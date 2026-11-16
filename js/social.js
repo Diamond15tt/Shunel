@@ -1,19 +1,40 @@
 
 /* =========================================
    SHUNEL — SOCIAL ENGINE
-   Seguidores, perfiles y comunidad
+   Seguidores, seguidos y comunidad
+   Version: 2.0.0
 ========================================= */
 
 (() => {
   "use strict";
 
+  if (window.ShunelSocial) return;
+
+  const CONFIG = {
+    table: "follows",
+    cacheKey: "shunel_social_cache",
+    pageSize: 50
+  };
+
   const state = {
-    user: null,
+    initialized: false,
+    loading: false,
+    currentUser: null,
     following: [],
     followers: [],
-    initialized: false,
-    loading: false
+    operations: new Set(),
+    client: null
   };
+
+  function emit(name, detail = {}) {
+    if (window.ShunelEvents) {
+      window.ShunelEvents.emit(name, detail);
+    } else {
+      window.dispatchEvent(
+        new CustomEvent(`shunel:${name}`, { detail })
+      );
+    }
+  }
 
   function getSupabase() {
     return (
@@ -25,440 +46,471 @@
   }
 
   function getClient() {
-    const client = getSupabase();
-
-    if (!client) {
-      throw new Error("Supabase no está conectado.");
-    }
-
-    return client;
+    return state.client || getSupabase();
   }
 
-  async function getUser() {
+  function normalizeId(value) {
+    return String(value || "").trim();
+  }
+
+  function readCache() {
+    try {
+      const saved = JSON.parse(
+        localStorage.getItem(CONFIG.cacheKey) || "{}"
+      );
+
+      return saved && typeof saved === "object"
+        ? saved
+        : {};
+    } catch {
+      return {};
+    }
+  }
+
+  function saveCache() {
+    try {
+      localStorage.setItem(
+        CONFIG.cacheKey,
+        JSON.stringify({
+          userId: state.currentUser,
+          following: state.following,
+          followers: state.followers,
+          updatedAt: Date.now()
+        })
+      );
+    } catch (error) {
+      console.warn(
+        "[Shunel Social] No se pudo guardar la caché:",
+        error
+      );
+    }
+  }
+
+  async function getAuthenticatedUser() {
     const client = getClient();
+
+    if (!client?.auth) return null;
 
     const { data, error } = await client.auth.getUser();
 
     if (error) throw error;
 
-    state.user = data?.user || null;
-
-    if (!state.user) {
-      throw new Error("Iniciá sesión para utilizar las funciones sociales.");
-    }
-
-    return state.user;
+    return data?.user || null;
   }
 
-  function normalizeUsername(value) {
-    return String(value || "")
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9_.]/g, "")
-      .slice(0, 24);
-  }
+  function hasFollowed(userId) {
+    const id = normalizeId(userId);
 
-  function dispatch(name, detail = {}) {
-    document.dispatchEvent(
-      new CustomEvent(name, { detail })
+    return state.following.some(
+      item => item.following_id === id
     );
   }
 
-  function normalizeProfile(profile) {
-    if (!profile) return null;
+  function hasFollower(userId) {
+    const id = normalizeId(userId);
 
-    return {
-      id: profile.id,
-      username: profile.username || "",
-      display_name: profile.display_name || profile.username || "Usuario",
-      avatar_url: profile.avatar_url || "",
-      bio: profile.bio || "",
-      is_private: Boolean(profile.is_private),
-      is_public: profile.is_public !== false
-    };
+    return state.followers.some(
+      item => item.follower_id === id
+    );
   }
 
-  /* =========================================
-     BUSCAR USUARIOS
-  ========================================= */
-
-  async function searchUsers(query, limit = 20) {
-    const client = getClient();
-    const search = normalizeUsername(query);
-
-    if (search.length < 2) return [];
-
-    const { data, error } = await client
-      .from("profiles")
-      .select(
-        "id, username, display_name, avatar_url, bio, is_private, is_public"
-      )
-      .ilike("username", `%${search}%`)
-      .eq("is_public", true)
-      .limit(Math.min(50, Math.max(1, limit)));
-
-    if (error) {
-      console.error("[Shunel Social] Error buscando usuarios:", error);
-      throw error;
+  async function load() {
+    if (state.loading) {
+      return getState();
     }
 
-    const user = await getUser();
+    state.loading = true;
 
-    return (data || [])
-      .filter(profile => profile.id !== user.id)
-      .map(normalizeProfile);
-  }
-
-  async function getProfile(userId) {
-    if (!userId) return null;
-
-    const client = getClient();
-
-    const { data, error } = await client
-      .from("profiles")
-      .select(
-        "id, username, display_name, avatar_url, bio, is_private, is_public"
-      )
-      .eq("id", userId)
-      .maybeSingle();
-
-    if (error) throw error;
-
-    return normalizeProfile(data);
-  }
-
-  /* =========================================
-     SEGUIR USUARIOS
-     Esquema esperado:
-     follows.follower_id
-     follows.following_id
-  ========================================= */
-
-  async function follow(userId) {
-    const user = await getUser();
-
-    if (!userId || userId === user.id) {
-      throw new Error("No podés seguir tu propio perfil.");
-    }
-
-    const client = getClient();
-
-    const profile = await getProfile(userId);
-
-    if (!profile) {
-      throw new Error("Este usuario no existe o no está disponible.");
-    }
-
-    if (profile.is_private) {
-      throw new Error("Este perfil es privado. Necesitás autorización para seguirlo.");
-    }
-
-    const { error } = await client
-      .from("follows")
-      .insert({
-        follower_id: user.id,
-        following_id: userId
-      });
-
-    if (error) {
-      if (error.code === "23505") {
-        throw new Error("Ya seguís a este usuario.");
-      }
-
-      console.error("[Shunel Social] Error siguiendo:", error);
-      throw error;
-    }
-
-    await refreshConnections();
-
-    dispatch("shunel:user-followed", {
-      userId,
-      profile
+    emit("social:loading", {
+      loading: true
     });
 
-    return true;
+    try {
+      const client = getClient();
+
+      if (!client) {
+        const cache = readCache();
+
+        state.currentUser = cache.userId || null;
+        state.following = cache.following || [];
+        state.followers = cache.followers || [];
+
+        emit("social:offline", {
+          following: state.following,
+          followers: state.followers
+        });
+
+        return getState();
+      }
+
+      const user = await getAuthenticatedUser();
+
+      if (!user) {
+        state.currentUser = null;
+        state.following = [];
+        state.followers = [];
+
+        emit("social:logged-out", {});
+
+        return getState();
+      }
+
+      state.currentUser = user.id;
+
+      const [followingResult, followersResult] =
+        await Promise.all([
+          client
+            .from(CONFIG.table)
+            .select("follower_id, following_id, created_at")
+            .eq("follower_id", user.id)
+            .order("created_at", { ascending: false })
+            .limit(CONFIG.pageSize),
+
+          client
+            .from(CONFIG.table)
+            .select("follower_id, following_id, created_at")
+            .eq("following_id", user.id)
+            .order("created_at", { ascending: false })
+            .limit(CONFIG.pageSize)
+        ]);
+
+      if (followingResult.error) {
+        throw followingResult.error;
+      }
+
+      if (followersResult.error) {
+        throw followersResult.error;
+      }
+
+      state.following = followingResult.data || [];
+      state.followers = followersResult.data || [];
+
+      saveCache();
+
+      emit("social:loaded", {
+        following: state.following,
+        followers: state.followers,
+        followingCount: state.following.length,
+        followersCount: state.followers.length
+      });
+
+      return getState();
+
+    } catch (error) {
+      console.error(
+        "[Shunel Social] Error cargando relaciones:",
+        error
+      );
+
+      emit("social:error", {
+        message: error.message
+      });
+
+      throw error;
+
+    } finally {
+      state.loading = false;
+
+      emit("social:loading", {
+        loading: false
+      });
+    }
+  }
+
+  async function follow(userId) {
+    const targetId = normalizeId(userId);
+
+    if (!targetId) {
+      throw new Error("El usuario indicado no es válido.");
+    }
+
+    if (!state.currentUser) {
+      throw new Error("Debes iniciar sesión para seguir usuarios.");
+    }
+
+    if (targetId === state.currentUser) {
+      throw new Error("No puedes seguirte a ti mismo.");
+    }
+
+    if (hasFollowed(targetId)) {
+      return {
+        success: true,
+        alreadyFollowing: true
+      };
+    }
+
+    const operationId = `follow:${targetId}`;
+
+    if (state.operations.has(operationId)) {
+      return {
+        success: false,
+        pending: true
+      };
+    }
+
+    const client = getClient();
+
+    if (!client) {
+      throw new Error("No hay conexión con Supabase.");
+    }
+
+    state.operations.add(operationId);
+
+    try {
+      const { data, error } = await client
+        .from(CONFIG.table)
+        .insert({
+          follower_id: state.currentUser,
+          following_id: targetId
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      state.following = [
+        {
+          follower_id: state.currentUser,
+          following_id: targetId,
+          created_at: data.created_at
+        },
+        ...state.following
+      ];
+
+      saveCache();
+
+      emit("social:followed", {
+        userId: targetId,
+        relationship: data
+      });
+
+      return {
+        success: true,
+        alreadyFollowing: false
+      };
+
+    } catch (error) {
+      emit("social:error", {
+        action: "follow",
+        userId: targetId,
+        message: error.message
+      });
+
+      throw error;
+
+    } finally {
+      state.operations.delete(operationId);
+    }
   }
 
   async function unfollow(userId) {
-    const user = await getUser();
+    const targetId = normalizeId(userId);
 
-    if (!userId || userId === user.id) {
-      throw new Error("Usuario no válido.");
+    if (!targetId) {
+      throw new Error("El usuario indicado no es válido.");
+    }
+
+    if (!state.currentUser) {
+      throw new Error("Debes iniciar sesión.");
+    }
+
+    if (!hasFollowed(targetId)) {
+      return {
+        success: true,
+        alreadyUnfollowed: true
+      };
+    }
+
+    const operationId = `unfollow:${targetId}`;
+
+    if (state.operations.has(operationId)) {
+      return {
+        success: false,
+        pending: true
+      };
     }
 
     const client = getClient();
 
-    const { error } = await client
-      .from("follows")
-      .delete()
-      .eq("follower_id", user.id)
-      .eq("following_id", userId);
+    if (!client) {
+      throw new Error("No hay conexión con Supabase.");
+    }
 
-    if (error) {
-      console.error("[Shunel Social] Error dejando de seguir:", error);
+    state.operations.add(operationId);
+
+    try {
+      const { error } = await client
+        .from(CONFIG.table)
+        .delete()
+        .eq("follower_id", state.currentUser)
+        .eq("following_id", targetId);
+
+      if (error) throw error;
+
+      state.following = state.following.filter(
+        item => item.following_id !== targetId
+      );
+
+      saveCache();
+
+      emit("social:unfollowed", {
+        userId: targetId
+      });
+
+      return {
+        success: true,
+        alreadyUnfollowed: false
+      };
+
+    } catch (error) {
+      emit("social:error", {
+        action: "unfollow",
+        userId: targetId,
+        message: error.message
+      });
+
       throw error;
+
+    } finally {
+      state.operations.delete(operationId);
+    }
+  }
+
+  async function toggleFollow(userId) {
+    return hasFollowed(userId)
+      ? unfollow(userId)
+      : follow(userId);
+  }
+
+  async function checkFollow(userId) {
+    const targetId = normalizeId(userId);
+
+    if (!targetId || !state.currentUser) {
+      return false;
     }
 
-    await refreshConnections();
-
-    dispatch("shunel:user-unfollowed", { userId });
-
-    return true;
-  }
-
-  /* =========================================
-     CONSULTAR CONEXIONES
-  ========================================= */
-
-  async function getFollowing(userId = null) {
-    const user = await getUser();
-    const targetId = userId || user.id;
     const client = getClient();
 
-    const { data, error } = await client
-      .from("follows")
-      .select("following_id")
-      .eq("follower_id", targetId);
-
-    if (error) throw error;
-
-    const ids = (data || []).map(item => item.following_id);
-
-    if (!ids.length) return [];
-
-    const { data: profiles, error: profileError } = await client
-      .from("profiles")
-      .select(
-        "id, username, display_name, avatar_url, bio, is_private, is_public"
-      )
-      .in("id", ids);
-
-    if (profileError) throw profileError;
-
-    return (profiles || []).map(normalizeProfile);
-  }
-
-  async function getFollowers(userId = null) {
-    const user = await getUser();
-    const targetId = userId || user.id;
-    const client = getClient();
+    if (!client) {
+      return hasFollowed(targetId);
+    }
 
     const { data, error } = await client
-      .from("follows")
+      .from(CONFIG.table)
       .select("follower_id")
-      .eq("following_id", targetId);
-
-    if (error) throw error;
-
-    const ids = (data || []).map(item => item.follower_id);
-
-    if (!ids.length) return [];
-
-    const { data: profiles, error: profileError } = await client
-      .from("profiles")
-      .select(
-        "id, username, display_name, avatar_url, bio, is_private, is_public"
-      )
-      .in("id", ids);
-
-    if (profileError) throw profileError;
-
-    return (profiles || []).map(normalizeProfile);
-  }
-
-  async function isFollowing(userId) {
-    const user = await getUser();
-
-    if (!userId || userId === user.id) return false;
-
-    const client = getClient();
-
-    const { data, error } = await client
-      .from("follows")
-      .select("follower_id")
-      .eq("follower_id", user.id)
-      .eq("following_id", userId)
+      .eq("follower_id", state.currentUser)
+      .eq("following_id", targetId)
       .maybeSingle();
 
     if (error) throw error;
 
-    return Boolean(data);
-  }
+    const following = Boolean(data);
 
-  async function refreshConnections() {
-    const [following, followers] = await Promise.all([
-      getFollowing(),
-      getFollowers()
-    ]);
-
-    state.following = following;
-    state.followers = followers;
-
-    dispatch("shunel:social-updated", {
-      following,
-      followers,
-      followingCount: following.length,
-      followersCount: followers.length
-    });
-
-    return {
-      following,
-      followers
-    };
-  }
-
-  /* =========================================
-     CONTADORES
-  ========================================= */
-
-  async function getCounts(userId = null) {
-    const [following, followers] = await Promise.all([
-      getFollowing(userId),
-      getFollowers(userId)
-    ]);
-
-    return {
-      following: following.length,
-      followers: followers.length
-    };
-  }
-
-  /* =========================================
-     RENDERIZADO DE USUARIOS
-  ========================================= */
-
-  function renderUsers(container, profiles, options = {}) {
-    if (!container) return;
-
-    container.replaceChildren();
-
-    if (!profiles.length) {
-      const empty = document.createElement("p");
-      empty.className = "social-empty";
-      empty.textContent = options.emptyMessage || "No hay usuarios para mostrar.";
-      container.appendChild(empty);
-      return;
+    if (following && !hasFollowed(targetId)) {
+      state.following.push({
+        follower_id: state.currentUser,
+        following_id: targetId
+      });
     }
 
-    const fragment = document.createDocumentFragment();
-
-    profiles.forEach(profile => {
-      const item = document.createElement("article");
-      item.className = "social-user";
-
-      const avatar = document.createElement("img");
-      avatar.className = "social-user-avatar";
-      avatar.alt = "";
-      avatar.loading = "lazy";
-
-      if (profile.avatar_url) {
-        avatar.src = profile.avatar_url;
-      }
-
-      const information = document.createElement("div");
-      information.className = "social-user-information";
-
-      const name = document.createElement("strong");
-      name.textContent = profile.display_name;
-
-      const username = document.createElement("span");
-      username.textContent = `@${profile.username}`;
-
-      const bio = document.createElement("small");
-      bio.textContent = profile.bio || "";
-
-      information.append(name, username);
-
-      if (profile.bio) {
-        information.appendChild(bio);
-      }
-
-      item.append(avatar, information);
-
-      if (options.showFollowButton && profile.id !== state.user?.id) {
-        const button = document.createElement("button");
-
-        button.type = "button";
-        button.className = "social-follow-button";
-        button.textContent = "Seguir";
-
-        button.addEventListener("click", async () => {
-          button.disabled = true;
-
-          try {
-            await follow(profile.id);
-            button.textContent = "Siguiendo";
-          } catch (error) {
-            button.textContent = "Seguir";
-            dispatch("shunel:toast", {
-              message: error.message || "No se pudo seguir al usuario."
-            });
-          } finally {
-            button.disabled = false;
-          }
-        });
-
-        item.appendChild(button);
-      }
-
-      item.addEventListener("click", event => {
-        if (event.target.closest("button")) return;
-
-        dispatch("shunel:open-profile", {
-          userId: profile.id,
-          profile
-        });
-      });
-
-      fragment.appendChild(item);
-    });
-
-    container.appendChild(fragment);
-  }
-
-  /* =========================================
-     INICIALIZACIÓN
-  ========================================= */
-
-  async function initialize() {
-    if (state.initialized) return;
-
-    state.initialized = true;
-
-    window.ShunelSocial = {
-      searchUsers,
-      getProfile,
-      follow,
-      unfollow,
-      getFollowing,
-      getFollowers,
-      isFollowing,
-      refreshConnections,
-      getCounts,
-      renderUsers,
-
-      getState: () => ({
-        user: state.user,
-        following: [...state.following],
-        followers: [...state.followers],
-        loading: state.loading
-      })
-    };
-
-    try {
-      await getUser();
-      await refreshConnections();
-    } catch (error) {
-      console.info(
-        "[Shunel Social] Esperando una sesión autenticada:",
-        error.message
+    if (!following) {
+      state.following = state.following.filter(
+        item => item.following_id !== targetId
       );
     }
 
-    dispatch("shunel:social-ready");
+    saveCache();
 
-    console.info("[Shunel Social] Módulo preparado.");
+    return following;
   }
+
+  function getFollowing() {
+    return [...state.following];
+  }
+
+  function getFollowers() {
+    return [...state.followers];
+  }
+
+  function getCounts() {
+    return {
+      following: state.following.length,
+      followers: state.followers.length
+    };
+  }
+
+  function getState() {
+    return {
+      initialized: state.initialized,
+      loading: state.loading,
+      currentUser: state.currentUser,
+      following: getFollowing(),
+      followers: getFollowers(),
+      ...getCounts()
+    };
+  }
+
+  function setClient(client) {
+    if (
+      !client?.auth ||
+      typeof client.from !== "function"
+    ) {
+      return false;
+    }
+
+    state.client = client;
+
+    return true;
+  }
+
+  function clear() {
+    state.currentUser = null;
+    state.following = [];
+    state.followers = [];
+    state.operations.clear();
+
+    try {
+      localStorage.removeItem(CONFIG.cacheKey);
+    } catch {}
+
+    emit("social:cleared", {});
+
+    return true;
+  }
+
+  function initialize() {
+    if (state.initialized) return;
+
+    const cache = readCache();
+
+    state.currentUser = cache.userId || null;
+    state.following = cache.following || [];
+    state.followers = cache.followers || [];
+
+    state.client = getSupabase();
+    state.initialized = true;
+
+    emit("social:ready", {});
+
+    console.info("[Shunel Social] Sistema preparado.");
+  }
+
+  window.ShunelSocial = Object.freeze({
+    initialize,
+    load,
+    follow,
+    unfollow,
+    toggleFollow,
+    checkFollow,
+    hasFollowed,
+    hasFollower,
+    getFollowing,
+    getFollowers,
+    getCounts,
+    getState,
+    setClient,
+    clear
+  });
 
   initialize();
 

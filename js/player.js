@@ -1,56 +1,46 @@
 
 /* =========================================
    SHUNEL — PLAYER ENGINE
-   Reproductor principal
+   Motor central de reproducción
+   Version: 2.0.0
 ========================================= */
 
 (() => {
   "use strict";
 
-  const $ = (id) => document.getElementById(id);
+  if (window.ShunelPlayer) {
+    console.warn("[Shunel Player] Ya está inicializado.");
+    return;
+  }
 
-  const audio = $("localAudio");
+  const audio = document.getElementById("localAudio");
 
   if (!audio) {
     console.error("[Shunel Player] No se encontró #localAudio.");
     return;
   }
 
+  const $ = id => document.getElementById(id);
+
   const elements = {
-    miniPlayer: $("bottom-player"),
-    miniArtwork: $("miniPlayerArtwork"),
-    miniCover: $("miniCoverImage"),
-    miniTitle: $("miniTrackTitle"),
-    miniArtist: $("miniTrackArtist"),
     miniPlay: $("miniPlayButton"),
-    miniPrevious: $("miniPreviousButton"),
     miniNext: $("miniNextButton"),
-    miniProgress: $("miniProgressBar"),
-
-    fullPlayer: $("nowPlayingScreen"),
-    closePlayer: $("closePlayerButton"),
-    openQueue: $("openQueueButton"),
-    openLyrics: $("openLyricsButton"),
-    openCanvas: $("openCanvasButton"),
-    openPlayerQueue: $("openPlayerQueueButton"),
-
-    cover: $("playerCoverImage"),
-    title: $("playerTrackTitle"),
-    artist: $("playerTrackArtist"),
-    artistButton: $("playerArtistButton"),
-    favorite: $("playerFavoriteButton"),
-
-    progress: $("playerProgress"),
-    currentTime: $("currentTime"),
-    duration: $("durationTime"),
-
+    miniPrevious: $("miniPreviousButton"),
     play: $("playButton"),
-    previous: $("previousButton"),
     next: $("nextButton"),
+    previous: $("previousButton"),
     shuffle: $("shuffleButton"),
     repeat: $("repeatButton"),
-
-    lyricsPreview: $("lyricsPreviewText")
+    volume: $("volumeSlider"),
+    seek: $("seekSlider"),
+    currentTime: $("currentTime"),
+    duration: $("duration"),
+    title: $("miniTrackTitle"),
+    artist: $("miniTrackArtist"),
+    artwork: $("miniTrackArtwork"),
+    fullTitle: $("trackTitle"),
+    fullArtist: $("trackArtist"),
+    fullArtwork: $("trackArtwork")
   };
 
   const state = {
@@ -58,120 +48,49 @@
     queue: [],
     currentIndex: -1,
     isPlaying: false,
-    isShuffle: false,
-    repeatMode: "off",
-    isSeeking: false,
-    initialized: false
+    isLoading: false,
+    shuffle: false,
+    repeat: "off",
+    volume: 0.8,
+    source: "none",
+    externalController: null,
+    initialized: false,
+    playRequest: 0
   };
 
-  const STORAGE_KEY = "shunel_player_preferences";
-
-  /* =========================================
-     EVENTOS INTERNOS
-  ========================================= */
+  const STORAGE_KEY = "shunel_player_settings";
 
   function emit(name, detail = {}) {
+    if (window.ShunelEvents) {
+      window.ShunelEvents.emit(name, detail);
+      return;
+    }
+
     window.dispatchEvent(
       new CustomEvent(`shunel:${name}`, { detail })
     );
   }
 
   function notify(message) {
+    if (typeof window.ShunelNotify === "function") {
+      window.ShunelNotify(message);
+      return;
+    }
+
     const toast = $("toast");
 
     if (!toast) return;
 
     toast.textContent = message;
     toast.hidden = false;
+    toast.classList.add("show");
 
     clearTimeout(notify.timer);
 
     notify.timer = setTimeout(() => {
+      toast.classList.remove("show");
       toast.hidden = true;
-    }, 2600);
-  }
-
-  function savePreferences() {
-    try {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({
-          shuffle: state.isShuffle,
-          repeat: state.repeatMode,
-          volume: audio.volume,
-          muted: audio.muted
-        })
-      );
-    } catch (error) {
-      console.warn("[Shunel Player] No se pudieron guardar los ajustes.", error);
-    }
-  }
-
-  function loadPreferences() {
-    try {
-      const saved = JSON.parse(
-        localStorage.getItem(STORAGE_KEY) || "{}"
-      );
-
-      state.isShuffle = Boolean(saved.shuffle);
-
-      if (["off", "one", "all"].includes(saved.repeat)) {
-        state.repeatMode = saved.repeat;
-      }
-
-      if (typeof saved.volume === "number") {
-        audio.volume = Math.max(0, Math.min(1, saved.volume));
-      }
-
-      audio.muted = Boolean(saved.muted);
-    } catch {
-      audio.volume = 1;
-    }
-  }
-
-  /* =========================================
-     UTILIDADES
-  ========================================= */
-
-  function formatTime(seconds) {
-    if (!Number.isFinite(seconds) || seconds < 0) {
-      return "0:00";
-    }
-
-    const minutes = Math.floor(seconds / 60);
-    const remaining = Math.floor(seconds % 60);
-
-    return `${minutes}:${String(remaining).padStart(2, "0")}`;
-  }
-
-  function getArtwork(track) {
-    return (
-      track?.artwork_url ||
-      track?.artwork ||
-      track?.cover ||
-      track?.thumbnail ||
-      ""
-    );
-  }
-
-  function getTrackUrl(track) {
-    return (
-      track?.audioUrl ||
-      track?.audio_url ||
-      track?.url ||
-      track?.src ||
-      ""
-    );
-  }
-
-  function isExternalTrack(track) {
-    const source = String(track?.source || "").toLowerCase();
-
-    return (
-      source === "youtube" ||
-      source === "external-youtube" ||
-      Boolean(track?.videoId || track?.video_id)
-    );
+    }, 2500);
   }
 
   function normalizeTrack(track) {
@@ -179,138 +98,184 @@
       return null;
     }
 
+    const title = String(track.title || track.name || "Sin título").trim();
+    const artist = String(track.artist || track.channelTitle || "Artista desconocido").trim();
+
+    const videoId = String(
+      track.videoId ||
+      track.youtubeId ||
+      ""
+    ).trim();
+
+    const rawUrl =
+      track.audioUrl ||
+      track.url ||
+      track.src ||
+      "";
+
+    const artwork =
+      track.artwork ||
+      track.thumbnail ||
+      track.cover ||
+      "";
+
+    let source = track.source;
+
+    if (!source) {
+      source = videoId
+        ? "youtube"
+        : rawUrl
+          ? "local"
+          : "unknown";
+    }
+
+    const id = String(
+      track.id ||
+      (videoId ? `youtube:${videoId}` : rawUrl || `${title}:${artist}`)
+    );
+
     return {
-      ...track,
-      id: String(
-        track.id ||
-        track.track_id ||
-        track.videoId ||
-        track.video_id ||
-        getTrackUrl(track) ||
-        `track-${Date.now()}`
-      ),
-      title: track.title || track.name || "Canción desconocida",
-      artist: track.artist || track.artist_name || "Artista desconocido",
-      artwork_url: getArtwork(track),
-      source: track.source || "local"
+      id,
+      title,
+      artist,
+      artwork: safeImageUrl(artwork),
+      audioUrl: safeAudioUrl(rawUrl),
+      videoId,
+      source,
+      duration: Number(track.duration) || 0,
+      album: track.album || "",
+      metadata: track.metadata || {}
     };
   }
 
-  /* =========================================
-     INFORMACIÓN VISUAL
-  ========================================= */
+  function safeImageUrl(value) {
+    if (!value) return "";
 
-  function updateTrackInformation(track) {
-    if (!track) return;
+    try {
+      const url = new URL(value, location.href);
 
-    const artwork = getArtwork(track);
+      if (["http:", "https:", "blob:"].includes(url.protocol)) {
+        return url.href;
+      }
+    } catch {}
 
-    if (elements.miniTitle) {
-      elements.miniTitle.textContent = track.title;
-    }
+    return "";
+  }
 
-    if (elements.miniArtist) {
-      elements.miniArtist.textContent = track.artist;
-    }
+  function safeAudioUrl(value) {
+    if (!value) return "";
 
-    if (elements.title) {
-      elements.title.textContent = track.title;
-    }
+    try {
+      const url = new URL(value, location.href);
 
-    if (elements.artist) {
-      elements.artist.textContent = track.artist;
-    }
+      if (["http:", "https:", "blob:", "data:"].includes(url.protocol)) {
+        return url.href;
+      }
+    } catch {}
 
-    if (elements.miniCover) {
-      elements.miniCover.src = artwork;
-      elements.miniCover.alt = `Portada de ${track.title}`;
-    }
+    return "";
+  }
 
-    if (elements.cover) {
-      elements.cover.src = artwork;
-      elements.cover.alt = `Portada de ${track.title}`;
-    }
+  function isYouTube(track) {
+    return Boolean(
+      track &&
+      (
+        track.source === "youtube" ||
+        track.videoId
+      )
+    );
+  }
 
-    if (elements.lyricsPreview) {
-      elements.lyricsPreview.textContent =
-        "Las letras aparecerán aquí.";
-    }
+  function getCurrentTrack() {
+    return state.currentTrack
+      ? { ...state.currentTrack }
+      : null;
+  }
 
-    if (elements.miniPlayer) {
-      elements.miniPlayer.hidden = false;
-    }
+  function getQueue() {
+    return state.queue.map(track => ({ ...track }));
+  }
 
-    emit("trackchange", { track });
+  function getState() {
+    return {
+      currentTrack: getCurrentTrack(),
+      queue: getQueue(),
+      currentIndex: state.currentIndex,
+      isPlaying: state.isPlaying,
+      isLoading: state.isLoading,
+      shuffle: state.shuffle,
+      repeat: state.repeat,
+      volume: state.volume,
+      source: state.source
+    };
   }
 
   function updatePlayButtons() {
-    const icon = state.isPlaying ? "Ⅱ" : "▶";
+    const iconName = state.isPlaying ? "pause" : "play";
 
-    if (elements.play) {
-      elements.play.textContent = icon;
-      elements.play.setAttribute(
+    [
+      elements.miniPlay,
+      elements.play
+    ].forEach(button => {
+      if (!button) return;
+
+      button.dataset.state = state.isPlaying ? "playing" : "paused";
+      button.setAttribute(
         "aria-label",
         state.isPlaying ? "Pausar" : "Reproducir"
       );
-    }
 
-    if (elements.miniPlay) {
-      elements.miniPlay.textContent = icon;
-      elements.miniPlay.setAttribute(
-        "aria-label",
-        state.isPlaying ? "Pausar" : "Reproducir"
-      );
-    }
+      const icon = button.querySelector("i, svg");
+
+      if (icon && icon.tagName === "I") {
+        icon.className = `icon-${iconName}`;
+      }
+    });
   }
 
-  function updateModeButtons() {
-    if (elements.shuffle) {
-      elements.shuffle.classList.toggle(
-        "active",
-        state.isShuffle
-      );
+  function updateTrackUI(track = state.currentTrack) {
+    if (!track) return;
 
-      elements.shuffle.setAttribute(
-        "aria-pressed",
-        String(state.isShuffle)
-      );
+    const title = track.title;
+    const artist = track.artist;
+    const artwork = track.artwork;
+
+    if (elements.title) {
+      elements.title.textContent = title;
     }
 
-    if (elements.repeat) {
-      elements.repeat.classList.toggle(
-        "active",
-        state.repeatMode !== "off"
-      );
-
-      elements.repeat.textContent =
-        state.repeatMode === "one" ? "🔂" : "🔁";
-
-      elements.repeat.setAttribute(
-        "aria-label",
-        `Repetición: ${state.repeatMode}`
-      );
+    if (elements.artist) {
+      elements.artist.textContent = artist;
     }
+
+    if (elements.fullTitle) {
+      elements.fullTitle.textContent = title;
+    }
+
+    if (elements.fullArtist) {
+      elements.fullArtist.textContent = artist;
+    }
+
+    [
+      elements.artwork,
+      elements.fullArtwork
+    ].forEach(element => {
+      if (!element || !artwork) return;
+
+      if (element.tagName === "IMG") {
+        element.src = artwork;
+        element.alt = `Portada de ${title}`;
+      }
+    });
+
+    document.title = `${title} — ${artist} | Shunel`;
+
+    updateMediaSession(track);
   }
 
-  /* =========================================
-     PROGRESO
-  ========================================= */
-
-  function updateProgress() {
-    const duration = audio.duration || 0;
+  function updateTimeUI() {
     const current = audio.currentTime || 0;
-
-    const percentage = duration
-      ? (current / duration) * 100
-      : 0;
-
-    if (elements.progress && !state.isSeeking) {
-      elements.progress.value = percentage;
-    }
-
-    if (elements.miniProgress) {
-      elements.miniProgress.style.width = `${percentage}%`;
-    }
+    const duration = audio.duration || 0;
 
     if (elements.currentTime) {
       elements.currentTime.textContent = formatTime(current);
@@ -319,635 +284,716 @@
     if (elements.duration) {
       elements.duration.textContent = formatTime(duration);
     }
+
+    if (elements.seek && duration > 0) {
+      elements.seek.value = Math.floor(
+        (current / duration) * 1000
+      );
+    }
   }
 
-  function seekTo(value) {
-    if (!Number.isFinite(audio.duration)) return;
-
-    const percentage = Math.max(0, Math.min(100, Number(value)));
-
-    audio.currentTime = audio.duration * percentage / 100;
-
-    updateProgress();
-
-    emit("seek", {
-      currentTime: audio.currentTime,
-      duration: audio.duration
-    });
-  }
-
-  /* =========================================
-     REPRODUCCIÓN
-  ========================================= */
-
-  async function play() {
-    if (!state.currentTrack) {
-      notify("Selecciona una canción primero.");
-      return false;
+  function formatTime(seconds) {
+    if (!Number.isFinite(seconds) || seconds < 0) {
+      return "0:00";
     }
 
-    if (isExternalTrack(state.currentTrack)) {
-      emit("external-play", {
-        track: state.currentTrack
-      });
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
 
-      notify("Esta canción necesita su reproductor externo.");
-      return false;
+    return `${mins}:${String(secs).padStart(2, "0")}`;
+  }
+
+  function updateMediaSession(track) {
+    if (!("mediaSession" in navigator) || !track) {
+      return;
     }
 
     try {
-      await audio.play();
-      return true;
+      navigator.mediaSession.metadata =
+        new MediaMetadata({
+          title: track.title,
+          artist: track.artist,
+          album: track.album || "Shunel",
+          artwork: track.artwork
+            ? [
+                {
+                  src: track.artwork,
+                  sizes: "512x512",
+                  type: "image/jpeg"
+                }
+              ]
+            : []
+        });
     } catch (error) {
-      console.error("[Shunel Player] Error al reproducir:", error);
-
-      notify("No se pudo iniciar la reproducción.");
-      return false;
+      console.warn("[Shunel Player] Metadata:", error);
     }
   }
 
-  function pause() {
+  function setPlaying(value, reason = "manual") {
+    const changed = state.isPlaying !== Boolean(value);
+
+    state.isPlaying = Boolean(value);
+
+    updatePlayButtons();
+
+    if (!changed) return;
+
+    emit(
+      state.isPlaying ? "play" : "pause",
+      {
+        track: getCurrentTrack(),
+        source: state.source,
+        reason
+      }
+    );
+  }
+
+  async function pause() {
+    if (state.externalController) {
+      try {
+        await state.externalController.pause();
+      } catch (error) {
+        console.warn("[Shunel Player] Error pausando fuente externa:", error);
+      }
+    }
+
     audio.pause();
-  }
 
-  async function togglePlay() {
-    if (audio.paused) {
-      return play();
-    }
+    setPlaying(false, "manual");
 
-    pause();
     return true;
   }
 
-  async function playTrack(track, tracks = null) {
+  async function play() {
+    if (!state.currentTrack) {
+      if (state.queue.length) {
+        return playTrack(
+          state.queue[0],
+          state.queue
+        );
+      }
+
+      notify("No hay ninguna canción seleccionada.");
+      return false;
+    }
+
+    if (state.externalController) {
+      try {
+        const result = await state.externalController.play();
+
+        if (result === false) return false;
+
+        setPlaying(true, "manual");
+        return true;
+      } catch (error) {
+        console.error("[Shunel Player] Error externo:", error);
+        return false;
+      }
+    }
+
+    if (!audio.src) return false;
+
+    try {
+      await audio.play();
+      setPlaying(true, "manual");
+      return true;
+    } catch (error) {
+      console.error("[Shunel Player] No se pudo reproducir:", error);
+      setPlaying(false, "error");
+      notify("No se pudo reproducir esta canción.");
+      return false;
+    }
+  }
+
+  async function togglePlay() {
+    return state.isPlaying
+      ? pause()
+      : play();
+  }
+
+  function stopExternal() {
+    if (!state.externalController) return;
+
+    try {
+      state.externalController.destroy?.();
+    } catch (error) {
+      console.warn("[Shunel Player] Error cerrando fuente externa:", error);
+    }
+
+    state.externalController = null;
+  }
+
+  async function playTrack(track, newQueue = null) {
     const normalized = normalizeTrack(track);
 
     if (!normalized) {
-      notify("La canción no es válida.");
+      notify("Esta canción no es válida.");
       return false;
     }
 
-    if (Array.isArray(tracks) && tracks.length) {
-      state.queue = tracks
+    const requestId = ++state.playRequest;
+
+    if (newQueue) {
+      state.queue = newQueue
         .map(normalizeTrack)
         .filter(Boolean);
+    }
 
-      state.currentIndex = state.queue.findIndex(
-        item => item.id === normalized.id
-      );
+    const index = state.queue.findIndex(
+      item => item.id === normalized.id
+    );
 
-      if (state.currentIndex < 0) {
-        state.queue.unshift(normalized);
-        state.currentIndex = 0;
-      }
+    if (index >= 0) {
+      state.currentIndex = index;
     } else {
-      state.queue = [normalized];
-      state.currentIndex = 0;
+      state.queue.push(normalized);
+      state.currentIndex = state.queue.length - 1;
     }
 
     state.currentTrack = normalized;
+    state.isLoading = true;
 
-    updateTrackInformation(normalized);
+    stopExternal();
+    audio.pause();
+    audio.removeAttribute("src");
+    audio.load();
 
-    if (isExternalTrack(normalized)) {
-      audio.pause();
-      audio.removeAttribute("src");
+    state.source = isYouTube(normalized)
+      ? "youtube"
+      : "local";
+
+    updateTrackUI(normalized);
+
+    emit("trackchange", {
+      track: getCurrentTrack(),
+      index: state.currentIndex,
+      queue: getQueue(),
+      source: state.source
+    });
+
+    try {
+      if (isYouTube(normalized)) {
+        emit("external-play", {
+          track: getCurrentTrack()
+        });
+
+        notify("Preparando reproducción de YouTube.");
+        state.isLoading = false;
+        return true;
+      }
+
+      if (!normalized.audioUrl) {
+        throw new Error("La canción no tiene una dirección de audio válida.");
+      }
+
+      audio.src = normalized.audioUrl;
       audio.load();
 
-      emit("external-play", {
-        track: normalized
+      await audio.play();
+
+      if (requestId !== state.playRequest) {
+        audio.pause();
+        return false;
+      }
+
+      state.isLoading = false;
+
+      setPlaying(true, "trackchange");
+
+      emit("trackloaded", {
+        track: getCurrentTrack()
       });
 
       return true;
-    }
 
-    const url = getTrackUrl(normalized);
+    } catch (error) {
+      if (requestId !== state.playRequest) return false;
 
-    if (!url) {
-      notify("Esta canción no tiene un archivo de audio disponible.");
+      state.isLoading = false;
+      setPlaying(false, "error");
+
+      console.error("[Shunel Player] Error:", error);
+
+      emit("playerror", {
+        track: getCurrentTrack(),
+        message: error.message
+      });
+
+      notify("No se pudo reproducir esta canción.");
+
       return false;
     }
-
-    audio.pause();
-    audio.src = url;
-    audio.load();
-
-    updateProgress();
-
-    return play();
   }
 
-  /* =========================================
-     COLA DE REPRODUCCIÓN
-  ========================================= */
-
-  function setQueue(tracks, startIndex = 0, autoplay = true) {
+  async function setQueue(tracks, startIndex = 0, autoplay = true) {
     if (!Array.isArray(tracks)) return false;
 
-    const validTracks = tracks
+    const normalized = tracks
       .map(normalizeTrack)
       .filter(Boolean);
 
-    if (!validTracks.length) {
-      state.queue = [];
-      state.currentIndex = -1;
-      state.currentTrack = null;
-
+    if (!normalized.length) {
       notify("La cola está vacía.");
       return false;
     }
 
-    state.queue = validTracks;
+    state.queue = normalized;
 
     const index = Math.max(
       0,
-      Math.min(validTracks.length - 1, Number(startIndex) || 0)
+      Math.min(
+        normalized.length - 1,
+        Number(startIndex) || 0
+      )
     );
 
     state.currentIndex = index;
 
-    if (autoplay) {
-      playTrack(validTracks[index], validTracks);
+    emit("queuechange", {
+      queue: getQueue(),
+      currentIndex: index
+    });
+
+    if (!autoplay) {
+      state.currentTrack = normalized[index];
+      updateTrackUI();
+      return true;
+    }
+
+    return playTrack(normalized[index]);
+  }
+
+  function addToQueue(track, next = false) {
+    const normalized = normalizeTrack(track);
+
+    if (!normalized) return false;
+
+    if (next && state.currentIndex >= 0) {
+      state.queue.splice(
+        state.currentIndex + 1,
+        0,
+        normalized
+      );
     } else {
-      state.currentTrack = validTracks[index];
-      updateTrackInformation(state.currentTrack);
+      state.queue.push(normalized);
     }
 
     emit("queuechange", {
-      queue: [...state.queue],
+      queue: getQueue(),
       currentIndex: state.currentIndex
     });
 
     return true;
   }
 
-  function addToQueue(track) {
-    const normalized = normalizeTrack(track);
+  function removeFromQueue(index) {
+    if (
+      !Number.isInteger(index) ||
+      index < 0 ||
+      index >= state.queue.length
+    ) {
+      return false;
+    }
 
-    if (!normalized) return false;
+    const wasCurrent = index === state.currentIndex;
 
-    state.queue.push(normalized);
+    state.queue.splice(index, 1);
+
+    if (index < state.currentIndex) {
+      state.currentIndex--;
+    }
+
+    if (!state.queue.length) {
+      stop();
+    } else if (wasCurrent) {
+      state.currentIndex = Math.min(
+        index,
+        state.queue.length - 1
+      );
+
+      playTrack(state.queue[state.currentIndex]);
+    }
 
     emit("queuechange", {
-      queue: [...state.queue],
+      queue: getQueue(),
       currentIndex: state.currentIndex
     });
-
-    notify("Añadida a la cola.");
 
     return true;
   }
 
   function clearQueue() {
+    stop();
+
     state.queue = [];
     state.currentIndex = -1;
+    state.currentTrack = null;
+
+    updatePlayButtons();
 
     emit("queuechange", {
       queue: [],
       currentIndex: -1
     });
-  }
 
-  function getNextIndex() {
-    if (!state.queue.length) return -1;
+    emit("trackchange", {
+      track: null,
+      source: "none"
+    });
 
-    if (state.isShuffle && state.queue.length > 1) {
-      let nextIndex;
-
-      do {
-        nextIndex = Math.floor(
-          Math.random() * state.queue.length
-        );
-      } while (nextIndex === state.currentIndex);
-
-      return nextIndex;
-    }
-
-    const next = state.currentIndex + 1;
-
-    if (next < state.queue.length) {
-      return next;
-    }
-
-    return state.repeatMode === "all" ? 0 : -1;
+    return true;
   }
 
   async function next() {
-    if (state.repeatMode === "one" && state.currentTrack) {
-      audio.currentTime = 0;
-      return play();
-    }
-
-    const index = getNextIndex();
-
-    if (index < 0) {
-      pause();
-      return false;
-    }
-
-    return playTrack(
-      state.queue[index],
-      state.queue
-    );
-  }
-
-  async function previous() {
-    if (audio.currentTime > 3) {
-      audio.currentTime = 0;
-      return true;
-    }
-
     if (!state.queue.length) return false;
 
-    let index = state.currentIndex - 1;
+    let nextIndex;
 
-    if (index < 0) {
-      if (state.repeatMode === "all") {
-        index = state.queue.length - 1;
+    if (state.repeat === "one") {
+      return playTrack(state.currentTrack);
+    }
+
+    if (state.shuffle && state.queue.length > 1) {
+      const available = state.queue
+        .map((_, index) => index)
+        .filter(index => index !== state.currentIndex);
+
+      nextIndex = available[
+        Math.floor(Math.random() * available.length)
+      ];
+    } else {
+      nextIndex = state.currentIndex + 1;
+    }
+
+    if (nextIndex >= state.queue.length) {
+      if (state.repeat === "all") {
+        nextIndex = 0;
       } else {
-        audio.currentTime = 0;
+        await stop();
+        emit("queueend", {});
         return false;
       }
     }
 
-    return playTrack(
-      state.queue[index],
-      state.queue
-    );
+    return playTrack(state.queue[nextIndex]);
   }
 
-  /* =========================================
-     MODOS DE REPRODUCCIÓN
-  ========================================= */
+  async function previous() {
+    if (!state.queue.length) return false;
+
+    if (audio.currentTime > 3 && state.source === "local") {
+      audio.currentTime = 0;
+      return true;
+    }
+
+    let index = state.currentIndex - 1;
+
+    if (index < 0) {
+      index = state.repeat === "all"
+        ? state.queue.length - 1
+        : 0;
+    }
+
+    return playTrack(state.queue[index]);
+  }
+
+  async function stop() {
+    ++state.playRequest;
+
+    audio.pause();
+    audio.currentTime = 0;
+
+    stopExternal();
+
+    state.source = "none";
+    setPlaying(false, "stop");
+
+    return true;
+  }
+
+  function seek(value) {
+    if (state.source !== "local") return false;
+
+    const duration = audio.duration;
+
+    if (!Number.isFinite(duration)) return false;
+
+    const percentage = Math.max(
+      0,
+      Math.min(1000, Number(value) || 0)
+    );
+
+    audio.currentTime = duration * (percentage / 1000);
+
+    updateTimeUI();
+
+    emit("seek", {
+      currentTime: audio.currentTime,
+      duration
+    });
+
+    return true;
+  }
+
+  function setVolume(value) {
+    const volume = Math.max(
+      0,
+      Math.min(1, Number(value))
+    );
+
+    state.volume = volume;
+    audio.volume = volume;
+
+    if (elements.volume) {
+      elements.volume.value = volume;
+    }
+
+    saveSettings();
+
+    emit("volumechange", {
+      volume
+    });
+
+    return volume;
+  }
 
   function toggleShuffle() {
-    state.isShuffle = !state.isShuffle;
+    state.shuffle = !state.shuffle;
 
-    updateModeButtons();
-    savePreferences();
+    elements.shuffle?.classList.toggle(
+      "active",
+      state.shuffle
+    );
 
     emit("shufflechange", {
-      enabled: state.isShuffle
+      enabled: state.shuffle
     });
+
+    saveSettings();
+
+    return state.shuffle;
   }
 
   function toggleRepeat() {
     const modes = ["off", "all", "one"];
 
-    const index = modes.indexOf(state.repeatMode);
+    const index = modes.indexOf(state.repeat);
 
-    state.repeatMode = modes[
+    state.repeat = modes[
       (index + 1) % modes.length
     ];
 
-    updateModeButtons();
-    savePreferences();
+    if (elements.repeat) {
+      elements.repeat.classList.toggle(
+        "active",
+        state.repeat !== "off"
+      );
+
+      elements.repeat.dataset.mode = state.repeat;
+    }
 
     emit("repeatchange", {
-      mode: state.repeatMode
+      mode: state.repeat
     });
+
+    saveSettings();
+
+    return state.repeat;
   }
 
-  /* =========================================
-     REPRODUCTOR VISUAL
-  ========================================= */
-
-  function openPlayer() {
-    if (!state.currentTrack) {
-      notify("Todavía no hay ninguna canción.");
-      return;
-    }
-
-    if (elements.fullPlayer) {
-      elements.fullPlayer.hidden = false;
-    }
-
-    emit("playeropen", {
-      track: state.currentTrack
-    });
-  }
-
-  function closePlayer() {
-    if (elements.fullPlayer) {
-      elements.fullPlayer.hidden = true;
-    }
-
-    emit("playerclose");
-  }
-
-  function openLyrics() {
-    const screen = $("lyricsScreen");
-
-    if (screen) {
-      screen.hidden = false;
-      emit("lyricsopen");
-    }
-  }
-
-  function openQueue() {
-    const screen = $("queueScreen");
-
-    if (screen) {
-      screen.hidden = false;
-
-      emit("queueopen", {
-        queue: [...state.queue],
-        currentIndex: state.currentIndex
-      });
-    }
-  }
-
-  function openCanvas() {
-    const screen = $("canvasScreen");
-
-    if (screen) {
-      screen.hidden = false;
-      emit("canvasopen");
-    }
-  }
-
-  /* =========================================
-     MEDIA SESSION
-     Controles de pantalla bloqueada
-  ========================================= */
-
-  function updateMediaSession() {
-    if (!("mediaSession" in navigator)) return;
-    if (!state.currentTrack) return;
-
-    const track = state.currentTrack;
-    const artwork = getArtwork(track);
-
+  function saveSettings() {
     try {
-      const metadata = {
-        title: track.title,
-        artist: track.artist,
-        album: track.album || "Shunel",
-        artwork: artwork
-          ? [
-              {
-                src: artwork,
-                sizes: "512x512",
-                type: "image/jpeg"
-              }
-            ]
-          : []
-      };
-
-      navigator.mediaSession.metadata =
-        new MediaMetadata(metadata);
-
-      navigator.mediaSession.playbackState =
-        state.isPlaying ? "playing" : "paused";
-
-      navigator.mediaSession.setActionHandler(
-        "play",
-        play
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({
+          volume: state.volume,
+          shuffle: state.shuffle,
+          repeat: state.repeat
+        })
       );
-
-      navigator.mediaSession.setActionHandler(
-        "pause",
-        pause
-      );
-
-      navigator.mediaSession.setActionHandler(
-        "previoustrack",
-        previous
-      );
-
-      navigator.mediaSession.setActionHandler(
-        "nexttrack",
-        next
-      );
-
-      navigator.mediaSession.setActionHandler(
-        "seekto",
-        (details) => {
-          if (Number.isFinite(details.seekTime)) {
-            audio.currentTime = details.seekTime;
-          }
-        }
-      );
-
-      if (Number.isFinite(audio.duration) && audio.duration > 0) {
-        navigator.mediaSession.setPositionState({
-          duration: audio.duration,
-          playbackRate: audio.playbackRate,
-          position: Math.min(audio.currentTime, audio.duration)
-        });
-      }
     } catch (error) {
-      console.warn("[Shunel Player] Media Session:", error);
+      console.warn("[Shunel Player] No se pudo guardar:", error);
     }
   }
 
-  /* =========================================
-     EVENTOS DEL AUDIO
-  ========================================= */
+  function loadSettings() {
+    try {
+      const settings = JSON.parse(
+        localStorage.getItem(STORAGE_KEY) || "{}"
+      );
 
-  audio.addEventListener("play", () => {
-    state.isPlaying = true;
+      if (Number.isFinite(settings.volume)) {
+        state.volume = Math.max(
+          0,
+          Math.min(1, settings.volume)
+        );
+      }
 
-    updatePlayButtons();
-    updateMediaSession();
+      state.shuffle = Boolean(settings.shuffle);
 
-    emit("play", {
-      track: state.currentTrack
-    });
-  });
-
-  audio.addEventListener("pause", () => {
-    state.isPlaying = false;
-
-    updatePlayButtons();
-    updateMediaSession();
-
-    emit("pause", {
-      track: state.currentTrack
-    });
-  });
-
-  audio.addEventListener("timeupdate", () => {
-    updateProgress();
-    updateMediaSession();
-  });
-
-  audio.addEventListener("loadedmetadata", () => {
-    updateProgress();
-    updateMediaSession();
-
-    emit("metadata", {
-      duration: audio.duration,
-      track: state.currentTrack
-    });
-  });
-
-  audio.addEventListener("durationchange", updateProgress);
-
-  audio.addEventListener("ended", () => {
-    if (state.repeatMode === "one") {
-      audio.currentTime = 0;
-      play();
-      return;
+      if (["off", "all", "one"].includes(settings.repeat)) {
+        state.repeat = settings.repeat;
+      }
+    } catch {
+      console.warn("[Shunel Player] Configuración inválida.");
     }
 
-    next();
-  });
+    audio.volume = state.volume;
 
-  audio.addEventListener("error", () => {
-    if (!state.currentTrack) return;
+    if (elements.volume) {
+      elements.volume.value = state.volume;
+    }
 
-    console.error(
-      "[Shunel Player] Error de audio:",
-      audio.error
+    elements.shuffle?.classList.toggle(
+      "active",
+      state.shuffle
     );
 
-    notify("No se pudo cargar el archivo de audio.");
+    elements.repeat?.classList.toggle(
+      "active",
+      state.repeat !== "off"
+    );
+  }
 
-    emit("error", {
-      track: state.currentTrack,
-      error: audio.error
-    });
-  });
+  function registerMediaSession() {
+    if (!("mediaSession" in navigator)) return;
 
-  /* =========================================
-     EVENTOS DE LOS BOTONES
-  ========================================= */
+    const actions = {
+      play: () => play(),
+      pause: () => pause(),
+      nexttrack: () => next(),
+      previoustrack: () => previous(),
+      seekto: details => {
+        if (Number.isFinite(details.seekTime)) {
+          audio.currentTime = details.seekTime;
+        }
+      }
+    };
 
-  elements.play?.addEventListener("click", togglePlay);
-  elements.miniPlay?.addEventListener("click", togglePlay);
-
-  elements.next?.addEventListener("click", next);
-  elements.miniNext?.addEventListener("click", next);
-
-  elements.previous?.addEventListener("click", previous);
-  elements.miniPrevious?.addEventListener("click", previous);
-
-  elements.shuffle?.addEventListener("click", toggleShuffle);
-  elements.repeat?.addEventListener("click", toggleRepeat);
-
-  elements.progress?.addEventListener("input", (event) => {
-    state.isSeeking = true;
-
-    if (elements.currentTime && Number.isFinite(audio.duration)) {
-      elements.currentTime.textContent = formatTime(
-        audio.duration * Number(event.target.value) / 100
-      );
+    for (const [action, handler] of Object.entries(actions)) {
+      try {
+        navigator.mediaSession.setActionHandler(
+          action,
+          handler
+        );
+      } catch {}
     }
-  });
+  }
 
-  elements.progress?.addEventListener("change", (event) => {
-    seekTo(event.target.value);
-    state.isSeeking = false;
-  });
+  function bindControls() {
+    elements.miniPlay?.addEventListener("click", togglePlay);
+    elements.play?.addEventListener("click", togglePlay);
 
-  elements.miniArtwork?.addEventListener("click", openPlayer);
+    elements.miniNext?.addEventListener("click", next);
+    elements.next?.addEventListener("click", next);
 
-  elements.closePlayer?.addEventListener("click", closePlayer);
+    elements.miniPrevious?.addEventListener("click", previous);
+    elements.previous?.addEventListener("click", previous);
 
-  elements.openLyrics?.addEventListener("click", openLyrics);
+    elements.shuffle?.addEventListener("click", toggleShuffle);
+    elements.repeat?.addEventListener("click", toggleRepeat);
 
-  elements.openQueue?.addEventListener("click", openQueue);
-  elements.openPlayerQueue?.addEventListener("click", openQueue);
-
-  elements.openCanvas?.addEventListener("click", openCanvas);
-
-  elements.artistButton?.addEventListener("click", () => {
-    if (!state.currentTrack) return;
-
-    emit("artistclick", {
-      artist: state.currentTrack.artist,
-      track: state.currentTrack
+    elements.volume?.addEventListener("input", event => {
+      setVolume(event.target.value);
     });
-  });
 
-  elements.favorite?.addEventListener("click", () => {
-    if (!state.currentTrack) return;
-
-    emit("favoriteclick", {
-      track: state.currentTrack
+    elements.seek?.addEventListener("input", event => {
+      seek(event.target.value);
     });
-  });
 
-  /* =========================================
-     INICIALIZACIÓN
-  ========================================= */
+    audio.addEventListener("play", () => {
+      setPlaying(true, "audio");
+    });
 
-  function init() {
+    audio.addEventListener("pause", () => {
+      if (state.source === "local") {
+        setPlaying(false, "audio");
+      }
+    });
+
+    audio.addEventListener("ended", () => {
+      if (state.repeat === "one") {
+        audio.currentTime = 0;
+        play();
+      } else {
+        next();
+      }
+    });
+
+    audio.addEventListener("timeupdate", updateTimeUI);
+    audio.addEventListener("loadedmetadata", updateTimeUI);
+
+    audio.addEventListener("error", () => {
+      if (state.source === "local" && state.currentTrack) {
+        emit("playerror", {
+          track: getCurrentTrack(),
+          message: "Error al cargar el archivo de audio."
+        });
+      }
+    });
+
+    registerMediaSession();
+  }
+
+  function initialize() {
     if (state.initialized) return;
+
+    loadSettings();
+    bindControls();
 
     state.initialized = true;
 
-    loadPreferences();
+    emit("player:ready", {
+      version: "2.0.0"
+    });
 
-    updatePlayButtons();
-    updateModeButtons();
-    updateProgress();
-
-    emit("ready");
-
-    console.info("[Shunel Player] Reproductor inicializado.");
+    console.info("[Shunel Player] Motor inicializado.");
   }
 
-  /* =========================================
-     API PÚBLICA
-     Acceso desde los demás módulos
-  ========================================= */
-
-  window.ShunelPlayer = {
+  window.ShunelPlayer = Object.freeze({
     play,
     pause,
     togglePlay,
-
+    stop,
     playTrack,
     setQueue,
     addToQueue,
+    removeFromQueue,
     clearQueue,
-
     next,
     previous,
-
-    seekTo,
-    openPlayer,
-    closePlayer,
-
-    openLyrics,
-    openQueue,
-    openCanvas,
-
+    seek,
+    setVolume,
     toggleShuffle,
     toggleRepeat,
+    getCurrentTrack,
+    getQueue,
+    getState,
+    getAudio: () => audio,
+    formatTime,
+    isYouTube,
+    setExternalController(controller) {
+      if (
+        !controller ||
+        typeof controller.play !== "function" ||
+        typeof controller.pause !== "function"
+      ) {
+        throw new TypeError(
+          "El controlador externo debe incluir play() y pause()."
+        );
+      }
 
-    getState() {
-      return {
-        ...state,
-        queue: [...state.queue]
-      };
+      stopExternal();
+
+      state.externalController = controller;
+
+      return true;
     },
-
-    getCurrentTrack() {
-      return state.currentTrack;
-    },
-
-    getAudio() {
-      return audio;
-    },
-
-    getQueue() {
-      return [...state.queue];
-    },
-
-    setVolume(value) {
-      audio.volume = Math.max(
-        0,
-        Math.min(1, Number(value))
-      );
-
-      audio.muted = false;
-      savePreferences();
+    setExternalState(playing) {
+      setPlaying(playing, "external");
     }
-  };
+  });
 
-  init();
+  initialize();
 
 })();

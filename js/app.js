@@ -1,602 +1,822 @@
-/* =====================================================
-   SHUNEL — APP.JS (MASTER DEBUG EDITION)
-   Control principal de la aplicación, PWA, Supabase Auth y UI
-   ===================================================== */
+
+/* =========================================
+   SHUNEL — APPLICATION CORE
+   Navegación, controles e integración
+   Version: 2.0.0
+========================================= */
 
 (() => {
   "use strict";
 
-  /* =====================================================
-     1. UTILIDADES Y ESTADO GLOBAL
-  ===================================================== */
+  if (window.ShunelApp) return;
 
-  const $ = (selector, parent = document) => parent.querySelector(selector);
-  const $$ = (selector, parent = document) => [...parent.querySelectorAll(selector)];
+  const CONFIG = {
+    defaultPage: "home",
+    searchEndpoint: "/api/search",
+    searchTimeout: 15000,
+    toastDuration: 2800
+  };
 
   const state = {
-    currentPage: "home",
+    initialized: false,
+    currentPage: CONFIG.defaultPage,
     searching: false,
-    searchRequest: 0,
-    currentVideo: null,
-    user: null,
-    theme: localStorage.getItem("shunel_theme") || "dark"
+    searchController: null,
+    searchRequestId: 0,
+    lastSearchResults: [],
+    toastTimer: null,
+    boundElements: new WeakSet()
   };
 
   const pages = {
-    home: "#homePage",
-    library: "#libraryPage",
-    playlists: "#playlistsPage",
-    favorites: "#favoritesPage",
-    artists: "#artistsPage",
-    profile: "#profilePage",
-    stats: "#statsPage",
-    rooms: "#roomsPage",
-    ai: "#aiPage",
-    settings: "#settingsPage"
+    home: "homePage",
+    library: "libraryPage",
+    playlists: "playlistsPage",
+    favorites: "favoritesPage",
+    artists: "artistsPage",
+    profile: "profilePage",
+    stats: "statsPage",
+    rooms: "roomsPage",
+    ai: "aiPage",
+    settings: "settingsPage"
   };
 
-  /* =====================================================
-     2. SUPABASE & AUTENTICACIÓN CON DEBUGIN
-  ===================================================== */
+  const $ = (selector, parent = document) =>
+    parent.querySelector(selector);
 
-  const SUPABASE_URL = "https://tztigiwqteilnhuopmxv.supabase.co";
-  const SUPABASE_KEY = "sb_publishable_6XIlbp2GB_pWTfPa5nqUtA_RVzYbaQH";
+  const $$ = (selector, parent = document) =>
+    [...parent.querySelectorAll(selector)];
 
-  
-  let supabaseClient = null;
-
-  function initSupabase() {
-    if (window.supabase && typeof window.supabase.createClient === "function") {
-      try {
-        supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-        console.log("[Shunel Supabase] Cliente inicializado correctamente.");
-        checkUserSession();
-
-        // Escuchar cambios de sesión en tiempo real
-        supabaseClient.auth.onAuthStateChange((event, session) => {
-          console.log("[Shunel Auth State Change]:", event, session);
-          state.user = session?.user || null;
-          updateProfileUI();
-          toggleAuthScreen(!state.user);
-        });
-      } catch (err) {
-        console.error("[Shunel Supabase] Error crítico al crear cliente:", err);
-      }
+  function emit(name, detail = {}) {
+    if (window.ShunelEvents) {
+      window.ShunelEvents.emit(name, detail);
     } else {
-      console.warn("[Shunel Supabase] La librería de Supabase no está cargada en el HTML.");
+      window.dispatchEvent(
+        new CustomEvent(`shunel:${name}`, { detail })
+      );
     }
   }
 
-  async function checkUserSession() {
-    if (!supabaseClient) return;
-    try {
-      const { data: { session }, error } = await supabaseClient.auth.getSession();
-      if (error) throw error;
-      state.user = session?.user || null;
-      console.log("[Shunel Auth] Sesión activa:", state.user ? state.user.email : "Ninguna");
-      updateProfileUI();
-      toggleAuthScreen(!state.user);
-    } catch (error) {
-      console.error("[Shunel Auth] Error al verificar sesión:", error);
-    }
-  }
-
-  function updateProfileUI() {
-    const usernameEl = $("#topbarUsername");
-    if (usernameEl) {
-      usernameEl.textContent = state.user 
-        ? (state.user.user_metadata?.username || state.user.email?.split("@")[0] || "Mi cuenta") 
-        : "Perfil";
-    }
-
-    const profileDisplayName = $("#profileDisplayName");
-    if (profileDisplayName && state.user) {
-      profileDisplayName.textContent = state.user.user_metadata?.displayName || state.user.user_metadata?.username || "Usuario de Shunel";
-    }
-
-    const profileEmail = $("#profileUsername");
-    if (profileEmail && state.user) {
-      profileEmail.textContent = state.user.email;
-    }
-  }
-
-  function toggleAuthScreen(show) {
-    const authScreen = $("#authScreen");
-    if (!authScreen) return;
-    if (show) {
-      authScreen.classList.add("active");
-      authScreen.removeAttribute("hidden");
-    } else {
-      authScreen.classList.remove("active");
-      authScreen.setAttribute("hidden", "true");
-    }
-  }
-
-  function initializeAuthForms() {
-    const loginForm = $("#loginForm");
-    const registerForm = $("#registerForm");
-    const showRegisterBtn = $("#showRegisterButton");
-    const signOutBtn = $("#signOutButton");
-
-    // Alternar entre Login y Registro
-    showRegisterBtn?.addEventListener("click", () => {
-      const isHidden = registerForm.hidden;
-      registerForm.hidden = !isHidden;
-      loginForm.hidden = isHidden;
-      showRegisterBtn.textContent = isHidden ? "Iniciar sesión" : "Crear cuenta";
-    });
-
-    // Manejar Inicio de Sesión
-    loginForm?.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      if (!supabaseClient) {
-        console.error("[Shunel Auth] Cliente de Supabase no disponible.");
-        return notify("Error: Supabase no está conectado.");
-      }
-
-      const email = $("#loginEmail")?.value.trim();
-      const password = $("#loginPassword")?.value.trim();
-
-      if (!email || !password) return notify("Completa todos los campos.");
-
-      notify("Iniciando sesión...");
-      console.log("[Shunel Auth] Intentando iniciar sesión con:", email);
-
-      const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
-
-      if (error) {
-        console.error("[Shunel Auth Login Error]:", error);
-        notify("Error: " + error.message);
-      } else {
-        console.log("[Shunel Auth Login Success]:", data);
-        notify("¡Bienvenido de vuelta a Shunel!");
-        loginForm.reset();
-        toggleAuthScreen(false);
-      }
-    });
-
-    // Manejar Registro
-    registerForm?.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      if (!supabaseClient) return notify("Supabase no está conectado.");
-
-      const username = $("#registerUsername")?.value.trim();
-      const displayName = $("#registerDisplayName")?.value.trim();
-      const email = $("#registerEmail")?.value.trim();
-      const password = $("#registerPassword")?.value.trim();
-
-      if (!email || !password || !username) return notify("Completa los campos obligatorios.");
-
-      notify("Registrando cuenta...");
-      console.log("[Shunel Auth] Intentando registrar usuario:", email);
-
-      const { data, error } = await supabaseClient.auth.signUp({
-        email,
-        password,
-        options: {
-          data: { username, displayName }
-        }
-      });
-
-      if (error) {
-        console.error("[Shunel Auth Register Error]:", error);
-        notify("Error: " + error.message);
-      } else {
-        console.log("[Shunel Auth Register Success]:", data);
-        notify("¡Cuenta creada con éxito! Ya puedes iniciar sesión.");
-        registerForm.reset();
-        registerForm.hidden = true;
-        loginForm.hidden = false;
-        if (showRegisterBtn) showRegisterBtn.textContent = "Crear cuenta";
-      }
-    });
-
-    // Manejar Cierre de Sesión
-    signOutBtn?.addEventListener("click", async () => {
-      if (!supabaseClient) return;
-      const { error } = await supabaseClient.auth.signOut();
-      if (error) {
-        console.error("[Shunel Auth SignOut Error]:", error);
-        notify("Error al cerrar sesión.");
-      } else {
-        notify("Sesión cerrada correctamente.");
-        toggleAuthScreen(true);
-      }
-    });
-  }
-
-  /* =====================================================
-     3. NOTIFICACIONES (TOAST)
-  ===================================================== */
-
-  function notify(message) {
-    const toast = $("#toast");
-    if (!toast) {
-      console.log("[Shunel Notify]", message);
+  function bind(element, event, callback) {
+    if (!element || state.boundElements.has(element)) {
       return;
     }
 
-    toast.textContent = message;
-    toast.classList.add("show");
-
-    clearTimeout(notify.timer);
-    notify.timer = setTimeout(() => {
-      toast.classList.remove("show");
-    }, 3500);
+    element.addEventListener(event, callback);
+    state.boundElements.add(element);
   }
 
-  /* =====================================================
-     4. GESTIÓN DE TEMAS
-  ===================================================== */
+  /* =========================================
+     NOTIFICACIONES
+  ========================================= */
 
-  function setTheme(themeName) {
-    state.theme = themeName;
-    document.body.setAttribute("data-theme", themeName);
-    localStorage.setItem("shunel_theme", themeName);
+  function notify(message, duration = CONFIG.toastDuration) {
+    const toast = $("#toast");
 
-    const themeSelect = $("#themeSetting");
-    if (themeSelect) themeSelect.value = themeName;
+    if (!toast) {
+      console.info("[Shunel]", message);
+      return;
+    }
 
-    document.dispatchEvent(
-      new CustomEvent("shunel:theme-change", { detail: { theme: themeName } })
+    toast.textContent = String(message);
+
+    toast.classList.add("show");
+    toast.setAttribute("role", "status");
+    toast.setAttribute("aria-live", "polite");
+
+    clearTimeout(state.toastTimer);
+
+    state.toastTimer = setTimeout(() => {
+      toast.classList.remove("show");
+    }, duration);
+  }
+
+  /* =========================================
+     NAVEGACIÓN
+  ========================================= */
+
+  function getPageName(element) {
+    if (!element) return null;
+
+    return (
+      element.dataset.page ||
+      element.dataset.target ||
+      element.getAttribute("data-navigation") ||
+      null
     );
   }
 
-  function initializeTheme() {
-    setTheme(state.theme);
-    const themeSelect = $("#themeSetting");
-    if (themeSelect) {
-      themeSelect.addEventListener("change", (e) => {
-        setTheme(e.target.value);
-        notify(`Tema cambiado correctamente.`);
-      });
-    }
-  }
+  function navigate(page, options = {}) {
+    const pageName = String(page || "")
+      .replace(/^#/, "")
+      .replace(/Page$/, "");
 
-  /* =====================================================
-     5. NAVEGACIÓN Y RUTAS SPA
-  ===================================================== */
+    const pageId = pages[pageName];
 
-  function normalizePage(value) {
-    if (!value) return null;
-    value = value.replace(/^#/, "").replace(/^\/+/, "");
-    if (pages[value]) return value;
-    return Object.keys(pages).find(key => pages[key].replace("#", "") === value) || null;
-  }
+    if (!pageId) {
+      console.warn(
+        "[Shunel] Página desconocida:",
+        pageName
+      );
 
-  function showPage(pageName, updateHistory = true) {
-    const page = normalizePage(pageName);
-    if (!page) {
-      console.warn("[Shunel] Página desconocida:", pageName);
-      return;
+      return false;
     }
 
-    const target = $(pages[page]);
+    const target = document.getElementById(pageId);
+
     if (!target) {
-      console.error("[Shunel] No existe la sección:", pages[page]);
-      notify("No se encontró esta sección.");
-      return;
+      console.warn(
+        "[Shunel] No existe el contenedor:",
+        pageId
+      );
+
+      return false;
     }
 
-    Object.entries(pages).forEach(([name, selector]) => {
-      const element = $(selector);
-      if (!element) return;
-      const active = name === page;
-      element.hidden = !active;
-      element.classList.toggle("active", active);
-      element.setAttribute("aria-hidden", String(!active));
+    Object.entries(pages).forEach(([name, id]) => {
+      const section = document.getElementById(id);
+
+      if (!section) return;
+
+      const active = name === pageName;
+
+      section.hidden = !active;
+      section.classList.toggle("active", active);
+      section.setAttribute(
+        "aria-hidden",
+        String(!active)
+      );
     });
 
-    state.currentPage = page;
+    $$("[data-page], [data-navigation]").forEach(item => {
+      const name = getPageName(item);
 
-    // Actualizar menús de navegación
-    $$(".nav-link, .bottom-nav a, .bottom-nav button").forEach(item => {
-      const destination = item.dataset.page || item.dataset.target || item.getAttribute("href");
-      const active = normalizePage(destination) === page;
+      const active = name === pageName;
+
       item.classList.toggle("active", active);
-      if (item.matches(".nav-link")) {
-        if (active) item.setAttribute("aria-current", "page");
-        else item.removeAttribute("aria-current");
+
+      if (active) {
+        item.setAttribute("aria-current", "page");
+      } else {
+        item.removeAttribute("aria-current");
       }
     });
 
-    if (updateHistory) {
-      history.replaceState({ page }, "", `#${page}`);
+    state.currentPage = pageName;
+
+    if (options.history !== false) {
+      try {
+        history.pushState(
+          { page: pageName },
+          "",
+          `#${pageName}`
+        );
+      } catch (error) {
+        console.warn(
+          "[Shunel] No se pudo actualizar el historial.",
+          error
+        );
+      }
     }
 
-    document.dispatchEvent(new CustomEvent("shunel:navigate", { detail: { page } }));
+    const menu = $("#mainMenu");
 
-    window.scrollTo({ top: 0, behavior: "auto" });
+    if (menu) {
+      menu.classList.remove("open");
+    }
+
+    emit("navigation:change", {
+      page: pageName
+    });
+
+    return true;
   }
 
   function initializeNavigation() {
-    document.addEventListener("click", event => {
-      const link = event.target.closest("[data-page], [data-target], .nav-link, .bottom-nav a");
-      if (!link) return;
+    $$("[data-page], [data-navigation]").forEach(item => {
+      bind(item, "click", event => {
+        const page = getPageName(item);
 
-      const destination = link.dataset.page || link.dataset.target || link.getAttribute("href");
-      const page = normalizePage(destination);
-      if (!page) return;
+        if (!page) return;
 
-      event.preventDefault();
-      showPage(page);
-    });
-
-    $("#profileButton")?.addEventListener("click", () => {
-      showPage("profile");
+        event.preventDefault();
+        navigate(page);
+      });
     });
 
     window.addEventListener("popstate", () => {
-      const page = normalizePage(location.hash);
-      showPage(page || "home", false);
+      const page = location.hash.replace(/^#/, "");
+
+      navigate(
+        pages[page] ? page : CONFIG.defaultPage,
+        { history: false }
+      );
+    });
+
+    const initialPage = location.hash.replace(/^#/, "");
+
+    navigate(
+      pages[initialPage]
+        ? initialPage
+        : CONFIG.defaultPage,
+      { history: false }
+    );
+
+    const menuButton = $("#menuButton");
+    const menu = $("#mainMenu");
+
+    bind(menuButton, "click", () => {
+      if (!menu) return;
+
+      menu.classList.toggle("open");
     });
   }
 
-  /* =====================================================
-     6. BUSCADOR YOUTUBE
-  ===================================================== */
+  /* =========================================
+     REPRODUCTOR
+  ========================================= */
 
-  const searchForm = $("#searchForm");
-  const searchInput = $("#searchInput");
-  const searchResults = $("#searchResults");
-
-  function createSearchStatus(message) {
-    if (!searchResults) return;
-    const element = document.createElement("p");
-    element.className = "search-status";
-    element.textContent = message;
-    searchResults.replaceChildren(element);
-    searchResults.hidden = false;
+  function getPlayer() {
+    return window.ShunelPlayer || null;
   }
 
-  function createSearchResult(track) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "search-result track-row";
-    button.dataset.videoId = track.videoId;
-    button.setAttribute("aria-label", `Reproducir ${track.title}`);
+  function play() {
+    const player = getPlayer();
 
-    const image = document.createElement("img");
-    image.src = track.artwork || "";
-    image.alt = "";
-    image.loading = "lazy";
+    if (!player) {
+      notify("El reproductor no está disponible.");
+      return false;
+    }
 
-    const info = document.createElement("div");
-    info.className = "track-info";
-
-    const title = document.createElement("strong");
-    title.textContent = track.title || "Sin título";
-
-    const artist = document.createElement("span");
-    artist.textContent = track.artist || "Artista desconocido";
-
-    info.append(title, artist);
-    button.append(image, info);
-
-    return button;
+    return player.togglePlay();
   }
 
-  async function searchMusic(query) {
-    query = String(query || "").trim();
-    if (!query) {
-      notify("Escribe el nombre de una canción o artista.");
+  function pause() {
+    return getPlayer()?.pause?.() ?? false;
+  }
+
+  function next() {
+    return getPlayer()?.next?.() ?? false;
+  }
+
+  function previous() {
+    return getPlayer()?.previous?.() ?? false;
+  }
+
+  function initializePlayerControls() {
+    bind($("#playButton"), "click", play);
+    bind($("#miniPlayButton"), "click", play);
+
+    bind($("#nextButton"), "click", next);
+    bind($("#miniNextButton"), "click", next);
+
+    bind($("#previousButton"), "click", previous);
+    bind($("#miniPreviousButton"), "click", previous);
+
+    const volume = $("#volumeSlider");
+
+    bind(volume, "input", () => {
+      const value = Number(volume.value);
+
+      if (!Number.isFinite(value)) return;
+
+      const normalized = value > 1
+        ? value / 100
+        : value;
+
+      getPlayer()?.setVolume?.(
+        Math.max(0, Math.min(1, normalized))
+      );
+    });
+
+    const seek = $("#seekSlider");
+
+    bind(seek, "change", () => {
+      const value = Number(seek.value);
+
+      if (!Number.isFinite(value)) return;
+
+      const player = getPlayer();
+      const track = player?.getCurrentTrack?.();
+
+      if (!track) return;
+
+      const duration =
+        player.getAudio()?.duration ||
+        track.duration ||
+        0;
+
+      if (duration > 0) {
+        player.seek(
+          Math.max(
+            0,
+            Math.min(duration, value)
+          )
+        );
+      }
+    });
+  }
+
+  /* =========================================
+     BÚSQUEDA MUSICAL
+  ========================================= */
+
+  function renderSearchResults(results) {
+    const container = $("#searchResultsList");
+
+    if (!container) return;
+
+    container.replaceChildren();
+
+    if (!Array.isArray(results) || !results.length) {
+      const empty = document.createElement("p");
+
+      empty.textContent = "No se encontraron canciones.";
+
+      container.appendChild(empty);
+
       return;
     }
 
-    if (!searchResults) return;
+    const fragment = document.createDocumentFragment();
 
-    const requestId = ++state.searchRequest;
-    state.searching = true;
-    createSearchStatus("Buscando música...");
+    results.forEach((track, index) => {
+      const item = document.createElement("button");
+
+      item.type = "button";
+      item.className = "search-result";
+      item.dataset.index = String(index);
+
+      const artwork = document.createElement("img");
+
+      artwork.alt = "";
+      artwork.loading = "lazy";
+
+      const image = track.artwork || track.thumbnail;
+
+      if (image) {
+        try {
+          const url = new URL(image);
+
+          if (
+            url.protocol === "https:" ||
+            url.protocol === "http:"
+          ) {
+            artwork.src = url.href;
+          }
+        } catch {}
+      }
+
+      const information = document.createElement("span");
+
+      information.className = "search-result-info";
+
+      const title = document.createElement("strong");
+
+      title.textContent =
+        track.title || "Canción desconocida";
+
+      const artist = document.createElement("small");
+
+      artist.textContent =
+        track.artist || "Artista desconocido";
+
+      information.append(title, artist);
+
+      item.append(artwork, information);
+
+      bind(item, "click", async () => {
+        await playSearchResult(index);
+      });
+
+      fragment.appendChild(item);
+    });
+
+    container.appendChild(fragment);
+  }
+
+  async function playSearchResult(index) {
+    const track = state.lastSearchResults[index];
+
+    if (!track) return false;
+
+    const player = getPlayer();
+
+    if (!player) {
+      notify("El reproductor no está disponible.");
+      return false;
+    }
 
     try {
-      const response = await fetch(`/api/youtube?q=${encodeURIComponent(query)}&limit=15`, {
-        method: "GET",
-        headers: { Accept: "application/json" }
-      });
+      const result = await player.playTrack(track);
 
-      let data;
-      try {
-        data = await response.json();
-      } catch {
-        throw new Error("Respuesta inválida del servidor.");
+      if (result === false) {
+        notify("No se pudo reproducir esta canción.");
+        return false;
       }
 
-      if (requestId !== state.searchRequest) return;
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || `Error de búsqueda (${response.status}).`);
-      }
-
-      const results = Array.isArray(data.results) ? data.results : [];
-      searchResults.replaceChildren();
-
-      if (results.length === 0) {
-        createSearchStatus("No encontramos canciones.");
-        return;
-      }
-
-      results.forEach(track => {
-        if (!track.videoId) return;
-        searchResults.append(createSearchResult(track));
-      });
-
-      searchResults.hidden = false;
-
-      document.dispatchEvent(new CustomEvent("shunel:search-results", { detail: { query, results } }));
+      return true;
 
     } catch (error) {
-      if (requestId !== state.searchRequest) return;
-      console.error("[Shunel Search]", error);
-      createSearchStatus("No se pudo completar la búsqueda.");
-      notify("Error al buscar música.");
+      console.error("[Shunel] Error reproduciendo:", error);
+
+      notify("Error al reproducir la canción.");
+
+      return false;
+    }
+  }
+
+  async function searchMusic(query) {
+    const searchQuery = String(query || "").trim();
+
+    if (!searchQuery) return false;
+
+    if (state.searching) {
+      state.searchController?.abort();
+    }
+
+    const requestId = ++state.searchRequestId;
+
+    const controller = new AbortController();
+
+    state.searchController = controller;
+    state.searching = true;
+
+    const timeout = setTimeout(
+      () => controller.abort(),
+      CONFIG.searchTimeout
+    );
+
+    emit("search:start", {
+      query: searchQuery
+    });
+
+    try {
+      /*
+        Si existe un buscador especializado,
+        se utiliza primero.
+      */
+
+      let results = [];
+
+      if (
+        window.ShunelSearch &&
+        typeof window.ShunelSearch.search === "function"
+      ) {
+        results = await window.ShunelSearch.search(
+          searchQuery,
+          { signal: controller.signal }
+        );
+
+      } else {
+        /*
+          Endpoint previsto para el backend.
+          Se conectará cuando creemos el módulo
+          de búsqueda del servidor.
+        */
+
+        const response = await fetch(
+          `${CONFIG.searchEndpoint}?q=${encodeURIComponent(searchQuery)}`,
+          {
+            signal: controller.signal,
+            headers: {
+              Accept: "application/json"
+            }
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error(
+            `Error de búsqueda: ${response.status}`
+          );
+        }
+
+        const data = await response.json();
+
+        results = Array.isArray(data)
+          ? data
+          : data.results || data.items || [];
+      }
+
+      if (requestId !== state.searchRequestId) {
+        return false;
+      }
+
+      state.lastSearchResults = Array.isArray(results)
+        ? results
+        : [];
+
+      renderSearchResults(state.lastSearchResults);
+
+      emit("search:results", {
+        query: searchQuery,
+        results: state.lastSearchResults
+      });
+
+      if (!state.lastSearchResults.length) {
+        notify("No se encontraron resultados.");
+      }
+
+      return state.lastSearchResults;
+
+    } catch (error) {
+      if (requestId !== state.searchRequestId) {
+        return false;
+      }
+
+      const message = error.name === "AbortError"
+        ? "La búsqueda fue cancelada o tardó demasiado."
+        : "No se pudo realizar la búsqueda.";
+
+      notify(message);
+
+      emit("search:error", {
+        query: searchQuery,
+        message: error.message
+      });
+
+      return false;
+
     } finally {
-      if (requestId === state.searchRequest) {
+      clearTimeout(timeout);
+
+      if (requestId === state.searchRequestId) {
         state.searching = false;
+        state.searchController = null;
       }
     }
   }
 
   function initializeSearch() {
-    if (!searchForm) return;
+    const input = $("#searchInput");
 
-    searchForm.addEventListener("submit", event => {
+    bind(input, "keydown", event => {
+      if (event.key !== "Enter") return;
+
       event.preventDefault();
-      searchMusic(searchInput?.value);
+
+      searchMusic(input.value);
     });
 
-    searchInput?.addEventListener("keydown", event => {
-      if (event.key === "Enter") {
-        event.preventDefault();
-        searchMusic(searchInput.value);
-      }
-    });
-  }
+    const button = $("#searchButton");
 
-  /* =====================================================
-     7. REPRODUCTOR YOUTUBE
-  ===================================================== */
-
-  function playYouTubeVideo(videoId) {
-    if (!videoId) return;
-    const container = $("#youtubePlayerContainer");
-    if (!container) {
-      notify("Reproductor no disponible.");
-      return;
-    }
-
-    const iframe = document.createElement("iframe");
-    iframe.src = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(videoId)}?autoplay=1&playsinline=1&rel=0`;
-    iframe.title = "Shunel Music Player";
-    iframe.allow = "autoplay; encrypted-media; picture-in-picture; fullscreen";
-    iframe.allowFullscreen = true;
-    iframe.setAttribute("frameborder", "0");
-
-    container.replaceChildren(iframe);
-    state.currentVideo = videoId;
-
-    if (searchResults) searchResults.hidden = true;
-
-    document.dispatchEvent(new CustomEvent("shunel:youtube-play", { detail: { videoId } }));
-    notify("Reproduciendo audio...");
-  }
-
-  function initializeResults() {
-    if (!searchResults) return;
-    searchResults.addEventListener("click", event => {
-      const result = event.target.closest("[data-video-id]");
-      if (!result) return;
-      playYouTubeVideo(result.dataset.videoId);
+    bind(button, "click", () => {
+      searchMusic(input?.value || "");
     });
   }
 
-  /* =====================================================
-     8. CONTROLES Y OVERLAYS
-  ===================================================== */
-
-  function initializePlayerControls() {
-    $("#miniPlayButton")?.addEventListener("click", () => window.ShunelPlayer?.togglePlay?.());
-    $("#miniNextButton")?.addEventListener("click", () => window.ShunelPlayer?.next?.());
-    $("#miniPreviousButton")?.addEventListener("click", () => window.ShunelPlayer?.previous?.());
-    $("#playButton")?.addEventListener("click", () => window.ShunelPlayer?.togglePlay?.());
-
-    $("#bottom-player")?.addEventListener("click", event => {
-      if (event.target.closest("button")) return;
-      window.ShunelPlayer?.openPlayer?.();
-    });
-  }
+  /* =========================================
+     OVERLAYS
+  ========================================= */
 
   function initializeOverlays() {
-    const selectors = ["#nowPlayingScreen", "#lyricsScreen", "#queueScreen", "#canvasScreen", "#aiScreen"];
+    const overlayPairs = [
+      ["lyricsButton", "lyricsOverlay"],
+      ["openLyricsButton", "lyricsOverlay"],
+      ["closeLyricsButton", "lyricsOverlay"],
+      ["openAIButton", "aiOverlay"],
+      ["closeAIButton", "aiOverlay"],
+      ["openQueueButton", "queueOverlay"],
+      ["closeQueueButton", "queueOverlay"]
+    ];
 
-    selectors.forEach(selector => {
-      const overlay = $(selector);
-      if (!overlay) return;
+    overlayPairs.forEach(([buttonId, overlayId]) => {
+      const button = document.getElementById(buttonId);
+      const overlay = document.getElementById(overlayId);
 
-      $$("[data-close], .close-button, .close-overlay", overlay).forEach(button => {
-        button.addEventListener("click", () => {
-          overlay.classList.remove("active", "open");
+      if (!button || !overlay) return;
+
+      bind(button, "click", () => {
+        const isCloseButton =
+          buttonId.startsWith("close");
+
+        if (isCloseButton) {
+          overlay.classList.remove("active");
           overlay.hidden = true;
-        });
+          overlay.setAttribute("aria-hidden", "true");
+          return;
+        }
+
+        if (overlayId === "lyricsOverlay") {
+          window.ShunelLyrics?.show?.();
+          return;
+        }
+
+        overlay.hidden = false;
+        overlay.classList.add("active");
+        overlay.setAttribute("aria-hidden", "false");
       });
     });
+  }
 
-    window.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") {
-        selectors.forEach(sel => {
-          const el = $(sel);
-          if (el && !el.hidden) {
-            el.classList.remove("active", "open");
-            el.hidden = true;
-          }
-        });
-        if (searchResults) searchResults.hidden = true;
+  /* =========================================
+     SUPABASE
+  ========================================= */
+
+  function getSupabase() {
+    return (
+      window.shunelSupabase ||
+      window.supabaseClient ||
+      window._supabase ||
+      null
+    );
+  }
+
+  async function initializeAccount() {
+    const client = getSupabase();
+
+    if (!client?.auth) return;
+
+    try {
+      const { data, error } = await client.auth.getSession();
+
+      if (error) throw error;
+
+      if (data?.session?.user) {
+        await window.ShunelProfiles?.load?.();
+        await window.ShunelSocial?.load?.();
+        await window.ShunelStatistics?.load?.();
       }
+
+      client.auth.onAuthStateChange((event, session) => {
+        if (event === "SIGNED_OUT") {
+          window.ShunelProfiles?.clearLocal?.();
+          window.ShunelSocial?.clear?.();
+
+          emit("account:signed-out", {});
+          return;
+        }
+
+        if (
+          event === "SIGNED_IN" ||
+          event === "TOKEN_REFRESHED"
+        ) {
+          /*
+            No realizamos consultas directamente
+            dentro del callback de autenticación.
+            Las ejecutamos después de que termine
+            el evento para evitar bloquear el flujo.
+          */
+
+          Promise.resolve().then(async () => {
+            try {
+              await window.ShunelProfiles?.load?.();
+              await window.ShunelSocial?.load?.();
+              await window.ShunelStatistics?.load?.();
+
+              emit("account:signed-in", {
+                userId: session?.user?.id || null
+              });
+            } catch (error) {
+              console.error(
+                "[Shunel] Error sincronizando sesión:",
+                error
+              );
+            }
+          });
+        }
+      });
+
+    } catch (error) {
+      console.warn(
+        "[Shunel] Supabase no está disponible:",
+        error
+      );
+    }
+  }
+
+  /* =========================================
+     EVENTOS DEL SISTEMA
+  ========================================= */
+
+  function initializeEvents() {
+    const events = window.ShunelEvents;
+
+    if (!events) return;
+
+    events.on("trackchange", detail => {
+      emit("app:trackchange", detail);
+    });
+
+    events.on("play", () => {
+      emit("app:play", {});
+    });
+
+    events.on("pause", () => {
+      emit("app:pause", {});
+    });
+
+    events.on("player:error", detail => {
+      notify(detail?.message || "Error del reproductor.");
     });
   }
 
-  /* =====================================================
-     9. DETECCIÓN DE CONEXIÓN (OFFLINE/ONLINE)
-  ===================================================== */
+  /* =========================================
+     MÓDULOS
+  ========================================= */
 
-  function initializeNetworkListeners() {
-    window.addEventListener("online", () => notify("Conexión restablecida."));
-    window.addEventListener("offline", () => notify("Estás sin conexión. Modo offline activo."));
+  async function initializeModules() {
+    const modules = [
+      ["ShunelYouTube", "initialize"],
+      ["ShunelAudioEngine", "initialize"],
+      ["ShunelCrossfade", "initialize"],
+      ["ShunelLyrics", "initialize"],
+      ["ShunelCanvas", "initialize"],
+      ["ShunelRadio", "initialize"],
+      ["ShunelAI", "initialize"],
+      ["ShunelProfiles", "initialize"],
+      ["ShunelSocial", "initialize"],
+      ["ShunelStatistics", "initialize"]
+    ];
+
+    for (const [moduleName, method] of modules) {
+      const module = window[moduleName];
+
+      if (typeof module?.[method] !== "function") {
+        console.warn(
+          `[Shunel] Módulo no disponible: ${moduleName}`
+        );
+
+        continue;
+      }
+
+      try {
+        await module[method]();
+      } catch (error) {
+        console.error(
+          `[Shunel] Error inicializando ${moduleName}:`,
+          error
+        );
+      }
+    }
   }
 
-  /* =====================================================
-     10. SERVICE WORKER / PWA
-  ===================================================== */
+  /* =========================================
+     INICIALIZACIÓN
+  ========================================= */
 
-  function registerServiceWorker() {
-    if (!("serviceWorker" in navigator)) return;
-    navigator.serviceWorker.register("/sw.js")
-      .then(reg => console.log("[Shunel PWA] Service Worker registrado:", reg.scope))
-      .catch(err => console.error("[Shunel PWA] Error Service Worker:", err));
-  }
+  async function initialize() {
+    if (state.initialized) return true;
 
-  /* =====================================================
-     11. INICIALIZACIÓN GLOBAL
-  ===================================================== */
+    if (document.readyState === "loading") {
+      await new Promise(resolve => {
+        document.addEventListener(
+          "DOMContentLoaded",
+          resolve,
+          { once: true }
+        );
+      });
+    }
 
-  function initialize() {
-    initSupabase();
-    initializeAuthForms();
-    initializeTheme();
+    /*
+      El gestor de eventos debe estar disponible
+      antes de conectar los demás módulos.
+    */
+
+    window.ShunelEvents?.initialize?.();
+
+    initializeEvents();
     initializeNavigation();
-    initializeSearch();
-    initializeResults();
     initializePlayerControls();
+    initializeSearch();
     initializeOverlays();
-    initializeNetworkListeners();
 
-    const initialPage = normalizePage(location.hash) || "home";
-    showPage(initialPage, false);
+    await initializeModules();
+    await initializeAccount();
 
-    document.documentElement.classList.add("shunel-ready");
-    registerServiceWorker();
+    state.initialized = true;
 
-    console.log("[Shunel] Aplicación inicializada correctamente.");
+    emit("app:ready", {
+      page: state.currentPage
+    });
+
+    console.info(
+      "[Shunel] Aplicación inicializada."
+    );
+
+    return true;
   }
 
-  /* =====================================================
-     12. API PÚBLICA DE LA APP
-  ===================================================== */
+  window.ShunelApp = Object.freeze({
+    initialize,
+    navigate,
+    notify,
+    searchMusic,
+    play,
+    pause,
+    next,
+    previous,
 
-  window.ShunelApp = {
-    navigate: showPage,
-    search: searchMusic,
-    playYouTube: playYouTubeVideo,
-    setTheme,
-    getCurrentPage: () => state.currentPage,
-    getUser: () => state.user,
-    getState: () => ({ ...state }),
-    getPages: () => ({ ...pages })
-  };
+    getState() {
+      return {
+        initialized: state.initialized,
+        currentPage: state.currentPage,
+        searching: state.searching,
+        searchResults: state.lastSearchResults.length
+      };
+    }
+  });
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", initialize, { once: true });
-  } else {
-    initialize();
-  }
+  initialize();
 
 })();

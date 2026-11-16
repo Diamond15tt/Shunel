@@ -1,19 +1,30 @@
 
-/* ==========================================
+/* =========================================
    SHUNEL — SERVICE WORKER
    PWA, caché y funcionamiento offline
-========================================== */
+   Version: 2.0.0
+========================================= */
 
-const CACHE_NAME = "shunel-cache-v1";
+"use strict";
+
+const VERSION = "2.0.0";
+
+const CACHE_PREFIX = "shunel-";
+const STATIC_CACHE = `${CACHE_PREFIX}static-${VERSION}`;
+const RUNTIME_CACHE = `${CACHE_PREFIX}runtime-${VERSION}`;
 
 const APP_FILES = [
   "/",
   "/index.html",
   "/manifest.json",
+
   "/css/style.css",
   "/css/player.css",
-  "/js/app.js",
+
+  "/js/events.js",
   "/js/player.js",
+  "/js/youtube.js",
+  "/js/audio-engine.js",
   "/js/crossfade.js",
   "/js/lyrics.js",
   "/js/canvas.js",
@@ -21,125 +32,333 @@ const APP_FILES = [
   "/js/shunel-ai.js",
   "/js/profiles.js",
   "/js/social.js",
-  "/js/statistics.js"
+  "/js/statistics.js",
+  "/js/app.js"
 ];
 
-// Instalación
+const MAX_RUNTIME_ENTRIES = 60;
+
+const NETWORK_TIMEOUT = 5000;
+
+/* =========================================
+   INSTALACIÓN
+========================================= */
+
 self.addEventListener("install", event => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then(async cache => {
+    (async () => {
+      const cache = await caches.open(STATIC_CACHE);
+
+      /*
+        No obligamos a que todos los archivos
+        existan para completar la instalación.
+        Los recursos faltantes se reportan.
+      */
+
       await Promise.all(
-        APP_FILES.map(async file => {
+        APP_FILES.map(async path => {
           try {
-            await cache.add(file);
+            const response = await fetch(path, {
+              cache: "reload"
+            });
+
+            if (!response.ok) {
+              throw new Error(
+                `HTTP ${response.status}`
+              );
+            }
+
+            await cache.put(path, response);
+
           } catch (error) {
             console.warn(
               "[Shunel SW] No se pudo guardar:",
-              file
+              path,
+              error.message
             );
           }
         })
       );
-    })
-  );
 
-  self.skipWaiting();
+      await self.skipWaiting();
+
+      console.info(
+        `[Shunel SW] Instalado ${VERSION}`
+      );
+    })()
+  );
 });
 
-// Activación y limpieza de cachés antiguas
+/* =========================================
+   ACTIVACIÓN
+========================================= */
+
 self.addEventListener("activate", event => {
   event.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(
-        keys
-          .filter(key => key.startsWith("shunel-cache-"))
-          .filter(key => key !== CACHE_NAME)
-          .map(key => caches.delete(key))
-      )
-    )
-  );
+    (async () => {
+      const keys = await caches.keys();
 
-  self.clients.claim();
+      await Promise.all(
+        keys.map(async key => {
+          if (
+            key.startsWith(CACHE_PREFIX) &&
+            key !== STATIC_CACHE &&
+            key !== RUNTIME_CACHE
+          ) {
+            await caches.delete(key);
+          }
+        })
+      );
+
+      await self.clients.claim();
+
+      console.info(
+        `[Shunel SW] Activado ${VERSION}`
+      );
+    })()
+  );
 });
 
-// Solicitudes de red
+/* =========================================
+   UTILIDADES
+========================================= */
+
+function isSameOrigin(url) {
+  return url.origin === self.location.origin;
+}
+
+function isCacheable(response) {
+  return (
+    response &&
+    response.status === 200 &&
+    response.type !== "opaque"
+  );
+}
+
+async function networkWithTimeout(request) {
+  const controller = new AbortController();
+
+  const timeout = setTimeout(
+    () => controller.abort(),
+    NETWORK_TIMEOUT
+  );
+
+  try {
+    return await fetch(request, {
+      signal: controller.signal
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function trimCache(cacheName, maxEntries) {
+  const cache = await caches.open(cacheName);
+
+  const keys = await cache.keys();
+
+  if (keys.length <= maxEntries) return;
+
+  const excess = keys.length - maxEntries;
+
+  await Promise.all(
+    keys.slice(0, excess).map(request => {
+      return cache.delete(request);
+    })
+  );
+}
+
+/* =========================================
+   ARCHIVOS ESTÁTICOS
+   NETWORK FIRST
+========================================= */
+
+async function networkFirst(request) {
+  const cache = await caches.open(STATIC_CACHE);
+
+  try {
+    const response = await networkWithTimeout(request);
+
+    if (isCacheable(response)) {
+      await cache.put(request, response.clone());
+    }
+
+    return response;
+
+  } catch {
+    const cached = await cache.match(request);
+
+    if (cached) return cached;
+
+    throw new Error("Recurso no disponible offline.");
+  }
+}
+
+/* =========================================
+   RECURSOS DINÁMICOS
+   STALE WHILE REVALIDATE
+========================================= */
+
+async function staleWhileRevalidate(request) {
+  const cache = await caches.open(RUNTIME_CACHE);
+
+  const cached = await cache.match(request);
+
+  const networkRequest = fetch(request)
+    .then(async response => {
+      if (isCacheable(response)) {
+        await cache.put(request, response.clone());
+
+        await trimCache(
+          RUNTIME_CACHE,
+          MAX_RUNTIME_ENTRIES
+        );
+      }
+
+      return response;
+    })
+    .catch(() => null);
+
+  if (cached) {
+    return cached;
+  }
+
+  const response = await networkRequest;
+
+  if (response) return response;
+
+  throw new Error("Recurso no disponible.");
+}
+
+/* =========================================
+   NAVEGACIÓN HTML
+========================================= */
+
+async function handleNavigation(request) {
+  try {
+    const response = await networkWithTimeout(request);
+
+    if (isCacheable(response)) {
+      const cache = await caches.open(STATIC_CACHE);
+
+      await cache.put(
+        "/index.html",
+        response.clone()
+      );
+    }
+
+    return response;
+
+  } catch {
+    const cache = await caches.open(STATIC_CACHE);
+
+    const cached = await cache.match("/index.html");
+
+    if (cached) return cached;
+
+    return new Response(
+      "Shunel no está disponible sin conexión.",
+      {
+        status: 503,
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8"
+        }
+      }
+    );
+  }
+}
+
+/* =========================================
+   ESTRATEGIA DE PETICIONES
+========================================= */
+
 self.addEventListener("fetch", event => {
   const request = event.request;
+
+  if (request.method !== "GET") return;
+
   const url = new URL(request.url);
 
-  // Solo solicitudes GET del mismo origen
-  if (
-    request.method !== "GET" ||
-    url.origin !== self.location.origin
-  ) {
-    return;
-  }
+  /*
+    No interceptar:
+    - Peticiones externas.
+    - Supabase.
+    - APIs.
+    - YouTube.
+    - Streaming de audio.
+  */
 
-  // No almacenar respuestas de API ni autenticación
+  if (!isSameOrigin(url)) return;
+
   if (
     url.pathname.startsWith("/api/") ||
-    url.pathname.includes("auth")
+    url.pathname.includes("/auth/") ||
+    url.pathname.includes("/rest/") ||
+    url.pathname.includes("/storage/") ||
+    url.pathname.includes("/realtime/")
   ) {
-    event.respondWith(fetch(request));
     return;
   }
 
-  // HTML: intentar red y usar caché si no hay conexión
   if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request)
-        .then(response => {
-          if (response.ok) {
-            const copy = response.clone();
-
-            caches.open(CACHE_NAME).then(cache => {
-              cache.put("/index.html", copy);
-            });
-          }
-
-          return response;
-        })
-        .catch(async () => {
-          return (
-            await caches.match(request) ||
-            await caches.match("/index.html") ||
-            new Response(
-              "Shunel no está disponible sin conexión.",
-              {
-                status: 503,
-                headers: {
-                  "Content-Type": "text/plain; charset=utf-8"
-                }
-              }
-            )
-          );
-        })
+      handleNavigation(request)
     );
 
     return;
   }
 
-  // Recursos estáticos: caché primero, red después
+  const isStaticFile =
+    /\.(js|css|json|svg|png|jpg|jpeg|webp|ico|woff2?)$/i
+      .test(url.pathname);
+
+  if (isStaticFile) {
+    event.respondWith(
+      networkFirst(request)
+    );
+
+    return;
+  }
+
   event.respondWith(
-    caches.match(request).then(cached => {
-      if (cached) return cached;
-
-      return fetch(request).then(response => {
-        if (
-          response.ok &&
-          response.type === "basic"
-        ) {
-          const copy = response.clone();
-
-          caches.open(CACHE_NAME).then(cache => {
-            cache.put(request, copy);
-          });
-        }
-
-        return response;
-      });
-    })
+    staleWhileRevalidate(request)
   );
 });
 
-console.log("[Shunel] Service Worker cargado.");
+/* =========================================
+   MENSAJES DESDE LA APLICACIÓN
+========================================= */
+
+self.addEventListener("message", event => {
+  const message = event.data;
+
+  if (!message || typeof message !== "object") {
+    return;
+  }
+
+  if (message.type === "SKIP_WAITING") {
+    event.waitUntil(
+      self.skipWaiting()
+    );
+  }
+
+  if (message.type === "GET_VERSION") {
+    event.ports?.[0]?.postMessage({
+      version: VERSION
+    });
+  }
+
+  if (message.type === "CLEAR_RUNTIME_CACHE") {
+    event.waitUntil(
+      caches.delete(RUNTIME_CACHE)
+    );
+  }
+});
+
+/* =========================================
+   FINAL
+========================================= */
+
+console.info(
+  `[Shunel SW] Service Worker ${VERSION} listo.`
+);

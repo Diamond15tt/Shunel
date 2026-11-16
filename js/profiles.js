@@ -1,21 +1,40 @@
 
 /* =========================================
-   SHUNEL — PROFILES
-   Gestión de perfiles y datos de usuario
+   SHUNEL — USER PROFILES
+   Perfiles y sincronización con Supabase
+   Version: 2.0.0
 ========================================= */
 
 (() => {
   "use strict";
 
-  const STORAGE_KEY = "shunel_profile";
-  const DEFAULT_AVATAR = "";
+  if (window.ShunelProfiles) return;
+
+  const CONFIG = {
+    storageKey: "shunel_profile",
+    table: "profiles",
+    timeout: 15000
+  };
 
   const state = {
-    profile: null,
-    user: null,
+    initialized: false,
     loading: false,
-    initialized: false
+    saving: false,
+    user: null,
+    profile: null,
+    client: null,
+    requestId: 0
   };
+
+  function emit(name, detail = {}) {
+    if (window.ShunelEvents) {
+      window.ShunelEvents.emit(name, detail);
+    } else {
+      window.dispatchEvent(
+        new CustomEvent(`shunel:${name}`, { detail })
+      );
+    }
+  }
 
   function getSupabase() {
     return (
@@ -26,451 +45,390 @@
     );
   }
 
-  function getDefaultProfile() {
+  function normalizeProfile(data = {}) {
     return {
-      id: null,
-      username: "",
-      display_name: "",
-      avatar_url: DEFAULT_AVATAR,
-      bio: "",
-      is_private: false,
-      is_public: true,
-      created_at: null
+      id: data.id || null,
+      username: String(data.username || "").trim(),
+      display_name: String(
+        data.display_name || data.username || ""
+      ).trim(),
+      bio: String(data.bio || ""),
+      avatar_url: data.avatar_url || null,
+      created_at: data.created_at || null,
+      updated_at: data.updated_at || null
     };
   }
 
-  function normalizeUsername(value) {
-    return String(value || "")
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9_.]/g, "")
-      .slice(0, 24);
-  }
+  function readLocal() {
+    try {
+      const saved = localStorage.getItem(CONFIG.storageKey);
 
-  function cleanText(value, maxLength = 120) {
-    return String(value || "")
-      .trim()
-      .slice(0, maxLength);
-  }
+      return saved
+        ? normalizeProfile(JSON.parse(saved))
+        : null;
+    } catch (error) {
+      console.warn(
+        "[Shunel Profiles] Caché local inválida.",
+        error
+      );
 
-  function validateProfile(data) {
-    const errors = [];
-
-    const username = normalizeUsername(data.username);
-    const displayName = cleanText(data.display_name, 40);
-    const bio = cleanText(data.bio, 160);
-    const avatarUrl = cleanText(data.avatar_url, 1000);
-
-    if (!username) {
-      errors.push("El nombre de usuario es obligatorio.");
-    } else if (username.length < 3) {
-      errors.push("El nombre de usuario debe tener al menos 3 caracteres.");
+      return null;
     }
-
-    if (!displayName) {
-      errors.push("El nombre del perfil es obligatorio.");
-    }
-
-    if (
-      avatarUrl &&
-      !/^https:\/\//i.test(avatarUrl)
-    ) {
-      errors.push("La imagen debe utilizar una dirección HTTPS.");
-    }
-
-    return {
-      valid: errors.length === 0,
-      errors,
-      data: {
-        username,
-        display_name: displayName,
-        avatar_url: avatarUrl,
-        bio,
-        is_private: Boolean(data.is_private),
-        is_public: !Boolean(data.is_private)
-      }
-    };
   }
 
   function saveLocal(profile) {
     try {
       localStorage.setItem(
-        STORAGE_KEY,
+        CONFIG.storageKey,
         JSON.stringify(profile)
-      );
-
-      state.profile = profile;
-
-      document.dispatchEvent(
-        new CustomEvent("shunel:profile-updated", {
-          detail: { profile }
-        })
       );
 
       return true;
     } catch (error) {
-      console.error("[Shunel Profiles] Error local:", error);
+      console.warn(
+        "[Shunel Profiles] Error guardando caché:",
+        error
+      );
+
       return false;
     }
   }
 
-  function loadLocal() {
-    try {
-      const saved = JSON.parse(
-        localStorage.getItem(STORAGE_KEY) || "null"
-      );
-
-      if (saved && typeof saved === "object") {
-        state.profile = {
-          ...getDefaultProfile(),
-          ...saved
-        };
-      } else {
-        state.profile = getDefaultProfile();
-      }
-    } catch {
-      state.profile = getDefaultProfile();
-    }
-
-    return state.profile;
-  }
-
   async function getAuthenticatedUser() {
-    const client = getSupabase();
+    const client = state.client || getSupabase();
 
     if (!client?.auth) return null;
 
     const { data, error } = await client.auth.getUser();
 
-    if (error) {
-      console.warn("[Shunel Profiles] No se pudo verificar la sesión:", error);
-      return null;
-    }
+    if (error) throw error;
 
-    state.user = data?.user || null;
-
-    return state.user;
+    return data?.user || null;
   }
 
-  async function fetchProfile(userId) {
-    const client = getSupabase();
+  async function loadFromServer(userId) {
+    const client = state.client || getSupabase();
 
     if (!client || !userId) return null;
 
     const { data, error } = await client
-      .from("profiles")
+      .from(CONFIG.table)
       .select("*")
-      .eq("id", userId)
-      .maybeSingle();
-
-    if (error) {
-      console.error("[Shunel Profiles] Error leyendo perfil:", error);
-      throw error;
-    }
-
-    return data;
-  }
-
-  async function createProfile(user, profileData = {}) {
-    const client = getSupabase();
-
-    if (!client || !user?.id) {
-      throw new Error("No hay una sesión válida de Supabase.");
-    }
-
-    const initial = {
-      ...getDefaultProfile(),
-      ...profileData
-    };
-
-    const emailName = user.email
-      ? user.email.split("@")[0]
-      : "";
-
-    const username = normalizeUsername(
-      initial.username || emailName
-    );
-
-    const displayName = cleanText(
-      initial.display_name || username,
-      40
-    );
-
-    if (username.length < 3) {
-      throw new Error("Elegí un nombre de usuario de al menos 3 caracteres.");
-    }
-
-    const payload = {
-      id: user.id,
-      username,
-      display_name: displayName,
-      avatar_url: cleanText(initial.avatar_url, 1000),
-      bio: cleanText(initial.bio, 160),
-      is_private: Boolean(initial.is_private),
-      is_public: !Boolean(initial.is_private)
-    };
-
-    const { data, error } = await client
-      .from("profiles")
-      .insert(payload)
-      .select()
-      .single();
-
-    if (error) {
-      console.error("[Shunel Profiles] Error creando perfil:", error);
-      throw error;
-    }
-
-    saveLocal(data);
-
-    return data;
-  }
-
-  async function loadProfile() {
-    state.loading = true;
-
-    try {
-      loadLocal();
-
-      const user = await getAuthenticatedUser();
-
-      if (!user) {
-        return state.profile;
-      }
-
-      const remoteProfile = await fetchProfile(user.id);
-
-      if (remoteProfile) {
-        saveLocal(remoteProfile);
-        return remoteProfile;
-      }
-
-      // Si todavía no existe un perfil remoto,
-      // se conserva el perfil local hasta crearlo.
-      return state.profile;
-
-    } finally {
-      state.loading = false;
-    }
-  }
-
-  async function create(data = {}) {
-    const validation = validateProfile({
-      ...state.profile,
-      ...data
-    });
-
-    if (!validation.valid) {
-      throw new Error(validation.errors.join(" "));
-    }
-
-    const user = await getAuthenticatedUser();
-
-    if (!user) {
-      const localProfile = {
-        ...getDefaultProfile(),
-        ...validation.data
-      };
-
-      saveLocal(localProfile);
-
-      return localProfile;
-    }
-
-    return createProfile(user, validation.data);
-  }
-
-  async function update(data = {}) {
-    const current = state.profile || loadLocal();
-
-    const validation = validateProfile({
-      ...current,
-      ...data
-    });
-
-    if (!validation.valid) {
-      throw new Error(validation.errors.join(" "));
-    }
-
-    const user = await getAuthenticatedUser();
-
-    if (!user) {
-      const updated = {
-        ...current,
-        ...validation.data
-      };
-
-      saveLocal(updated);
-
-      return updated;
-    }
-
-    const client = getSupabase();
-
-    const { data: updated, error } = await client
-      .from("profiles")
-      .update(validation.data)
-      .eq("id", user.id)
-      .select()
-      .single();
-
-    if (error) {
-      console.error("[Shunel Profiles] Error actualizando:", error);
-      throw error;
-    }
-
-    saveLocal(updated);
-
-    return updated;
-  }
-
-  async function uploadAvatar(file) {
-    const client = getSupabase();
-    const user = await getAuthenticatedUser();
-
-    if (!client || !user) {
-      throw new Error("Iniciá sesión para subir una foto.");
-    }
-
-    if (!(file instanceof File)) {
-      throw new Error("Seleccioná una imagen válida.");
-    }
-
-    if (!file.type.startsWith("image/")) {
-      throw new Error("El archivo debe ser una imagen.");
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-      throw new Error("La imagen no puede superar los 5 MB.");
-    }
-
-    const extension = file.name.split(".").pop()
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, "") || "jpg";
-
-    const path = `${user.id}/avatar-${Date.now()}.${extension}`;
-
-    const { error: uploadError } = await client
-      .storage
-      .from("avatars")
-      .upload(path, file, {
-        upsert: true,
-        contentType: file.type
-      });
-
-    if (uploadError) {
-      console.error("[Shunel Profiles] Error subiendo avatar:", uploadError);
-      throw uploadError;
-    }
-
-    const { data } = client
-      .storage
-      .from("avatars")
-      .getPublicUrl(path);
-
-    const avatarUrl = data?.publicUrl;
-
-    if (!avatarUrl) {
-      throw new Error("No se pudo obtener la dirección de la imagen.");
-    }
-
-    return update({
-      ...state.profile,
-      avatar_url: avatarUrl
-    });
-  }
-
-  async function findByUsername(username) {
-    const client = getSupabase();
-    const normalized = normalizeUsername(username);
-
-    if (!client || !normalized) return null;
-
-    const { data, error } = await client
-      .from("profiles")
-      .select("id, username, display_name, avatar_url, bio, is_private, is_public")
-      .eq("username", normalized)
-      .maybeSingle();
-
-    if (error) {
-      console.error("[Shunel Profiles] Error buscando usuario:", error);
-      throw error;
-    }
-
-    return data;
-  }
-
-  async function getPublicProfile(userId) {
-    const client = getSupabase();
-
-    if (!client || !userId) return null;
-
-    const { data, error } = await client
-      .from("profiles")
-      .select("id, username, display_name, avatar_url, bio, is_private, is_public")
       .eq("id", userId)
       .maybeSingle();
 
     if (error) throw error;
 
-    return data;
+    return data ? normalizeProfile(data) : null;
+  }
+
+  async function createProfile(user) {
+    const client = state.client || getSupabase();
+
+    if (!client || !user?.id) {
+      throw new Error("No hay un usuario autenticado.");
+    }
+
+    const metadata = user.user_metadata || {};
+
+    const profile = normalizeProfile({
+      id: user.id,
+      username:
+        metadata.username ||
+        user.email?.split("@")[0] ||
+        "usuario",
+      display_name:
+        metadata.display_name ||
+        metadata.full_name ||
+        metadata.username ||
+        "Usuario",
+      bio: "",
+      avatar_url: metadata.avatar_url || null
+    });
+
+    const { data, error } = await client
+      .from(CONFIG.table)
+      .upsert(profile, {
+        onConflict: "id"
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return normalizeProfile(data);
+  }
+
+  async function load() {
+    if (state.loading) return state.profile;
+
+    state.loading = true;
+
+    const requestId = ++state.requestId;
+
+    emit("profile:loading", {
+      loading: true
+    });
+
+    try {
+      state.client = getSupabase();
+
+      if (!state.client) {
+        state.profile = readLocal();
+
+        emit("profile:offline", {
+          profile: state.profile
+        });
+
+        return state.profile;
+      }
+
+      const user = await getAuthenticatedUser();
+
+      if (requestId !== state.requestId) return null;
+
+      if (!user) {
+        state.user = null;
+        state.profile = null;
+
+        emit("profile:logged-out", {});
+
+        return null;
+      }
+
+      state.user = user;
+
+      let profile = await loadFromServer(user.id);
+
+      if (requestId !== state.requestId) return null;
+
+      if (!profile) {
+        profile = await createProfile(user);
+      }
+
+      if (requestId !== state.requestId) return null;
+
+      state.profile = profile;
+
+      saveLocal(profile);
+
+      emit("profile:loaded", {
+        profile
+      });
+
+      return profile;
+
+    } catch (error) {
+      console.error(
+        "[Shunel Profiles] Error cargando perfil:",
+        error
+      );
+
+      state.profile = readLocal();
+
+      emit("profile:error", {
+        message: error.message,
+        profile: state.profile
+      });
+
+      return state.profile;
+
+    } finally {
+      if (requestId === state.requestId) {
+        state.loading = false;
+
+        emit("profile:loading", {
+          loading: false
+        });
+      }
+    }
+  }
+
+  async function update(changes = {}) {
+    if (!state.user?.id) {
+      throw new Error("Debes iniciar sesión para editar tu perfil.");
+    }
+
+    if (state.saving) {
+      throw new Error("Ya hay una actualización en curso.");
+    }
+
+    const allowedFields = [
+      "username",
+      "display_name",
+      "bio",
+      "avatar_url"
+    ];
+
+    const updates = {};
+
+    allowedFields.forEach(field => {
+      if (Object.prototype.hasOwnProperty.call(changes, field)) {
+        updates[field] = changes[field];
+      }
+    });
+
+    if (!Object.keys(updates).length) {
+      return state.profile;
+    }
+
+    if (
+      updates.username !== undefined &&
+      !/^[a-zA-Z0-9_.-]{3,24}$/.test(updates.username)
+    ) {
+      throw new Error(
+        "El nombre de usuario debe tener entre 3 y 24 caracteres."
+      );
+    }
+
+    if (
+      updates.bio !== undefined &&
+      String(updates.bio).length > 300
+    ) {
+      throw new Error(
+        "La biografía no puede superar los 300 caracteres."
+      );
+    }
+
+    if (
+      updates.display_name !== undefined &&
+      String(updates.display_name).length > 50
+    ) {
+      throw new Error(
+        "El nombre no puede superar los 50 caracteres."
+      );
+    }
+
+    if (
+      updates.avatar_url !== undefined &&
+      updates.avatar_url !== null
+    ) {
+      try {
+        const url = new URL(updates.avatar_url);
+
+        if (!["https:", "http:"].includes(url.protocol)) {
+          throw new Error();
+        }
+      } catch {
+        throw new Error("La dirección de la fotografía no es válida.");
+      }
+    }
+
+    state.saving = true;
+
+    emit("profile:saving", {
+      saving: true
+    });
+
+    try {
+      const client = state.client || getSupabase();
+
+      if (!client) {
+        throw new Error("No hay conexión con Supabase.");
+      }
+
+      const payload = {
+        ...updates,
+        updated_at: new Date().toISOString()
+      };
+
+      const { data, error } = await client
+        .from(CONFIG.table)
+        .update(payload)
+        .eq("id", state.user.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      state.profile = normalizeProfile(data);
+
+      saveLocal(state.profile);
+
+      emit("profile:updated", {
+        profile: state.profile
+      });
+
+      return state.profile;
+
+    } catch (error) {
+      emit("profile:error", {
+        message: error.message
+      });
+
+      throw error;
+
+    } finally {
+      state.saving = false;
+
+      emit("profile:saving", {
+        saving: false
+      });
+    }
   }
 
   function getProfile() {
-    return state.profile || loadLocal();
+    return state.profile
+      ? { ...state.profile }
+      : null;
   }
 
-  function getUser() {
-    return state.user;
+  function setClient(client) {
+    if (!client?.auth || typeof client.from !== "function") {
+      return false;
+    }
+
+    state.client = client;
+
+    return true;
   }
 
   function clearLocal() {
-    localStorage.removeItem(STORAGE_KEY);
-    state.profile = getDefaultProfile();
+    try {
+      localStorage.removeItem(CONFIG.storageKey);
+    } catch {}
+
+    state.profile = null;
     state.user = null;
 
-    document.dispatchEvent(
-      new CustomEvent("shunel:profile-cleared")
-    );
+    emit("profile:cleared", {});
+
+    return true;
   }
 
-  async function initialize() {
+  function initialize() {
     if (state.initialized) return;
+
+    state.client = getSupabase();
+    state.profile = readLocal();
 
     state.initialized = true;
 
-    loadLocal();
+    emit("profile:ready", {
+      cached: Boolean(state.profile)
+    });
 
-    window.ShunelProfiles = {
-      load: loadProfile,
-      create,
-      update,
-      uploadAvatar,
-      findByUsername,
-      getPublicProfile,
-      getProfile,
-      getUser,
-      clearLocal,
-      validate: validateProfile
-    };
-
-    try {
-      await loadProfile();
-    } catch (error) {
-      console.warn("[Shunel Profiles] Se utilizará el perfil local:", error);
-    }
-
-    document.dispatchEvent(
-      new CustomEvent("shunel:profiles-ready", {
-        detail: {
-          profile: state.profile,
-          user: state.user
-        }
-      })
-    );
-
-    console.info("[Shunel Profiles] Módulo preparado.");
+    console.info("[Shunel Profiles] Sistema preparado.");
   }
+
+  window.ShunelProfiles = Object.freeze({
+    initialize,
+    load,
+    update,
+    getProfile,
+    setClient,
+    clearLocal,
+
+    getState() {
+      return {
+        initialized: state.initialized,
+        loading: state.loading,
+        saving: state.saving,
+        authenticated: Boolean(state.user),
+        profile: getProfile()
+      };
+    }
+  });
 
   initialize();
 

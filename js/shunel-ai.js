@@ -2,52 +2,94 @@
 /* =========================================
    SHUNEL — AI ASSISTANT
    Asistente musical inteligente
+   Version: 2.0.0
 ========================================= */
 
 (() => {
   "use strict";
 
+  if (window.ShunelAI) return;
+
+  const CONFIG = {
+    endpoint: "/api/chat",
+    timeout: 30000,
+    maxHistory: 20,
+    storageKey: "shunel_ai_history",
+    systemPrompt: `
+Eres Shunel AI, el asistente musical integrado
+en la aplicación Shunel.
+
+Tu trabajo es ayudar al usuario con música,
+artistas, canciones, recomendaciones y funciones
+del reproductor.
+
+Responde en español de forma natural y directa.
+
+No afirmes que has realizado una acción si el
+sistema no te ha confirmado que se ejecutó.
+
+Si no tienes información suficiente, dilo.
+No inventes canciones, artistas ni resultados.
+`
+  };
+
   const state = {
-    messages: [],
-    loading: false,
     initialized: false,
-    maxMessages: 100
+    loading: false,
+    history: [],
+    abortController: null,
+    requestId: 0,
+    provider: null
   };
 
-  const selectors = {
-    form: "#aiForm",
-    input: "#aiInput",
-    send: "#aiSendButton",
-    messages: "#aiMessages",
-    clear: "#aiClearButton"
-  };
-
-  const $ = selector => document.querySelector(selector);
+  function emit(name, detail = {}) {
+    if (window.ShunelEvents) {
+      window.ShunelEvents.emit(name, detail);
+    } else {
+      window.dispatchEvent(
+        new CustomEvent(`shunel:${name}`, { detail })
+      );
+    }
+  }
 
   function getPlayer() {
     return window.ShunelPlayer || null;
+  }
+
+  function getRadio() {
+    return window.ShunelRadio || null;
   }
 
   function getCurrentTrack() {
     return getPlayer()?.getCurrentTrack?.() || null;
   }
 
-  function getMessagesElement() {
-    return $(selectors.messages) ||
-      document.querySelector("[data-ai-messages]");
+  function getHistory() {
+    try {
+      const saved = JSON.parse(
+        localStorage.getItem(CONFIG.storageKey) || "[]"
+      );
+
+      return Array.isArray(saved) ? saved : [];
+    } catch {
+      return [];
+    }
   }
 
-  function getInputElement() {
-    return $(selectors.input) ||
-      document.querySelector("[data-ai-input]");
-  }
-
-  function normalize(text) {
-    return String(text || "")
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLowerCase()
-      .trim();
+  function saveHistory() {
+    try {
+      localStorage.setItem(
+        CONFIG.storageKey,
+        JSON.stringify(
+          state.history.slice(-CONFIG.maxHistory)
+        )
+      );
+    } catch (error) {
+      console.warn(
+        "[Shunel AI] No se pudo guardar el historial:",
+        error
+      );
+    }
   }
 
   function addMessage(role, content) {
@@ -57,330 +99,433 @@
       timestamp: Date.now()
     };
 
-    state.messages.push(message);
+    state.history.push(message);
 
-    if (state.messages.length > state.maxMessages) {
-      state.messages.shift();
-    }
-
-    renderMessage(message);
-
-    document.dispatchEvent(
-      new CustomEvent("shunel:ai-message", {
-        detail: message
-      })
+    state.history = state.history.slice(
+      -CONFIG.maxHistory
     );
+
+    saveHistory();
+
+    emit("ai:message", message);
 
     return message;
   }
 
-  function renderMessage(message) {
-    const container = getMessagesElement();
-
-    if (!container) return;
-
-    const article = document.createElement("article");
-
-    article.className = `ai-message ai-message-${message.role}`;
-    article.dataset.role = message.role;
-
-    const content = document.createElement("p");
-    content.textContent = message.content;
-
-    article.appendChild(content);
-    container.appendChild(article);
-
-    container.scrollTop = container.scrollHeight;
-  }
-
-  function setLoading(value) {
-    state.loading = Boolean(value);
-
-    const sendButton = $(selectors.send);
-    const input = getInputElement();
-
-    if (sendButton) {
-      sendButton.disabled = state.loading;
-    }
-
-    if (input) {
-      input.disabled = state.loading;
-    }
-
-    document.dispatchEvent(
-      new CustomEvent("shunel:ai-loading", {
-        detail: { loading: state.loading }
-      })
-    );
-  }
-
-  function getTrackDescription() {
-    const track = getCurrentTrack();
-
-    if (!track) {
-      return "No hay ninguna canción reproduciéndose.";
-    }
-
-    return `Estás escuchando ${track.title || "una canción"} de ${track.artist || "un artista desconocido"}.`;
-  }
-
-  function executeCommand(message) {
-    const text = normalize(message);
+  function getContext() {
     const player = getPlayer();
 
-    if (!player) return null;
-
-    if (
-      /^(pausa|pausar|detener|stop|para la musica|pausa la musica)$/.test(text)
-    ) {
-      player.pause();
-      return "Listo, pausé la música.";
-    }
-
-    if (
-      /^(reanuda|reanudar|continua|continuar|reproducir|seguir escuchando)$/.test(text)
-    ) {
-      player.play();
-      return "Continuamos con la música.";
-    }
-
-    if (
-      /^(siguiente|otra cancion|cambia la cancion|next)$/.test(text)
-    ) {
-      player.next();
-      return "Vamos con la siguiente canción.";
-    }
-
-    if (
-      /^(anterior|cancion anterior|vuelve a la anterior)$/.test(text)
-    ) {
-      player.previous();
-      return "Volviendo a la canción anterior.";
-    }
-
-    if (
-      /^(que estoy escuchando|cancion actual|que cancion suena|que suena)$/.test(text)
-    ) {
-      return getTrackDescription();
-    }
-
-    if (
-      /^(abre letras|mostrar letras|quiero ver las letras)$/.test(text)
-    ) {
-      window.ShunelLyrics?.open();
-      return "Abriendo las letras.";
-    }
-
-    if (
-      /^(abre visualizador|mostrar visualizador|visualizador)$/.test(text)
-    ) {
-      window.ShunelCanvas?.open();
-      return "Abriendo el visualizador.";
-    }
-
-    if (
-      /^(activa radio|iniciar radio|pon radio|radio inteligente)$/.test(text)
-    ) {
-      window.ShunelRadio?.start();
-      return "Preparando tu radio musical.";
-    }
-
-    if (
-      /^(activa aleatorio|activar aleatorio|modo aleatorio)$/.test(text)
-    ) {
-      player.toggleShuffle();
-      return "Cambié el modo aleatorio.";
-    }
-
-    if (
-      /^(activa repetir|activar repetir|repetir cancion)$/.test(text)
-    ) {
-      player.toggleRepeat();
-      return "Cambié el modo de repetición.";
-    }
-
-    return null;
+    return {
+      currentTrack: getCurrentTrack(),
+      playback: player?.getState?.() || null,
+      queue: player?.getQueue?.() || [],
+      radio: getRadio()?.getState?.() || null
+    };
   }
 
-  async function askAI(message) {
-    const provider = window.ShunelAIProvider;
+  async function requestAI(message, requestId) {
+    const controller = new AbortController();
 
-    if (typeof provider === "function") {
-      return await provider({
-        message,
-        history: state.messages.slice(-20),
-        currentTrack: getCurrentTrack()
-      });
-    }
+    state.abortController = controller;
 
-    document.dispatchEvent(
-      new CustomEvent("shunel:ai-request", {
-        detail: {
-          message,
-          history: state.messages.slice(-20),
-          currentTrack: getCurrentTrack()
-        }
-      })
+    const timeout = setTimeout(
+      () => controller.abort(),
+      CONFIG.timeout
     );
-
-    return null;
-  }
-
-  async function ask(message) {
-    const question = String(message || "").trim();
-
-    if (!question || state.loading) return null;
-
-    addMessage("user", question);
-
-    const commandResponse = executeCommand(question);
-
-    if (commandResponse) {
-      addMessage("assistant", commandResponse);
-      return commandResponse;
-    }
-
-    setLoading(true);
 
     try {
-      const response = await askAI(question);
+      const response = await fetch(CONFIG.endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          message,
+          history: state.history
+            .slice(-CONFIG.maxHistory)
+            .map(item => ({
+              role: item.role,
+              content: item.content
+            })),
+          context: getContext(),
+          system: CONFIG.systemPrompt
+        }),
+        signal: controller.signal
+      });
 
-      if (response === null || response === undefined || response === "") {
-        const fallback =
-          "Todavía estoy esperando la conexión con el modelo de IA. Por ahora puedo controlar la reproducción, abrir las letras y activar tu radio.";
-
-        addMessage("assistant", fallback);
-        return fallback;
+      if (!response.ok) {
+        throw new Error(
+          `El servidor respondió ${response.status}.`
+        );
       }
 
-      const answer = typeof response === "string"
-        ? response
-        : response.message || response.text || "";
+      const data = await response.json();
 
-      if (!answer) {
-        throw new Error("La respuesta del asistente está vacía.");
+      if (requestId !== state.requestId) {
+        return null;
       }
 
-      addMessage("assistant", answer);
+      const answer =
+        data.reply ||
+        data.message ||
+        data.response ||
+        data.choices?.[0]?.message?.content;
 
-      return answer;
+      if (typeof answer !== "string" || !answer.trim()) {
+        throw new Error(
+          "El servidor no devolvió una respuesta válida."
+        );
+      }
 
-    } catch (error) {
-      console.error("[Shunel AI]", error);
-
-      const fallback =
-        "No pude completar la solicitud. Revisá tu conexión e intentá nuevamente.";
-
-      addMessage("assistant", fallback);
-
-      return fallback;
+      return answer.trim();
 
     } finally {
-      setLoading(false);
+      clearTimeout(timeout);
+
+      if (state.abortController === controller) {
+        state.abortController = null;
+      }
     }
   }
 
-  function clear() {
-    state.messages = [];
+  function extractCommand(message) {
+    const text = message.toLowerCase().trim();
 
-    const container = getMessagesElement();
+    const patterns = [
+      {
+        type: "play",
+        regex: /^(reproduce|reproducir|pon|ponme|escucha|quiero escuchar)\s+(.+)$/i
+      },
+      {
+        type: "pause",
+        regex: /^(pausa|pausar|detén la música|detener música)$/i
+      },
+      {
+        type: "resume",
+        regex: /^(continúa|continuar|reanuda|reanudar|sigue reproduciendo)$/i
+      },
+      {
+        type: "next",
+        regex: /^(siguiente|próxima|otra canción|cambia de canción)$/i
+      },
+      {
+        type: "previous",
+        regex: /^(anterior|canción anterior|vuelve a la anterior)$/i
+      },
+      {
+        type: "radio",
+        regex: /^(inicia|iniciar|activa|activar)\s+(la\s+)?radio(\s+inteligente)?$/i
+      },
+      {
+        type: "shuffle",
+        regex: /^(activa|activar|desactiva|desactivar)\s+el\s+aleatorio$/i
+      }
+    ];
 
-    if (container) {
-      container.replaceChildren();
+    for (const pattern of patterns) {
+      const match = text.match(pattern.regex);
+
+      if (match) {
+        return {
+          type: pattern.type,
+          argument: match[2] || null,
+          original: text
+        };
+      }
     }
 
-    document.dispatchEvent(
-      new CustomEvent("shunel:ai-clear")
-    );
+    return null;
   }
 
-  function open() {
-    const page = document.getElementById("aiPage");
+  async function executeCommand(command) {
+    const player = getPlayer();
 
-    page?.classList.add("active");
+    if (!player) {
+      return {
+        success: false,
+        message: "El reproductor todavía no está disponible."
+      };
+    }
 
-    document.dispatchEvent(
-      new CustomEvent("shunel:ai-open")
-    );
+    try {
+      let result = false;
 
-    getInputElement()?.focus();
+      switch (command.type) {
+        case "play": {
+          const query = command.argument;
+
+          if (!query) {
+            return {
+              success: false,
+              message: "No especificaste qué canción quieres escuchar."
+            };
+          }
+
+          const search = window.ShunelApp?.searchMusic;
+
+          if (typeof search !== "function") {
+            return {
+              success: false,
+              message: "La búsqueda musical todavía no está conectada."
+            };
+          }
+
+          result = await search(query);
+
+          if (result === false || result == null) {
+            return {
+              success: false,
+              message: "No pude encontrar o reproducir esa canción."
+            };
+          }
+
+          return {
+            success: true,
+            message: `Solicitud de reproducción enviada para: ${query}.`
+          };
+        }
+
+        case "pause":
+          if (!player.getState().isPlaying) {
+            return {
+              success: false,
+              message: "La música ya está pausada."
+            };
+          }
+
+          player.pause();
+          result = !player.getState().isPlaying;
+          break;
+
+        case "resume":
+          if (player.getState().isPlaying) {
+            return {
+              success: false,
+              message: "La música ya está reproduciéndose."
+            };
+          }
+
+          result = await player.play();
+          break;
+
+        case "next":
+          result = await player.next();
+          break;
+
+        case "previous":
+          result = await player.previous();
+          break;
+
+        case "radio": {
+          const radio = getRadio();
+
+          if (!radio) {
+            return {
+              success: false,
+              message: "La radio inteligente no está disponible."
+            };
+          }
+
+          result = await radio.start();
+          break;
+        }
+
+        case "shuffle":
+          player.toggleShuffle();
+
+          return {
+            success: true,
+            message: player.getState().shuffle
+              ? "Modo aleatorio activado."
+              : "Modo aleatorio desactivado."
+          };
+
+        default:
+          return {
+            success: false,
+            message: "No reconozco esa acción."
+          };
+      }
+
+      if (result === false || result == null) {
+        return {
+          success: false,
+          message: "El reproductor no pudo completar la acción."
+        };
+      }
+
+      return {
+        success: true,
+        message: "Acción ejecutada correctamente."
+      };
+
+    } catch (error) {
+      console.error(
+        "[Shunel AI] Error ejecutando acción:",
+        error
+      );
+
+      return {
+        success: false,
+        message: "Ocurrió un error al ejecutar la acción."
+      };
+    }
   }
 
-  function close() {
-    document.dispatchEvent(
-      new CustomEvent("shunel:ai-close")
-    );
+  async function send(message) {
+    const text = String(message || "").trim();
+
+    if (!text) return null;
+
+    if (state.loading) {
+      emit("ai:error", {
+        message: "Espera a que termine la respuesta anterior."
+      });
+
+      return null;
+    }
+
+    const requestId = ++state.requestId;
+
+    state.loading = true;
+
+    addMessage("user", text);
+
+    emit("ai:thinking", { active: true });
+
+    try {
+      const command = extractCommand(text);
+
+      if (command) {
+        const result = await executeCommand(command);
+
+        if (requestId !== state.requestId) {
+          return null;
+        }
+
+        addMessage("assistant", result.message);
+
+        emit(
+          result.success ? "ai:action-success" : "ai:action-error",
+          {
+            command,
+            result
+          }
+        );
+
+        return result.message;
+      }
+
+      const response = await requestAI(text, requestId);
+
+      if (!response || requestId !== state.requestId) {
+        return null;
+      }
+
+      addMessage("assistant", response);
+
+      emit("ai:response", {
+        message: response
+      });
+
+      return response;
+
+    } catch (error) {
+      if (requestId !== state.requestId) {
+        return null;
+      }
+
+      const message = error.name === "AbortError"
+        ? "La solicitud tardó demasiado."
+        : "No pude comunicarme con Shunel AI.";
+
+      emit("ai:error", {
+        message,
+        error: error.message
+      });
+
+      return null;
+
+    } finally {
+      if (requestId === state.requestId) {
+        state.loading = false;
+
+        emit("ai:thinking", {
+          active: false
+        });
+      }
+    }
   }
 
-  function handleSubmit(event) {
-    event.preventDefault();
+  function cancel() {
+    state.requestId++;
 
-    const input = getInputElement();
+    state.abortController?.abort();
 
-    if (!input) return;
+    state.abortController = null;
+    state.loading = false;
 
-    const message = input.value.trim();
+    emit("ai:thinking", {
+      active: false
+    });
 
-    if (!message) return;
+    return true;
+  }
 
-    input.value = "";
+  function clearHistory() {
+    state.history = [];
 
-    ask(message);
+    try {
+      localStorage.removeItem(CONFIG.storageKey);
+    } catch {}
+
+    emit("ai:history-cleared", {});
+
+    return true;
+  }
+
+  function setProvider(callback) {
+    if (
+      callback !== null &&
+      typeof callback !== "function"
+    ) {
+      return false;
+    }
+
+    state.provider = callback;
+
+    return true;
   }
 
   function initialize() {
     if (state.initialized) return;
 
+    state.history = getHistory();
+
     state.initialized = true;
 
-    const form = $(selectors.form);
-    const sendButton = $(selectors.send);
-    const clearButton = $(selectors.clear);
+    emit("ai:ready", {});
 
-    form?.addEventListener("submit", handleSubmit);
-
-    sendButton?.addEventListener("click", () => {
-      if (!form) {
-        const input = getInputElement();
-
-        if (input) {
-          const message = input.value.trim();
-
-          if (message) {
-            input.value = "";
-            ask(message);
-          }
-        }
-      }
-    });
-
-    clearButton?.addEventListener("click", clear);
-
-    window.ShunelAI = {
-      ask,
-      open,
-      close,
-      clear,
-
-      getHistory: () => [...state.messages],
-
-      getState: () => ({
-        loading: state.loading,
-        messageCount: state.messages.length,
-        connected: typeof window.ShunelAIProvider === "function"
-      }),
-
-      setProvider(provider) {
-        if (typeof provider !== "function") {
-          throw new TypeError("El proveedor debe ser una función.");
-        }
-
-        window.ShunelAIProvider = provider;
-      }
-    };
-
-    console.info("[Shunel AI] Asistente preparado.");
+    console.info("[Shunel AI] Sistema preparado.");
   }
+
+  window.ShunelAI = Object.freeze({
+    initialize,
+    send,
+    cancel,
+    clearHistory,
+    getContext,
+    getHistory() {
+      return [...state.history];
+    },
+    getState() {
+      return {
+        initialized: state.initialized,
+        loading: state.loading,
+        messageCount: state.history.length
+      };
+    }
+  });
 
   initialize();
 

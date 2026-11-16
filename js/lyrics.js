@@ -1,385 +1,565 @@
 
 /* =========================================
    SHUNEL — LYRICS ENGINE
-   Letras sincronizadas mediante LRCLIB
+   Letras y sincronización musical
+   Version: 2.0.0
 ========================================= */
 
 (() => {
   "use strict";
 
-  const API = "https://lrclib.net/api";
-  const audio = document.getElementById("localAudio");
+  if (window.ShunelLyrics) {
+    console.warn("[Shunel Lyrics] Ya está inicializado.");
+    return;
+  }
 
-  const state = {
-    track: null,
-    lyrics: [],
-    plainLyrics: "",
-    currentLine: -1,
-    loading: false,
-    requestId: 0,
-    cache: new Map()
-  };
+  const API = "https://lrclib.net/api";
+
+  const CACHE_KEY = "shunel_lyrics_cache";
+  const MAX_CACHE = 100;
 
   const elements = {
-    screen: document.getElementById("lyricsScreen"),
+    overlay: document.getElementById("lyricsOverlay"),
+    container: document.getElementById("lyricsContainer"),
     content: document.getElementById("lyricsContent"),
     title: document.getElementById("lyricsTitle"),
     artist: document.getElementById("lyricsArtist"),
-    status: document.getElementById("lyricsStatus")
+    close: document.getElementById("closeLyricsButton"),
+    search: document.getElementById("lyricsSearchButton")
   };
 
-  function normalize(value) {
+  const state = {
+    currentTrack: null,
+    lines: [],
+    synchronized: false,
+    loading: false,
+    initialized: false,
+    requestId: 0,
+    activeIndex: -1,
+    cache: new Map(),
+    abortController: null
+  };
+
+  function emit(name, detail = {}) {
+    if (window.ShunelEvents) {
+      window.ShunelEvents.emit(name, detail);
+    } else {
+      window.dispatchEvent(
+        new CustomEvent(`shunel:${name}`, { detail })
+      );
+    }
+  }
+
+  function normalizeText(value) {
     return String(value || "")
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "")
       .toLowerCase()
-      .replace(/[^\w\s]/g, " ")
-      .replace(/\s+/g, " ")
       .trim();
   }
 
-  function getTrack() {
-    return window.ShunelPlayer?.getCurrentTrack?.() || null;
+  function getAudio() {
+    return window.ShunelPlayer?.getAudio?.() ||
+      document.getElementById("localAudio");
+  }
+
+  function getCurrentTime() {
+    const player = window.ShunelPlayer;
+
+    if (player?.getState().source === "youtube") {
+      return window.ShunelYouTube?.getCurrentTime?.() || 0;
+    }
+
+    return getAudio()?.currentTime || 0;
   }
 
   function getTrackKey(track) {
-    return `${normalize(track.title)}::${normalize(track.artist)}`;
+    return [
+      normalizeText(track.title),
+      normalizeText(track.artist)
+    ].join("::");
   }
 
-  function setStatus(message) {
-    if (elements.status) {
-      elements.status.textContent = message;
+  function loadCache() {
+    try {
+      const saved = JSON.parse(
+        localStorage.getItem(CACHE_KEY) || "[]"
+      );
+
+      if (Array.isArray(saved)) {
+        saved.forEach(item => {
+          if (item.key && Array.isArray(item.lines)) {
+            state.cache.set(item.key, item.lines);
+          }
+        });
+      }
+    } catch {
+      console.warn("[Shunel Lyrics] Caché inválida.");
     }
   }
 
-  function setTrackInformation(track) {
-    if (elements.title) {
-      elements.title.textContent = track?.title || "Letras";
-    }
+  function saveCache() {
+    try {
+      const entries = [...state.cache.entries()]
+        .slice(-MAX_CACHE)
+        .map(([key, lines]) => ({
+          key,
+          lines
+        }));
 
-    if (elements.artist) {
-      elements.artist.textContent = track?.artist || "";
+      localStorage.setItem(
+        CACHE_KEY,
+        JSON.stringify(entries)
+      );
+    } catch (error) {
+      console.warn(
+        "[Shunel Lyrics] No se pudo guardar:",
+        error
+      );
     }
   }
 
-  function renderMessage(message) {
-    if (!elements.content) return;
-
-    elements.content.replaceChildren();
-
-    const paragraph = document.createElement("p");
-    paragraph.className = "lyrics-message";
-    paragraph.textContent = message;
-
-    elements.content.appendChild(paragraph);
-  }
-
-  function parseSyncedLyrics(text) {
-    if (!text) return [];
+  function parseLRC(content) {
+    if (!content) return [];
 
     const lines = [];
 
-    for (const rawLine of text.split(/\r?\n/)) {
-      const matches = [...rawLine.matchAll(
-        /\[(\d{1,2}):(\d{2})(?:\.(\d{1,3}))?\]/g
-      )];
+    const regex =
+      /\[(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?\](.*)/g;
 
-      const content = rawLine.replace(
-        /\[(\d{1,2}):(\d{2})(?:\.(\d{1,3}))?\]/g,
-        ""
-      ).trim();
+    for (const rawLine of content.split(/\r?\n/)) {
+      let match;
+      regex.lastIndex = 0;
 
-      for (const match of matches) {
+      while ((match = regex.exec(rawLine)) !== null) {
         const minutes = Number(match[1]);
         const seconds = Number(match[2]);
+
         const fraction = match[3] || "0";
 
-        const timestamp =
-          minutes * 60 +
-          seconds +
-          Number(`0.${fraction}`);
+        const milliseconds =
+          fraction.length === 1
+            ? Number(fraction) * 100
+            : fraction.length === 2
+              ? Number(fraction) * 10
+              : Number(fraction);
 
         lines.push({
-          time: timestamp,
-          text: content
+          time:
+            minutes * 60 +
+            seconds +
+            milliseconds / 1000,
+          text: match[4].trim()
         });
       }
     }
 
-    return lines.sort((a, b) => a.time - b.time);
+    return lines
+      .filter(line => line.text)
+      .sort((a, b) => a.time - b.time);
   }
 
-  async function searchLyrics(track) {
-    const title = String(track.title || "").trim();
-    const artist = String(track.artist || "").trim();
+  function render(lines) {
+    const container =
+      elements.content ||
+      elements.container;
 
-    if (!title || !artist) {
-      throw new Error("Faltan datos de la canción.");
-    }
+    if (!container) return;
 
-    const params = new URLSearchParams({
-      track_name: title,
-      artist_name: artist
-    });
+    container.replaceChildren();
 
-    const response = await fetch(
-      `${API}/get?${params.toString()}`,
-      {
-        headers: {
-          Accept: "application/json"
-        }
-      }
-    );
+    if (!lines.length) {
+      const message = document.createElement("p");
 
-    if (response.status === 404) {
-      return null;
-    }
+      message.className = "lyrics-empty";
+      message.textContent = "No hay letras disponibles.";
 
-    if (!response.ok) {
-      throw new Error("No se pudo consultar LRCLIB.");
-    }
-
-    return response.json();
-  }
-
-  async function loadLyrics(track = getTrack()) {
-    if (!track) {
-      renderMessage("Reproducí una canción para ver sus letras.");
-      return;
-    }
-
-    const requestId = ++state.requestId;
-    const key = getTrackKey(track);
-
-    state.track = track;
-    state.lyrics = [];
-    state.plainLyrics = "";
-    state.currentLine = -1;
-
-    setTrackInformation(track);
-    setStatus("Buscando letras...");
-    renderMessage("Buscando letras de esta canción...");
-
-    if (state.cache.has(key)) {
-      const cached = state.cache.get(key);
-
-      if (requestId === state.requestId) {
-        applyLyrics(cached);
-      }
+      container.appendChild(message);
 
       return;
     }
-
-    state.loading = true;
-
-    try {
-      const result = await searchLyrics(track);
-
-      if (requestId !== state.requestId) return;
-
-      if (!result) {
-        state.cache.set(key, null);
-        renderMessage("No encontramos letras para esta canción.");
-        setStatus("Letras no disponibles");
-        return;
-      }
-
-      const synced = parseSyncedLyrics(result.syncedLyrics || "");
-
-      const data = {
-        synced,
-        plain: result.plainLyrics || ""
-      };
-
-      state.cache.set(key, data);
-      applyLyrics(data);
-
-    } catch (error) {
-      if (requestId !== state.requestId) return;
-
-      console.error("[Shunel Lyrics]", error);
-
-      renderMessage("No se pudieron cargar las letras. Revisá tu conexión e intentá de nuevo.");
-      setStatus("Error al cargar letras");
-
-    } finally {
-      if (requestId === state.requestId) {
-        state.loading = false;
-      }
-    }
-  }
-
-  function applyLyrics(data) {
-    state.lyrics = data?.synced || [];
-    state.plainLyrics = data?.plain || "";
-    state.currentLine = -1;
-
-    if (state.lyrics.length) {
-      renderSyncedLyrics();
-      setStatus("Letras sincronizadas");
-      updateCurrentLine();
-      return;
-    }
-
-    if (state.plainLyrics) {
-      renderPlainLyrics();
-      setStatus("Letras disponibles");
-      return;
-    }
-
-    renderMessage("No encontramos letras para esta canción.");
-    setStatus("Letras no disponibles");
-  }
-
-  function renderSyncedLyrics() {
-    if (!elements.content) return;
-
-    elements.content.replaceChildren();
 
     const fragment = document.createDocumentFragment();
 
-    state.lyrics.forEach((line, index) => {
-      const paragraph = document.createElement("p");
-
-      paragraph.className = "lyrics-line";
-      paragraph.dataset.index = String(index);
-      paragraph.textContent = line.text || "♪";
-
-      paragraph.addEventListener("click", () => {
-        if (!audio || !Number.isFinite(line.time)) return;
-
-        audio.currentTime = line.time;
-
-        if (audio.paused) {
-          audio.play().catch(() => {});
-        }
-      });
-
-      fragment.appendChild(paragraph);
-    });
-
-    elements.content.appendChild(fragment);
-  }
-
-  function renderPlainLyrics() {
-    if (!elements.content) return;
-
-    elements.content.replaceChildren();
-
-    const paragraph = document.createElement("p");
-    paragraph.className = "lyrics-plain";
-    paragraph.textContent = state.plainLyrics;
-
-    elements.content.appendChild(paragraph);
-  }
-
-  function updateCurrentLine() {
-    if (!audio || !state.lyrics.length || !elements.content) return;
-
-    const currentTime = audio.currentTime;
-
-    let low = 0;
-    let high = state.lyrics.length - 1;
-    let found = -1;
-
-    while (low <= high) {
-      const middle = Math.floor((low + high) / 2);
-
-      if (state.lyrics[middle].time <= currentTime) {
-        found = middle;
-        low = middle + 1;
-      } else {
-        high = middle - 1;
-      }
-    }
-
-    if (found === state.currentLine) return;
-
-    state.currentLine = found;
-
-    const lines = elements.content.querySelectorAll(".lyrics-line");
-
     lines.forEach((line, index) => {
-      const active = index === found;
+      const element = document.createElement("p");
 
-      line.classList.toggle("active", active);
-      line.classList.toggle("past", found >= 0 && index < found);
+      element.className = "lyrics-line";
+      element.dataset.index = index;
+      element.textContent = line.text;
+
+      if (line.time !== null) {
+        element.dataset.time = line.time;
+      }
+
+      fragment.appendChild(element);
     });
 
-    if (found >= 0) {
-      const activeLine = lines[found];
+    container.appendChild(fragment);
+  }
 
-      activeLine?.scrollIntoView({
-        behavior: "smooth",
-        block: "center"
-      });
+  function updateHeader(track) {
+    if (elements.title) {
+      elements.title.textContent =
+        track?.title || "Letras";
+    }
+
+    if (elements.artist) {
+      elements.artist.textContent =
+        track?.artist || "";
     }
   }
 
-  function open() {
-    elements.screen?.classList.add("active");
-    elements.screen?.setAttribute("aria-hidden", "false");
+  function setLoading(value) {
+    state.loading = Boolean(value);
 
-    const current = getTrack();
-
-    if (
-      current &&
-      state.track &&
-      getTrackKey(current) === getTrackKey(state.track)
-    ) {
-      updateCurrentLine();
-    } else {
-      loadLyrics(current);
+    if (!elements.content && !elements.container) {
+      return;
     }
+
+    const container =
+      elements.content ||
+      elements.container;
+
+    if (state.loading) {
+      container.textContent = "Buscando letras...";
+      container.setAttribute("aria-busy", "true");
+    } else {
+      container.removeAttribute("aria-busy");
+    }
+  }
+
+  function show() {
+    if (!elements.overlay) return false;
+
+    elements.overlay.hidden = false;
+    elements.overlay.classList.add("active");
+    elements.overlay.setAttribute("aria-hidden", "false");
+
+    emit("lyrics:open", {});
+
+    return true;
   }
 
   function close() {
-    elements.screen?.classList.remove("active");
-    elements.screen?.setAttribute("aria-hidden", "true");
+    if (!elements.overlay) return false;
+
+    elements.overlay.classList.remove("active");
+    elements.overlay.hidden = true;
+    elements.overlay.setAttribute("aria-hidden", "true");
+
+    emit("lyrics:close", {});
+
+    return true;
   }
 
-  function handleTrackChange(event) {
-    const track = event.detail?.track || getTrack();
+  async function fetchLyrics(track) {
+    const key = getTrackKey(track);
 
-    if (!track) return;
-
-    if (
-      elements.screen?.classList.contains("active") ||
-      elements.screen?.classList.contains("show")
-    ) {
-      loadLyrics(track);
-    } else {
-      state.track = track;
-      state.lyrics = [];
-      state.plainLyrics = "";
-      state.currentLine = -1;
+    if (state.cache.has(key)) {
+      return state.cache.get(key);
     }
+
+    if (state.abortController) {
+      state.abortController.abort();
+    }
+
+    const controller = new AbortController();
+
+    state.abortController = controller;
+
+    const timeout = setTimeout(
+      () => controller.abort(),
+      12000
+    );
+
+    try {
+      const params = new URLSearchParams({
+        track_name: track.title,
+        artist_name: track.artist
+      });
+
+      if (track.album) {
+        params.set("album_name", track.album);
+      }
+
+      if (track.duration > 0) {
+        params.set(
+          "duration",
+          String(Math.round(track.duration))
+        );
+      }
+
+      const response = await fetch(
+        `${API}/get?${params.toString()}`,
+        {
+          signal: controller.signal,
+          headers: {
+            Accept: "application/json"
+          }
+        }
+      );
+
+      if (!response.ok) {
+        if (response.status === 404) return [];
+
+        throw new Error(
+          `LRCLIB respondió ${response.status}.`
+        );
+      }
+
+      const data = await response.json();
+
+      let lines = [];
+
+      if (data.syncedLyrics) {
+        lines = parseLRC(data.syncedLyrics);
+      }
+
+      if (!lines.length && data.plainLyrics) {
+        lines = data.plainLyrics
+          .split(/\r?\n/)
+          .map(text => ({
+            time: null,
+            text: text.trim()
+          }))
+          .filter(line => line.text);
+      }
+
+      state.cache.set(key, lines);
+
+      saveCache();
+
+      return lines;
+
+    } finally {
+      clearTimeout(timeout);
+
+      if (state.abortController === controller) {
+        state.abortController = null;
+      }
+    }
+  }
+
+  async function search(track = null) {
+    const target =
+      track ||
+      window.ShunelPlayer?.getCurrentTrack?.();
+
+    if (!target) {
+      emit("lyrics:error", {
+        message: "No hay ninguna canción seleccionada."
+      });
+
+      return false;
+    }
+
+    const requestId = ++state.requestId;
+
+    state.currentTrack = target;
+    state.lines = [];
+    state.activeIndex = -1;
+
+    updateHeader(target);
+    setLoading(true);
+
+    try {
+      const lines = await fetchLyrics(target);
+
+      if (requestId !== state.requestId) {
+        return false;
+      }
+
+      state.lines = lines;
+      state.synchronized = lines.some(
+        line => line.time !== null
+      );
+
+      setLoading(false);
+      render(lines);
+
+      emit("lyrics:loaded", {
+        track: target,
+        count: lines.length,
+        synchronized: state.synchronized
+      });
+
+      return lines.length > 0;
+
+    } catch (error) {
+      if (requestId !== state.requestId) {
+        return false;
+      }
+
+      state.lines = [];
+      state.synchronized = false;
+
+      setLoading(false);
+      render([]);
+
+      emit("lyrics:error", {
+        message: error.name === "AbortError"
+          ? "La búsqueda tardó demasiado."
+          : error.message
+      });
+
+      return false;
+    }
+  }
+
+  function sync() {
+    if (!state.synchronized || !state.lines.length) {
+      return;
+    }
+
+    const currentTime = getCurrentTime();
+
+    let active = -1;
+
+    for (let i = 0; i < state.lines.length; i++) {
+      const line = state.lines[i];
+
+      if (
+        line.time !== null &&
+        line.time <= currentTime
+      ) {
+        active = i;
+      } else if (
+        line.time !== null &&
+        line.time > currentTime
+      ) {
+        break;
+      }
+    }
+
+    if (active === state.activeIndex) return;
+
+    state.activeIndex = active;
+
+    const container =
+      elements.content ||
+      elements.container;
+
+    if (!container) return;
+
+    const lines = container.querySelectorAll(
+      ".lyrics-line"
+    );
+
+    lines.forEach((element, index) => {
+      const isActive = index === active;
+
+      element.classList.toggle(
+        "active",
+        isActive
+      );
+
+      element.classList.toggle(
+        "past",
+        index < active
+      );
+
+      if (isActive) {
+        element.scrollIntoView({
+          behavior: "smooth",
+          block: "center"
+        });
+      }
+    });
+
+    emit("lyrics:linechange", {
+      index: active,
+      line: state.lines[active] || null,
+      currentTime
+    });
+  }
+
+  function handleTrackChange(detail) {
+    const track = detail?.track;
+
+    if (!track) {
+      state.requestId++;
+      state.lines = [];
+      state.currentTrack = null;
+      state.synchronized = false;
+
+      state.abortController?.abort();
+
+      render([]);
+
+      return;
+    }
+
+    search(track);
+  }
+
+  function bindEvents() {
+    if (window.ShunelEvents) {
+      window.ShunelEvents.on(
+        "trackchange",
+        handleTrackChange
+      );
+    } else {
+      window.addEventListener(
+        "shunel:trackchange",
+        event => handleTrackChange(event.detail)
+      );
+    }
+
+    const audio = getAudio();
+
+    audio?.addEventListener("timeupdate", sync);
+
+    elements.close?.addEventListener(
+      "click",
+      close
+    );
+
+    elements.search?.addEventListener(
+      "click",
+      () => search()
+    );
+
+    elements.overlay?.addEventListener(
+      "click",
+      event => {
+        if (event.target === elements.overlay) {
+          close();
+        }
+      }
+    );
   }
 
   function initialize() {
-    if (audio) {
-      audio.addEventListener("timeupdate", updateCurrentLine);
-      audio.addEventListener("seeked", updateCurrentLine);
-    }
+    if (state.initialized) return;
 
-    document.addEventListener("shunel:trackchange", handleTrackChange);
+    loadCache();
+    bindEvents();
 
-    window.ShunelLyrics = {
-      open,
-      close,
-      load: loadLyrics,
-      refresh: () => loadLyrics(getTrack()),
-      getState: () => ({
-        track: state.track,
-        lyrics: state.lyrics,
-        plainLyrics: state.plainLyrics,
-        currentLine: state.currentLine,
-        loading: state.loading
-      })
-    };
+    state.initialized = true;
 
-    console.info("[Shunel] Lyrics engine iniciado.");
+    emit("lyrics:ready", {});
+
+    console.info("[Shunel Lyrics] Sistema preparado.");
   }
+
+  window.ShunelLyrics = Object.freeze({
+    initialize,
+    search,
+    show,
+    close,
+    sync,
+    parseLRC,
+    getState() {
+      return {
+        currentTrack: state.currentTrack,
+        lineCount: state.lines.length,
+        synchronized: state.synchronized,
+        loading: state.loading,
+        activeIndex: state.activeIndex
+      };
+    }
+  });
 
   initialize();
 
