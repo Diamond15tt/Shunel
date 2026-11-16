@@ -1,8 +1,8 @@
 
 /* =========================================
    SHUNEL — APPLICATION CORE
-   Navegación, controles e integración
-   Version: 2.0.0
+   Navegación, búsqueda e integración
+   Version: 2.2.0
 ========================================= */
 
 (() => {
@@ -47,6 +47,10 @@
   const $$ = (selector, parent = document) =>
     [...parent.querySelectorAll(selector)];
 
+  /* =========================================
+     EVENTOS
+  ========================================= */
+
   function emit(name, detail = {}) {
     if (window.ShunelEvents) {
       window.ShunelEvents.emit(name, detail);
@@ -80,6 +84,7 @@
 
     toast.textContent = String(message);
 
+    toast.hidden = false;
     toast.classList.add("show");
     toast.setAttribute("role", "status");
     toast.setAttribute("aria-live", "polite");
@@ -88,6 +93,7 @@
 
     state.toastTimer = setTimeout(() => {
       toast.classList.remove("show");
+      toast.hidden = true;
     }, duration);
   }
 
@@ -95,30 +101,30 @@
      NAVEGACIÓN
   ========================================= */
 
+  function normalizePageName(value) {
+    return String(value || "")
+      .trim()
+      .replace(/^#/, "")
+      .replace(/Page$/i, "");
+  }
+
   function getPageName(element) {
     if (!element) return null;
 
-    return (
+    return normalizePageName(
       element.dataset.page ||
       element.dataset.target ||
       element.getAttribute("data-navigation") ||
-      null
+      ""
     );
   }
 
   function navigate(page, options = {}) {
-    const pageName = String(page || "")
-      .replace(/^#/, "")
-      .replace(/Page$/, "");
-
+    const pageName = normalizePageName(page);
     const pageId = pages[pageName];
 
     if (!pageId) {
-      console.warn(
-        "[Shunel] Página desconocida:",
-        pageName
-      );
-
+      console.warn("[Shunel] Página desconocida:", pageName);
       return false;
     }
 
@@ -142,16 +148,11 @@
 
       section.hidden = !active;
       section.classList.toggle("active", active);
-      section.setAttribute(
-        "aria-hidden",
-        String(!active)
-      );
+      section.setAttribute("aria-hidden", String(!active));
     });
 
-    $$("[data-page], [data-navigation]").forEach(item => {
-      const name = getPageName(item);
-
-      const active = name === pageName;
+    $$("[data-page], [data-navigation], [data-target]").forEach(item => {
+      const active = getPageName(item) === pageName;
 
       item.classList.toggle("active", active);
 
@@ -172,18 +173,11 @@
           `#${pageName}`
         );
       } catch (error) {
-        console.warn(
-          "[Shunel] No se pudo actualizar el historial.",
-          error
-        );
+        console.warn("[Shunel] Error actualizando historial:", error);
       }
     }
 
-    const menu = $("#mainMenu");
-
-    if (menu) {
-      menu.classList.remove("open");
-    }
+    $("#mainMenu")?.classList.remove("open");
 
     emit("navigation:change", {
       page: pageName
@@ -193,7 +187,7 @@
   }
 
   function initializeNavigation() {
-    $$("[data-page], [data-navigation]").forEach(item => {
+    $$("[data-page], [data-navigation], [data-target]").forEach(item => {
       bind(item, "click", event => {
         const page = getPageName(item);
 
@@ -205,7 +199,7 @@
     });
 
     window.addEventListener("popstate", () => {
-      const page = location.hash.replace(/^#/, "");
+      const page = normalizePageName(location.hash);
 
       navigate(
         pages[page] ? page : CONFIG.defaultPage,
@@ -213,7 +207,7 @@
       );
     });
 
-    const initialPage = location.hash.replace(/^#/, "");
+    const initialPage = normalizePageName(location.hash);
 
     navigate(
       pages[initialPage]
@@ -226,14 +220,13 @@
     const menu = $("#mainMenu");
 
     bind(menuButton, "click", () => {
-      if (!menu) return;
-
-      menu.classList.toggle("open");
+      menu?.classList.toggle("open");
     });
   }
 
   /* =========================================
      REPRODUCTOR
+     Los controles pertenecen a player.js.
   ========================================= */
 
   function getPlayer() {
@@ -264,77 +257,120 @@
   }
 
   function initializePlayerControls() {
-    bind($("#playButton"), "click", play);
-    bind($("#miniPlayButton"), "click", play);
+    /*
+      No registrar aquí los botones de reproducción,
+      volumen ni progreso.
 
-    bind($("#nextButton"), "click", next);
-    bind($("#miniNextButton"), "click", next);
-
-    bind($("#previousButton"), "click", previous);
-    bind($("#miniPreviousButton"), "click", previous);
-
-    const volume = $("#volumeSlider");
-
-    bind(volume, "input", () => {
-      const value = Number(volume.value);
-
-      if (!Number.isFinite(value)) return;
-
-      const normalized = value > 1
-        ? value / 100
-        : value;
-
-      getPlayer()?.setVolume?.(
-        Math.max(0, Math.min(1, normalized))
-      );
-    });
-
-    const seek = $("#seekSlider");
-
-    bind(seek, "change", () => {
-      const value = Number(seek.value);
-
-      if (!Number.isFinite(value)) return;
-
-      const player = getPlayer();
-      const track = player?.getCurrentTrack?.();
-
-      if (!track) return;
-
-      const duration =
-        player.getAudio()?.duration ||
-        track.duration ||
-        0;
-
-      if (duration > 0) {
-        player.seek(
-          Math.max(
-            0,
-            Math.min(duration, value)
-          )
-        );
-      }
-    });
+      player.js ya administra esos controles.
+      Evitamos eventos duplicados.
+    */
   }
 
   /* =========================================
      BÚSQUEDA MUSICAL
   ========================================= */
 
+  function showSearchResults() {
+    const section = $("#searchResults");
+
+    if (section) {
+      section.hidden = false;
+    }
+  }
+
+  function hideSearchResults() {
+    const section = $("#searchResults");
+
+    if (section) {
+      section.hidden = true;
+    }
+  }
+
+  function normalizeSearchResult(item) {
+    if (!item || typeof item !== "object") {
+      return null;
+    }
+
+    /*
+      Los resultados de ShunelSearch ya llegan
+      normalizados. Esto también admite la
+      respuesta directa de YouTube.
+    */
+
+    const snippet = item.snippet || {};
+
+    const videoId =
+      item.videoId ||
+      item.youtubeId ||
+      item.id?.videoId ||
+      (typeof item.id === "string" ? item.id : "");
+
+    if (!videoId) return null;
+
+    const thumbnail =
+      item.thumbnail ||
+      item.artwork ||
+      snippet.thumbnails?.high?.url ||
+      snippet.thumbnails?.medium?.url ||
+      snippet.thumbnails?.default?.url ||
+      "";
+
+    return {
+      id: item.id?.videoId
+        ? `youtube:${videoId}`
+        : item.id || `youtube:${videoId}`,
+
+      videoId,
+      youtubeId: videoId,
+
+      title:
+        item.title ||
+        snippet.title ||
+        "Canción desconocida",
+
+      artist:
+        item.artist ||
+        item.channelTitle ||
+        snippet.channelTitle ||
+        "Artista desconocido",
+
+      channelTitle:
+        item.channelTitle ||
+        snippet.channelTitle ||
+        "",
+
+      thumbnail,
+      artwork: thumbnail,
+      source: "youtube",
+
+      duration: Number(item.duration) || 0,
+
+      metadata: item.metadata || {
+        platform: "YouTube",
+        description: snippet.description || "",
+        publishedAt: snippet.publishedAt || ""
+      }
+    };
+  }
+
   function renderSearchResults(results) {
     const container = $("#searchResultsList");
 
-    if (!container) return;
+    if (!container) {
+      console.warn("[Shunel] Falta #searchResultsList.");
+      return;
+    }
 
     container.replaceChildren();
+    showSearchResults();
 
     if (!Array.isArray(results) || !results.length) {
       const empty = document.createElement("p");
 
+      empty.className = "search-empty";
       empty.textContent = "No se encontraron canciones.";
 
       container.appendChild(empty);
-
       return;
     }
 
@@ -346,6 +382,10 @@
       item.type = "button";
       item.className = "search-result";
       item.dataset.index = String(index);
+      item.setAttribute(
+        "aria-label",
+        `Reproducir ${track.title}`
+      );
 
       const artwork = document.createElement("img");
 
@@ -358,31 +398,22 @@
         try {
           const url = new URL(image);
 
-          if (
-            url.protocol === "https:" ||
-            url.protocol === "http:"
-          ) {
+          if (["https:", "http:"].includes(url.protocol)) {
             artwork.src = url.href;
           }
         } catch {}
       }
 
       const information = document.createElement("span");
-
       information.className = "search-result-info";
 
       const title = document.createElement("strong");
-
-      title.textContent =
-        track.title || "Canción desconocida";
+      title.textContent = track.title || "Canción desconocida";
 
       const artist = document.createElement("small");
-
-      artist.textContent =
-        track.artist || "Artista desconocido";
+      artist.textContent = track.artist || "Artista desconocido";
 
       information.append(title, artist);
-
       item.append(artwork, information);
 
       bind(item, "click", async () => {
@@ -429,34 +460,30 @@
   async function searchMusic(query) {
     const searchQuery = String(query || "").trim();
 
-    if (!searchQuery) return false;
+    if (!searchQuery) {
+      notify("Escribe el nombre de una canción o artista.");
+      return false;
+    }
 
-    if (state.searching) {
-      state.searchController?.abort();
+    if (state.searchController) {
+      state.searchController.abort();
     }
 
     const requestId = ++state.searchRequestId;
-
     const controller = new AbortController();
 
     state.searchController = controller;
     state.searching = true;
 
-    const timeout = setTimeout(
-      () => controller.abort(),
-      CONFIG.searchTimeout
-    );
+    const timeout = setTimeout(() => {
+      controller.abort();
+    }, CONFIG.searchTimeout);
 
     emit("search:start", {
       query: searchQuery
     });
 
     try {
-      /*
-        Si existe un buscador especializado,
-        se utiliza primero.
-      */
-
       let results = [];
 
       if (
@@ -469,15 +496,15 @@
         );
 
       } else {
-        /*
-          Endpoint previsto para el backend.
-          Se conectará cuando creemos el módulo
-          de búsqueda del servidor.
-        */
+        const params = new URLSearchParams({
+          q: searchQuery,
+          maxResults: "20"
+        });
 
         const response = await fetch(
-          `${CONFIG.searchEndpoint}?q=${encodeURIComponent(searchQuery)}`,
+          `${CONFIG.searchEndpoint}?${params.toString()}`,
           {
+            method: "GET",
             signal: controller.signal,
             headers: {
               Accept: "application/json"
@@ -503,7 +530,7 @@
       }
 
       state.lastSearchResults = Array.isArray(results)
-        ? results
+        ? results.map(normalizeSearchResult).filter(Boolean)
         : [];
 
       renderSearchResults(state.lastSearchResults);
@@ -524,11 +551,12 @@
         return false;
       }
 
-      const message = error.name === "AbortError"
-        ? "La búsqueda fue cancelada o tardó demasiado."
-        : "No se pudo realizar la búsqueda.";
-
-      notify(message);
+      if (error.name === "AbortError") {
+        notify("La búsqueda fue cancelada o tardó demasiado.");
+      } else {
+        console.error("[Shunel] Error de búsqueda:", error);
+        notify("No se pudo realizar la búsqueda.");
+      }
 
       emit("search:error", {
         query: searchQuery,
@@ -548,20 +576,33 @@
   }
 
   function initializeSearch() {
+    const form = $("#searchForm");
     const input = $("#searchInput");
+    const button = $("#searchButton");
+
+    if (form) {
+      bind(form, "submit", event => {
+        event.preventDefault();
+        searchMusic(input?.value || "");
+      });
+
+      return;
+    }
+
+    /*
+      Compatibilidad si el HTML todavía no
+      contiene un formulario.
+    */
+
+    bind(button, "click", () => {
+      searchMusic(input?.value || "");
+    });
 
     bind(input, "keydown", event => {
       if (event.key !== "Enter") return;
 
       event.preventDefault();
-
       searchMusic(input.value);
-    });
-
-    const button = $("#searchButton");
-
-    bind(button, "click", () => {
-      searchMusic(input?.value || "");
     });
   }
 
@@ -587,8 +628,7 @@
       if (!button || !overlay) return;
 
       bind(button, "click", () => {
-        const isCloseButton =
-          buttonId.startsWith("close");
+        const isCloseButton = buttonId.startsWith("close");
 
         if (isCloseButton) {
           overlay.classList.remove("active");
@@ -651,13 +691,6 @@
           event === "SIGNED_IN" ||
           event === "TOKEN_REFRESHED"
         ) {
-          /*
-            No realizamos consultas directamente
-            dentro del callback de autenticación.
-            Las ejecutamos después de que termine
-            el evento para evitar bloquear el flujo.
-          */
-
           Promise.resolve().then(async () => {
             try {
               await window.ShunelProfiles?.load?.();
@@ -768,11 +801,6 @@
       });
     }
 
-    /*
-      El gestor de eventos debe estar disponible
-      antes de conectar los demás módulos.
-    */
-
     window.ShunelEvents?.initialize?.();
 
     initializeEvents();
@@ -790,12 +818,14 @@
       page: state.currentPage
     });
 
-    console.info(
-      "[Shunel] Aplicación inicializada."
-    );
+    console.info("[Shunel] Aplicación inicializada.");
 
     return true;
   }
+
+  /* =========================================
+     API PÚBLICA
+  ========================================= */
 
   window.ShunelApp = Object.freeze({
     initialize,
