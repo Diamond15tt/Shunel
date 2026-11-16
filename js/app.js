@@ -417,6 +417,29 @@ function bindEvents() {
 
   // Controles del reproductor.
   bindPlayerEvents();
+    // Abrir reproductor grande desde el mini reproductor
+  const openFullPlayer = () => {
+    if (!currentTrack) {
+      ui.toastMessage("Primero elige una canción.");
+      return;
+    }
+    
+    ui.toggleFullPlayer(true);
+  };
+  
+  const nowPlaying = document.querySelector(".now-playing");
+  
+  nowPlaying?.addEventListener("click", (event) => {
+    // Evitar que el botón de favoritos abra el reproductor
+    if (event.target.closest("button")) return;
+    
+    openFullPlayer();
+  });
+  
+  ui.elements.expandPlayer?.addEventListener(
+    "click",
+    openFullPlayer
+  );
 
   // Panel de cola.
   bindQueueEvents();

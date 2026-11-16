@@ -339,7 +339,18 @@
 }
 
 .expand-player {
-  display: none;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  
+  width: 34px;
+  height: 38px;
+  
+  border: 0;
+  background: transparent;
+  color: #ffffff;
+  
+  cursor: pointer;
 }
 
 /* =========================================
@@ -871,4 +882,17 @@
     animation: none !important;
     transition: none !important;
   }
+}
+/* Mini reproductor: zonas que abren el reproductor completo */
+
+.current-art,
+.now-playing-text {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.current-art:active,
+.now-playing-text:active {
+  opacity: 0.75;
+  transition: opacity 0.15s ease;
 }
