@@ -1,0 +1,622 @@
+
+/* =========================================
+   SHUNEL — PLAYER SYSTEM
+   Diseño mobile-first para iPhone
+========================================= */
+
+:root {
+  --player-bg: #080D18;
+  --player-surface: #0D1423;
+  --player-elevated: #101B30;
+  --player-hover: #192945;
+  --player-text: #E8EDF7;
+  --player-muted: #A5B3CA;
+  --player-subtle: #71819B;
+  --player-accent: #6699E8;
+  --player-border: rgba(165, 179, 202, 0.12);
+  --player-safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* ELEMENTOS GENERALES */
+
+.bottom-player button,
+.now-playing-screen button,
+.overlay-screen button {
+  font: inherit;
+  color: inherit;
+  -webkit-tap-highlight-color: transparent;
+  cursor: pointer;
+}
+
+.bottom-player button,
+.now-playing-screen button {
+  border: 0;
+  background: transparent;
+}
+
+.bottom-player button:focus-visible,
+.now-playing-screen button:focus-visible,
+.overlay-screen button:focus-visible {
+  outline: 2px solid var(--player-accent);
+  outline-offset: 3px;
+}
+
+/* =========================================
+   MINI PLAYER
+========================================= */
+
+.bottom-player {
+  position: fixed;
+  z-index: 900;
+  left: 10px;
+  right: 10px;
+  bottom: calc(64px + var(--player-safe-bottom));
+
+  overflow: hidden;
+  background: var(--player-elevated);
+  border: 1px solid var(--player-border);
+  border-radius: 14px;
+
+  color: var(--player-text);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
+}
+
+.mini-player-content {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-height: 66px;
+  padding: 9px 11px;
+}
+
+.mini-cover {
+  flex: 0 0 46px;
+  width: 46px;
+  height: 46px;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 7px;
+  background: var(--player-hover);
+}
+
+.mini-cover img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.mini-info {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.mini-info p {
+  overflow: hidden;
+  margin: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#miniTrackTitle {
+  color: var(--player-text);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+#miniTrackArtist {
+  margin-top: 4px;
+  color: var(--player-muted);
+  font-size: 11px;
+}
+
+.mini-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex: 0 0 auto;
+  gap: 5px;
+}
+
+.mini-controls button {
+  display: grid;
+  place-items: center;
+  width: 35px;
+  height: 42px;
+  padding: 0;
+  color: var(--player-muted);
+  font-size: 19px;
+}
+
+.mini-controls #miniPlayButton {
+  color: var(--player-text);
+  font-size: 22px;
+}
+
+.mini-controls button:active {
+  color: var(--player-accent);
+}
+
+.mini-progress {
+  height: 2px;
+  width: 100%;
+  overflow: hidden;
+  background: rgba(165, 179, 202, 0.12);
+}
+
+.mini-progress span {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: var(--player-accent);
+  transition: width 150ms linear;
+}
+
+/* =========================================
+   REPRODUCTOR COMPLETO
+========================================= */
+
+.now-playing-screen {
+  position: fixed;
+  z-index: 1100;
+  inset: 0;
+
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+
+  padding:
+    calc(12px + env(safe-area-inset-top, 0px))
+    22px
+    calc(20px + var(--player-safe-bottom));
+
+  background: var(--player-bg);
+  color: var(--player-text);
+
+  -webkit-overflow-scrolling: touch;
+}
+
+.np-header {
+  display: grid;
+  grid-template-columns: 48px 1fr 48px;
+  align-items: center;
+  min-height: 48px;
+  flex-shrink: 0;
+}
+
+.np-header p {
+  margin: 0;
+  color: var(--player-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-align: center;
+}
+
+.np-header button {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  color: var(--player-muted);
+  font-size: 25px;
+}
+
+.np-header button:last-child {
+  justify-self: end;
+}
+
+/* CONTENIDO */
+
+.np-main {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 520px;
+  margin: auto;
+  gap: 0;
+}
+
+.np-artwork {
+  width: min(100%, 360px);
+  aspect-ratio: 1;
+  margin: 18px auto 30px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--player-surface);
+}
+
+.np-artwork img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.np-song-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-width: 0;
+  margin-bottom: 22px;
+}
+
+.np-song-info > div {
+  flex: 1;
+  min-width: 0;
+}
+
+#playerTrackTitle {
+  overflow: hidden;
+  margin: 0;
+  color: var(--player-text);
+  font-size: clamp(20px, 5.5vw, 25px);
+  font-weight: 750;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#playerArtistButton {
+  display: block;
+  max-width: 100%;
+  margin-top: 7px;
+  padding: 0;
+  color: var(--player-muted);
+  font-size: 15px;
+  text-align: left;
+}
+
+#playerArtistButton:active {
+  color: var(--player-accent);
+}
+
+#playerFavoriteButton {
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  color: var(--player-muted);
+  font-size: 27px;
+}
+
+/* =========================================
+   LETRAS EN EL REPRODUCTOR
+========================================= */
+
+.lyrics-preview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 48px;
+  margin-bottom: 20px;
+  padding: 11px 13px;
+  border: 1px solid var(--player-border);
+  border-radius: 10px;
+  background: var(--player-surface);
+}
+
+.lyrics-preview p {
+  display: -webkit-box;
+  flex: 1;
+  overflow: hidden;
+  margin: 0;
+  color: var(--player-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.lyrics-preview button {
+  flex: 0 0 auto;
+  padding: 8px 0 8px 8px;
+  color: var(--player-accent);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+/* =========================================
+   PROGRESO
+========================================= */
+
+.np-progress-area {
+  width: 100%;
+  margin-top: 4px;
+}
+
+#playerProgress {
+  display: block;
+  width: 100%;
+  height: 22px;
+  margin: 0;
+  accent-color: var(--player-accent);
+  cursor: pointer;
+}
+
+.progress-times {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 1px;
+  color: var(--player-subtle);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* =========================================
+   CONTROLES PRINCIPALES
+========================================= */
+
+.np-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin-top: 20px;
+}
+
+.np-controls button {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 48px;
+  padding: 0;
+  color: var(--player-muted);
+  font-size: 21px;
+}
+
+.np-controls button:active {
+  color: var(--player-accent);
+}
+
+.np-controls #playButton {
+  width: 62px;
+  height: 62px;
+  border-radius: 50%;
+  background: var(--player-text);
+  color: var(--player-bg);
+  font-size: 25px;
+}
+
+.np-controls #playButton:active {
+  background: var(--player-accent);
+}
+
+.np-controls button.active,
+.np-extra-controls button.active {
+  color: var(--player-accent);
+}
+
+/* =========================================
+   CONTROLES SECUNDARIOS
+========================================= */
+
+.np-extra-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  gap: 8px;
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid var(--player-border);
+}
+
+.np-extra-controls button {
+  min-height: 38px;
+  padding: 7px 9px;
+  color: var(--player-muted);
+  font-size: 12px;
+}
+
+.np-extra-controls button:active {
+  color: var(--player-accent);
+}
+
+/* =========================================
+   PANTALLAS DE LETRAS, COLA Y CANVAS
+========================================= */
+
+.overlay-screen {
+  position: fixed;
+  z-index: 1200;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  padding:
+    calc(14px + env(safe-area-inset-top, 0px))
+    20px
+    calc(20px + var(--player-safe-bottom));
+  background: var(--player-bg);
+  color: var(--player-text);
+  -webkit-overflow-scrolling: touch;
+}
+
+.overlay-screen > header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 48px;
+  margin-bottom: 20px;
+}
+
+.overlay-screen > header h2 {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 700;
+}
+
+.overlay-screen > header button {
+  min-height: 42px;
+  padding: 8px 12px;
+  border: 1px solid var(--player-border);
+  border-radius: 9px;
+  background: var(--player-surface);
+  color: var(--player-text);
+  font-size: 13px;
+}
+
+.lyrics-content {
+  width: 100%;
+  max-width: 620px;
+  margin: 10px auto;
+  padding: 15px 0 40px;
+  color: var(--player-muted);
+  font-size: 19px;
+  font-weight: 600;
+  line-height: 2;
+  text-align: center;
+}
+
+.lyrics-content p {
+  margin: 0 0 18px;
+}
+
+#queueList {
+  width: 100%;
+  max-width: 650px;
+  margin: 0 auto;
+}
+
+#clearQueueButton {
+  align-self: center;
+  min-height: 44px;
+  margin: 20px auto;
+  padding: 10px 18px;
+  border: 1px solid var(--player-border);
+  border-radius: 10px;
+  background: var(--player-surface);
+  color: var(--player-muted);
+  font-size: 13px;
+}
+
+#visualizerCanvas {
+  display: block;
+  width: 100%;
+  max-width: 700px;
+  height: min(55vh, 420px);
+  margin: auto;
+  border-radius: 12px;
+  background: var(--player-surface);
+}
+
+/* =========================================
+   iPHONE PEQUEÑO
+========================================= */
+
+@media (max-width: 375px) {
+  .bottom-player {
+    left: 7px;
+    right: 7px;
+  }
+
+  .mini-player-content {
+    gap: 8px;
+    min-height: 62px;
+    padding: 8px;
+  }
+
+  .mini-cover {
+    flex-basis: 42px;
+    width: 42px;
+    height: 42px;
+  }
+
+  .mini-controls {
+    gap: 1px;
+  }
+
+  .mini-controls button {
+    width: 31px;
+    font-size: 17px;
+  }
+
+  .now-playing-screen {
+    padding-right: 18px;
+    padding-left: 18px;
+  }
+
+  .np-artwork {
+    width: min(100%, 320px);
+    margin-top: 12px;
+    margin-bottom: 24px;
+  }
+
+  .np-controls {
+    margin-top: 14px;
+  }
+}
+
+/* =========================================
+   iPHONE GRANDE Y TABLETS
+========================================= */
+
+@media (min-width: 600px) {
+  .bottom-player {
+    right: 22px;
+    bottom: calc(20px + var(--player-safe-bottom));
+    left: auto;
+    width: min(430px, calc(100% - 44px));
+  }
+
+  .now-playing-screen {
+    align-items: center;
+    padding-right: 32px;
+    padding-left: 32px;
+  }
+
+  .np-main {
+    width: 100%;
+  }
+
+  .np-artwork {
+    width: min(100%, 390px);
+  }
+}
+
+/* =========================================
+   ESCRITORIO
+========================================= */
+
+@media (min-width: 900px) {
+  .now-playing-screen {
+    padding-top: 28px;
+  }
+
+  .np-artwork {
+    width: min(100%, 340px);
+    margin-top: 12px;
+    margin-bottom: 22px;
+  }
+
+  .np-song-info {
+    margin-bottom: 16px;
+  }
+
+  .np-controls {
+    margin-top: 12px;
+  }
+}
+
+/* =========================================
+   REDUCIR MOVIMIENTO
+========================================= */
+
+@media (prefers-reduced-motion: reduce) {
+  .mini-progress span,
+  .bottom-player *,
+  .now-playing-screen * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+/* RESPETAR EL ATRIBUTO HIDDEN */
+.bottom-player[hidden],
+.now-playing-screen[hidden],
+.overlay-screen[hidden] {
+  display: none !important;
+}
