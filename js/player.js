@@ -1,1409 +1,361 @@
 
 /* =========================================
-   SHUNEL — PLAYER ENGINE
-   Motor central de reproducción
-   Version: 2.2.0
+   SHUNEL — YOUTUBE PLAYER
+   YouTube IFrame Player API
 ========================================= */
 
-(() => {
-  "use strict";
+const IFRAME_API = "https://www.youtube.com/iframe_api";
 
-  if (window.ShunelPlayer) {
-    console.warn("[Shunel Player] Ya está inicializado.");
-    return;
-  }
+let apiPromise = null;
 
-  const audio = document.getElementById("localAudio");
+export class YouTubePlayer {
+  constructor(hostId, callbacks = {}) {
+    this.hostId = hostId;
+    this.callbacks = callbacks;
 
-  if (!audio) {
-    console.error("[Shunel Player] No se encontró #localAudio.");
-    return;
-  }
+    this.player = null;
 
-  const $ = id => document.getElementById(id);
+    this.ready = false;
+    this.initializing = false;
+    this.destroyed = false;
 
-  const elements = {
-    miniPlay: $("miniPlayButton"),
-    miniNext: $("miniNextButton"),
-    miniPrevious: $("miniPreviousButton"),
+    this.pendingVideoId = null;
+    this.lastState = -1;
 
-    play: $("playButton"),
-    next: $("nextButton"),
-    previous: $("previousButton"),
-
-    shuffle: $("shuffleButton"),
-    repeat: $("repeatButton"),
-
-    volume: $("volumeSlider"),
-    seek: $("seekSlider"),
-
-    currentTime: $("currentTime"),
-    duration: $("duration"),
-
-    title: $("miniTrackTitle"),
-    artist: $("miniTrackArtist"),
-    artwork: $("miniTrackArtwork"),
-
-    fullTitle: $("trackTitle") || $("playerTrackTitle"),
-    fullArtist: $("trackArtist") || $("playerTrackArtist"),
-    fullArtwork: $("trackArtwork") || $("playerCoverImage")
-  };
-
-  const state = {
-    currentTrack: null,
-    queue: [],
-    currentIndex: -1,
-
-    isPlaying: false,
-    isLoading: false,
-
-    shuffle: false,
-    repeat: "off",
-    volume: 0.8,
-
-    source: "none",
-    externalController: null,
-
-    initialized: false,
-    playRequest: 0,
-
-    externalDuration: 0,
-    externalTime: 0,
-    externalProgressTimer: null
-  };
-
-  const STORAGE_KEY = "shunel_player_settings";
-
-  /* =========================================
-     EVENTOS
-  ========================================= */
-
-  function emit(name, detail = {}) {
-    if (window.ShunelEvents?.emit) {
-      window.ShunelEvents.emit(name, detail);
-    } else {
-      window.dispatchEvent(
-        new CustomEvent(`shunel:${name}`, { detail })
-      );
-    }
-  }
-
-  function notify(message) {
-    if (typeof window.ShunelNotify === "function") {
-      window.ShunelNotify(message);
-      return;
-    }
-
-    const toast = $("toast");
-
-    if (!toast) {
-      console.info("[Shunel]", message);
-      return;
-    }
-
-    toast.textContent = message;
-    toast.hidden = false;
-    toast.classList.add("show");
-
-    clearTimeout(notify.timer);
-
-    notify.timer = setTimeout(() => {
-      toast.classList.remove("show");
-      toast.hidden = true;
-    }, 2500);
+    this.volume = 70;
   }
 
   /* =========================================
-     NORMALIZACIÓN
+     INITIALIZATION
   ========================================= */
 
-  function safeImageUrl(value) {
-    if (!value) return "";
-
-    try {
-      const url = new URL(value, location.href);
-
-      if (
-        ["http:", "https:", "blob:"].includes(url.protocol)
-      ) {
-        return url.href;
-      }
-    } catch {}
-
-    return "";
-  }
-
-  function safeAudioUrl(value) {
-    if (!value) return "";
-
-    try {
-      const url = new URL(value, location.href);
-
-      if (
-        ["http:", "https:", "blob:", "data:"].includes(url.protocol)
-      ) {
-        return url.href;
-      }
-    } catch {}
-
-    return "";
-  }
-
-  function normalizeTrack(track) {
-    if (!track || typeof track !== "object") {
-      return null;
+  async init() {
+    if (this.destroyed) {
+      throw new Error("El reproductor fue destruido.");
     }
 
-    const title = String(
-      track.title || track.name || "Sin título"
-    ).trim();
-
-    const artist = String(
-      track.artist ||
-      track.channelTitle ||
-      "Artista desconocido"
-    ).trim();
-
-    const videoId = String(
-      track.videoId ||
-      track.youtubeId ||
-      ""
-    ).trim();
-
-    const rawUrl =
-      track.audioUrl ||
-      track.url ||
-      track.src ||
-      "";
-
-    const artwork =
-      track.artwork ||
-      track.thumbnail ||
-      track.cover ||
-      "";
-
-    const source =
-      track.source ||
-      (videoId ? "youtube" : rawUrl ? "local" : "unknown");
-
-    const id = String(
-      track.id ||
-      (videoId
-        ? `youtube:${videoId}`
-        : rawUrl || `${title}:${artist}`)
-    );
-
-    return {
-      id,
-      title,
-      artist,
-      artwork: safeImageUrl(artwork),
-      audioUrl: safeAudioUrl(rawUrl),
-      videoId,
-      source,
-      duration: Number(track.duration) || 0,
-      album: track.album || "",
-      metadata: track.metadata || {}
-    };
-  }
-
-  function isYouTube(track) {
-    return Boolean(
-      track &&
-      (track.source === "youtube" || track.videoId)
-    );
-  }
-
-  /* =========================================
-     ESTADO PÚBLICO
-  ========================================= */
-
-  function getCurrentTrack() {
-    return state.currentTrack
-      ? { ...state.currentTrack }
-      : null;
-  }
-
-  function getQueue() {
-    return state.queue.map(track => ({ ...track }));
-  }
-
-  function getState() {
-    return {
-      currentTrack: getCurrentTrack(),
-      queue: getQueue(),
-      currentIndex: state.currentIndex,
-
-      isPlaying: state.isPlaying,
-      isLoading: state.isLoading,
-
-      shuffle: state.shuffle,
-      repeat: state.repeat,
-      volume: state.volume,
-
-      source: state.source,
-
-      currentTime: getCurrentTime(),
-      duration: getDuration()
-    };
-  }
-
-  /* =========================================
-     TIEMPOS
-  ========================================= */
-
-  function formatTime(seconds) {
-    if (!Number.isFinite(seconds) || seconds < 0) {
-      return "0:00";
+    if (this.ready && this.player) {
+      return this.player;
     }
 
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
+    if (this.initializing) {
+      return this.initPromise;
+    }
 
-    return `${mins}:${String(secs).padStart(2, "0")}`;
-  }
+    this.initializing = true;
 
-  function getCurrentTime() {
-    if (state.source === "youtube") {
-      const controller = state.externalController;
+    this.initPromise = (async () => {
+      await this.loadAPI();
 
-      if (controller?.getCurrentTime) {
-        try {
-          const value = Number(controller.getCurrentTime());
-
-          if (Number.isFinite(value) && value >= 0) {
-            state.externalTime = value;
-          }
-        } catch {}
+      if (this.destroyed) {
+        throw new Error("El reproductor fue destruido.");
       }
 
-      return state.externalTime;
-    }
+      const host = document.getElementById(this.hostId);
 
-    return audio.currentTime || 0;
-  }
-
-  function getDuration() {
-    if (state.source === "youtube") {
-      const controller = state.externalController;
-
-      if (controller?.getDuration) {
-        try {
-          const value = Number(controller.getDuration());
-
-          if (Number.isFinite(value) && value > 0) {
-            state.externalDuration = value;
-          }
-        } catch {}
-      }
-
-      return (
-        state.externalDuration ||
-        state.currentTrack?.duration ||
-        0
-      );
-    }
-
-    return Number.isFinite(audio.duration)
-      ? audio.duration
-      : 0;
-  }
-
-  function updateTimeUI() {
-    const current = getCurrentTime();
-    const duration = getDuration();
-
-    if (elements.currentTime) {
-      elements.currentTime.textContent =
-        formatTime(current);
-    }
-
-    if (elements.duration) {
-      elements.duration.textContent =
-        formatTime(duration);
-    }
-
-    if (elements.seek && duration > 0) {
-      const percentage = Math.max(
-        0,
-        Math.min(1000, (current / duration) * 1000)
-      );
-
-      elements.seek.value = percentage;
-    }
-  }
-
-  /* =========================================
-     INTERFAZ
-  ========================================= */
-
-  function updatePlayButtons() {
-    const iconName = state.isPlaying
-      ? "pause"
-      : "play";
-
-    [elements.miniPlay, elements.play].forEach(button => {
-      if (!button) return;
-
-      button.dataset.state = state.isPlaying
-        ? "playing"
-        : "paused";
-
-      button.setAttribute(
-        "aria-label",
-        state.isPlaying ? "Pausar" : "Reproducir"
-      );
-
-      const icon = button.querySelector("i");
-
-      if (icon) {
-        icon.className = `icon-${iconName}`;
-      }
-    });
-  }
-
-  function updateTrackUI(track = state.currentTrack) {
-    if (!track) return;
-
-    const title = track.title;
-    const artist = track.artist;
-    const artwork = track.artwork;
-
-    if (elements.title) {
-      elements.title.textContent = title;
-    }
-
-    if (elements.artist) {
-      elements.artist.textContent = artist;
-    }
-
-    if (elements.fullTitle) {
-      elements.fullTitle.textContent = title;
-    }
-
-    if (elements.fullArtist) {
-      elements.fullArtist.textContent = artist;
-    }
-
-    [
-      elements.artwork,
-      elements.fullArtwork
-    ].forEach(element => {
-      if (!element) return;
-
-      if (element.tagName === "IMG") {
-        if (artwork) {
-          element.src = artwork;
-          element.alt = `Portada de ${title}`;
-        } else {
-          element.removeAttribute("src");
-          element.alt = "";
-        }
-      }
-    });
-
-    document.title = `${title} — ${artist} | Shunel`;
-
-    updateMediaSession(track);
-  }
-
-  function setPlaying(value, reason = "manual") {
-    const changed = state.isPlaying !== Boolean(value);
-
-    state.isPlaying = Boolean(value);
-
-    updatePlayButtons();
-
-    if (!changed) return;
-
-    emit(state.isPlaying ? "play" : "pause", {
-      track: getCurrentTrack(),
-      source: state.source,
-      reason
-    });
-  }
-
-  /* =========================================
-     MEDIA SESSION
-  ========================================= */
-
-  function updateMediaSession(track) {
-    if (!("mediaSession" in navigator) || !track) {
-      return;
-    }
-
-    try {
-      navigator.mediaSession.metadata =
-        new MediaMetadata({
-          title: track.title,
-          artist: track.artist,
-          album: track.album || "Shunel",
-
-          artwork: track.artwork
-            ? [{
-                src: track.artwork,
-                sizes: "512x512",
-                type: "image/jpeg"
-              }]
-            : []
-        });
-
-    } catch (error) {
-      console.warn(
-        "[Shunel Player] Metadata:",
-        error
-      );
-    }
-  }
-
-  function registerMediaSession() {
-    if (!("mediaSession" in navigator)) return;
-
-    const actions = {
-      play: () => play(),
-      pause: () => pause(),
-      nexttrack: () => next(),
-      previoustrack: () => previous(),
-
-      seekto: details => {
-        if (Number.isFinite(details.seekTime)) {
-          seekToTime(details.seekTime);
-        }
-      }
-    };
-
-    for (const [action, handler] of Object.entries(actions)) {
-      try {
-        navigator.mediaSession.setActionHandler(
-          action,
-          handler
-        );
-      } catch {}
-    }
-  }
-
-  /* =========================================
-     PROGRESO EXTERNO
-  ========================================= */
-
-  function stopExternalProgress() {
-    if (state.externalProgressTimer !== null) {
-      clearInterval(state.externalProgressTimer);
-      state.externalProgressTimer = null;
-    }
-  }
-
-  function startExternalProgress() {
-    stopExternalProgress();
-
-    state.externalProgressTimer = setInterval(() => {
-      if (
-        state.source !== "youtube" ||
-        !state.isPlaying
-      ) {
-        return;
-      }
-
-      updateTimeUI();
-
-    }, 500);
-  }
-
-  function updateExternalProgress() {
-    if (state.source !== "youtube") return;
-
-    updateTimeUI();
-  }
-
-  /* =========================================
-     BÚSQUEDA DE POSICIÓN
-  ========================================= */
-
-  function seekToTime(seconds) {
-    const duration = getDuration();
-
-    if (!duration) return false;
-
-    const time = Math.max(
-      0,
-      Math.min(duration, Number(seconds) || 0)
-    );
-
-    if (state.source === "youtube") {
-      const controller = state.externalController;
-
-      if (typeof controller?.seekTo !== "function") {
-        return false;
-      }
-
-      try {
-        controller.seekTo(time);
-        state.externalTime = time;
-      } catch (error) {
-        console.error(
-          "[Shunel Player] Error buscando posición:",
-          error
-        );
-
-        return false;
-      }
-
-    } else {
-      audio.currentTime = time;
-    }
-
-    updateTimeUI();
-
-    return true;
-  }
-
-  function seek(value) {
-    const percentage = Math.max(
-      0,
-      Math.min(1000, Number(value) || 0)
-    );
-
-    const duration = getDuration();
-
-    if (!duration) return false;
-
-    return seekToTime(
-      duration * (percentage / 1000)
-    );
-  }
-
-  /* =========================================
-     CONTROLADOR EXTERNO
-  ========================================= */
-
-  function stopExternal() {
-    stopExternalProgress();
-
-    const controller = state.externalController;
-
-    if (!controller) return;
-
-    state.externalController = null;
-
-    try {
-      controller.destroy?.();
-    } catch (error) {
-      console.warn(
-        "[Shunel Player] Error cerrando fuente externa:",
-        error
-      );
-    }
-  }
-
-  function setExternalController(controller) {
-    if (
-      !controller ||
-      typeof controller.play !== "function" ||
-      typeof controller.pause !== "function"
-    ) {
-      throw new TypeError(
-        "El controlador externo debe incluir play() y pause()."
-      );
-    }
-
-    stopExternal();
-
-    state.externalController = controller;
-
-    return true;
-  }
-
-  function setExternalState(playing) {
-    const active = Boolean(playing);
-
-    setPlaying(active, "external");
-
-    if (active) {
-      startExternalProgress();
-    } else {
-      stopExternalProgress();
-      updateTimeUI();
-    }
-  }
-
-  /* =========================================
-     VOLUMEN
-  ========================================= */
-
-  function getVolumeSliderValue(volume) {
-    const max = Number(elements.volume?.max);
-
-    return Number.isFinite(max) && max > 1
-      ? volume * max
-      : volume;
-  }
-
-  function normalizeVolumeValue(value) {
-    const number = Number(value);
-
-    if (!Number.isFinite(number)) return 0;
-
-    const max = Number(elements.volume?.max);
-
-    if (Number.isFinite(max) && max > 1) {
-      return number / max;
-    }
-
-    return number > 1 ? number / 100 : number;
-  }
-
-  function setVolume(value) {
-    const volume = Math.max(
-      0,
-      Math.min(1, Number(value) || 0)
-    );
-
-    state.volume = volume;
-
-    audio.volume = volume;
-
-    if (elements.volume) {
-      elements.volume.value =
-        getVolumeSliderValue(volume);
-    }
-
-    if (state.externalController?.setVolume) {
-      try {
-        state.externalController.setVolume(volume * 100);
-      } catch (error) {
-        console.warn(
-          "[Shunel Player] Error ajustando volumen externo:",
-          error
-        );
-      }
-    }
-
-    saveSettings();
-
-    emit("volumechange", { volume });
-
-    return volume;
-  }
-
-  /* =========================================
-     REPRODUCCIÓN
-  ========================================= */
-
-  async function pause() {
-    if (state.externalController) {
-      try {
-        await state.externalController.pause();
-      } catch (error) {
-        console.warn(
-          "[Shunel Player] Error pausando fuente externa:",
-          error
-        );
-      }
-    }
-
-    audio.pause();
-
-    setPlaying(false, "manual");
-
-    return true;
-  }
-
-  async function play() {
-    if (!state.currentTrack) {
-      if (state.queue.length) {
-        return playTrack(state.queue[0]);
-      }
-
-      notify("No hay ninguna canción seleccionada.");
-      return false;
-    }
-
-    if (state.externalController) {
-      try {
-        const result =
-          await state.externalController.play();
-
-        if (result === false) return false;
-
-        return true;
-
-      } catch (error) {
-        console.error(
-          "[Shunel Player] Error externo:",
-          error
-        );
-
-        return false;
-      }
-    }
-
-    if (!audio.src) return false;
-
-    try {
-      await audio.play();
-
-      setPlaying(true, "manual");
-
-      return true;
-
-    } catch (error) {
-      console.error(
-        "[Shunel Player] No se pudo reproducir:",
-        error
-      );
-
-      setPlaying(false, "error");
-
-      notify("No se pudo reproducir esta canción.");
-
-      return false;
-    }
-  }
-
-  async function togglePlay() {
-    return state.isPlaying
-      ? pause()
-      : play();
-  }
-
-  async function playTrack(track, newQueue = null) {
-    const normalized = normalizeTrack(track);
-
-    if (!normalized) {
-      notify("Esta canción no es válida.");
-      return false;
-    }
-
-    const requestId = ++state.playRequest;
-
-    if (newQueue) {
-      state.queue = newQueue
-        .map(normalizeTrack)
-        .filter(Boolean);
-    }
-
-    const index = state.queue.findIndex(
-      item => item.id === normalized.id
-    );
-
-    if (index >= 0) {
-      state.currentIndex = index;
-    } else {
-      state.queue.push(normalized);
-      state.currentIndex = state.queue.length - 1;
-    }
-
-    state.currentTrack = normalized;
-    state.isLoading = true;
-
-    state.externalTime = 0;
-    state.externalDuration = normalized.duration || 0;
-
-    stopExternal();
-
-    audio.pause();
-    audio.removeAttribute("src");
-    audio.load();
-
-    state.source = isYouTube(normalized)
-      ? "youtube"
-      : "local";
-
-    setPlaying(false, "trackchange");
-
-    updateTrackUI(normalized);
-    updateTimeUI();
-
-    emit("trackchange", {
-      track: getCurrentTrack(),
-      index: state.currentIndex,
-      queue: getQueue(),
-      source: state.source
-    });
-
-    emit("queuechange", {
-      queue: getQueue(),
-      currentIndex: state.currentIndex
-    });
-
-    try {
-      if (isYouTube(normalized)) {
-        emit("external-play", {
-          track: getCurrentTrack()
-        });
-
-        notify("Preparando reproducción de YouTube.");
-
-        /*
-          youtube.js se encarga de crear
-          el reproductor y cargar el video.
-        */
-
-        state.isLoading = false;
-
-        return true;
-      }
-
-      if (!normalized.audioUrl) {
+      if (!host) {
         throw new Error(
-          "La canción no tiene una dirección de audio válida."
+          `No se encontró el contenedor: ${this.hostId}`
         );
       }
 
-      audio.src = normalized.audioUrl;
-      audio.load();
+      return new Promise((resolve, reject) => {
+        try {
+          this.player = new window.YT.Player(this.hostId, {
+            width: "1",
+            height: "1",
 
-      await audio.play();
+            playerVars: {
+              autoplay: 0,
+              controls: 0,
+              playsinline: 1,
+              rel: 0,
+              modestbranding: 1,
+              enablejsapi: 1,
+              origin: window.location.origin
+            },
 
-      if (requestId !== state.playRequest) {
-        audio.pause();
-        return false;
-      }
+            events: {
+              onReady: event => {
+                this.ready = true;
+                this.initializing = false;
 
-      state.isLoading = false;
+                this.player = event.target;
 
-      setPlaying(true, "trackchange");
+                this.setVolume(this.volume);
 
-      emit("trackloaded", {
-        track: getCurrentTrack()
+                this.callbacks.onReady?.();
+
+                // Reproducir la última canción solicitada.
+                if (this.pendingVideoId) {
+                  const videoId = this.pendingVideoId;
+
+                  this.pendingVideoId = null;
+
+                  this.play(videoId);
+                }
+
+                resolve(this.player);
+              },
+
+              onStateChange: event => {
+                this.handleState(event);
+              },
+
+              onError: event => {
+                this.callbacks.onError?.(event.data);
+              }
+            }
+          });
+
+        } catch (error) {
+          this.initializing = false;
+          reject(error);
+        }
       });
+    })();
 
-      return true;
-
+    try {
+      return await this.initPromise;
     } catch (error) {
-      if (requestId !== state.playRequest) {
-        return false;
-      }
-
-      state.isLoading = false;
-
-      setPlaying(false, "error");
-
-      console.error(
-        "[Shunel Player] Error:",
-        error
-      );
-
-      emit("playerror", {
-        track: getCurrentTrack(),
-        message: error.message
-      });
-
-      notify("No se pudo reproducir esta canción.");
-
-      return false;
+      this.initializing = false;
+      this.initPromise = null;
+      throw error;
     }
   }
 
   /* =========================================
-     COLA
+     LOAD YOUTUBE API
   ========================================= */
 
-  async function setQueue(
-    tracks,
-    startIndex = 0,
-    autoplay = true
-  ) {
-    if (!Array.isArray(tracks)) return false;
-
-    const normalized = tracks
-      .map(normalizeTrack)
-      .filter(Boolean);
-
-    if (!normalized.length) {
-      notify("La cola está vacía.");
-      return false;
+  loadAPI() {
+    if (window.YT?.Player) {
+      return Promise.resolve();
     }
 
-    state.queue = normalized;
+    if (apiPromise) {
+      return apiPromise;
+    }
 
-    const index = Math.max(
+    apiPromise = new Promise((resolve, reject) => {
+      const previousCallback =
+        window.onYouTubeIframeAPIReady;
+
+      let settled = false;
+
+      const finish = () => {
+        if (settled) return;
+
+        settled = true;
+
+        if (window.YT?.Player) {
+          resolve();
+        } else {
+          reject(
+            new Error(
+              "La API de YouTube no se inicializó correctamente."
+            )
+          );
+        }
+      };
+
+      window.onYouTubeIframeAPIReady = () => {
+        try {
+          previousCallback?.();
+        } finally {
+          finish();
+        }
+      };
+
+      let script = document.querySelector(
+        `script[src="${IFRAME_API}"]`
+      );
+
+      if (!script) {
+        script = document.createElement("script");
+
+        script.src = IFRAME_API;
+        script.async = true;
+
+        script.onerror = () => {
+          apiPromise = null;
+
+          reject(
+            new Error(
+              "No se pudo cargar el reproductor de YouTube."
+            )
+          );
+        };
+
+        document.head.appendChild(script);
+      }
+    });
+
+    return apiPromise;
+  }
+
+  /* =========================================
+     PLAYBACK
+  ========================================= */
+
+  play(videoId) {
+    if (!/^[a-zA-Z0-9_-]{11}$/.test(videoId || "")) {
+      console.warn("[Shunel] ID de video inválido:", videoId);
+      return;
+    }
+
+    if (!this.ready || !this.player) {
+      this.pendingVideoId = videoId;
+
+      this.init().catch(error => {
+        console.error("[Shunel] Player error:", error);
+        this.callbacks.onError?.(error.message);
+      });
+
+      return;
+    }
+
+    this.pendingVideoId = null;
+
+    this.player.loadVideoById({
+      videoId,
+      suggestedQuality: "default"
+    });
+  }
+
+  toggle() {
+    if (!this.ready || !this.player) return;
+
+    const state = this.player.getPlayerState();
+
+    if (state === window.YT.PlayerState.PLAYING) {
+      this.pause();
+    } else {
+      this.resume();
+    }
+  }
+
+  pause() {
+    if (!this.ready || !this.player) return;
+
+    this.player.pauseVideo();
+  }
+
+  resume() {
+    if (!this.ready || !this.player) return;
+
+    this.player.playVideo();
+  }
+
+  stop() {
+    if (!this.ready || !this.player) return;
+
+    this.player.stopVideo();
+  }
+
+  /* =========================================
+     VOLUME
+  ========================================= */
+
+  setVolume(value) {
+    const volume = Number(value);
+
+    if (!Number.isFinite(volume)) return;
+
+    this.volume = Math.max(
       0,
-      Math.min(
-        normalized.length - 1,
-        Number(startIndex) || 0
-      )
+      Math.min(100, volume)
     );
 
-    state.currentIndex = index;
-
-    emit("queuechange", {
-      queue: getQueue(),
-      currentIndex: index
-    });
-
-    if (!autoplay) {
-      state.currentTrack = normalized[index];
-
-      state.source = isYouTube(normalized[index])
-        ? "youtube"
-        : "local";
-
-      updateTrackUI();
-      return true;
+    if (this.ready && this.player) {
+      this.player.setVolume(this.volume);
     }
-
-    return playTrack(normalized[index]);
   }
 
-  function addToQueue(track, nextTrack = false) {
-    const normalized = normalizeTrack(track);
-
-    if (!normalized) return false;
-
-    if (nextTrack && state.currentIndex >= 0) {
-      state.queue.splice(
-        state.currentIndex + 1,
-        0,
-        normalized
-      );
-    } else {
-      state.queue.push(normalized);
+  mute() {
+    if (this.ready && this.player) {
+      this.player.mute();
     }
-
-    emit("queuechange", {
-      queue: getQueue(),
-      currentIndex: state.currentIndex
-    });
-
-    return true;
   }
 
-  function removeFromQueue(index) {
-    if (
-      !Number.isInteger(index) ||
-      index < 0 ||
-      index >= state.queue.length
-    ) {
-      return false;
+  unmute() {
+    if (this.ready && this.player) {
+      this.player.unMute();
+      this.player.setVolume(this.volume);
     }
-
-    const wasCurrent = index === state.currentIndex;
-
-    state.queue.splice(index, 1);
-
-    if (index < state.currentIndex) {
-      state.currentIndex--;
-    }
-
-    if (!state.queue.length) {
-      clearQueue();
-      return true;
-    }
-
-    if (wasCurrent) {
-      const nextIndex = Math.min(
-        index,
-        state.queue.length - 1
-      );
-
-      playTrack(state.queue[nextIndex]);
-    }
-
-    emit("queuechange", {
-      queue: getQueue(),
-      currentIndex: state.currentIndex
-    });
-
-    return true;
   }
 
-  function clearQueue() {
-    stop();
+  /* =========================================
+     PROGRESS
+  ========================================= */
 
-    state.queue = [];
-    state.currentIndex = -1;
-    state.currentTrack = null;
-    state.source = "none";
-
-    updatePlayButtons();
-    updateTimeUI();
-
-    emit("queuechange", {
-      queue: [],
-      currentIndex: -1
-    });
-
-    emit("trackchange", {
-      track: null,
-      source: "none"
-    });
-
-    return true;
-  }
-
-  async function next() {
-    if (!state.queue.length) return false;
+  seekTo(seconds) {
+    const time = Number(seconds);
 
     if (
-      state.repeat === "one" &&
-      state.currentTrack
+      !this.ready ||
+      !this.player ||
+      !Number.isFinite(time)
     ) {
-      return playTrack(state.currentTrack);
+      return;
     }
 
-    let nextIndex;
-
-    if (state.shuffle && state.queue.length > 1) {
-      const available = state.queue
-        .map((_, index) => index)
-        .filter(index => index !== state.currentIndex);
-
-      nextIndex = available[
-        Math.floor(Math.random() * available.length)
-      ];
-
-    } else {
-      nextIndex = state.currentIndex + 1;
-    }
-
-    if (nextIndex >= state.queue.length) {
-      if (state.repeat === "all") {
-        nextIndex = 0;
-      } else {
-        await stop();
-
-        emit("queueend", {});
-
-        return false;
-      }
-    }
-
-    return playTrack(state.queue[nextIndex]);
+    this.player.seekTo(
+      Math.max(0, time),
+      true
+    );
   }
 
-  async function previous() {
-    if (!state.queue.length) return false;
+  getCurrentTime() {
+    if (!this.ready || !this.player) return 0;
 
-    if (getCurrentTime() > 3) {
-      seekToTime(0);
-      return true;
-    }
-
-    let index = state.currentIndex - 1;
-
-    if (index < 0) {
-      index = state.repeat === "all"
-        ? state.queue.length - 1
-        : 0;
-    }
-
-    return playTrack(state.queue[index]);
+    return this.player.getCurrentTime() || 0;
   }
 
-  async function stop() {
-    ++state.playRequest;
+  getDuration() {
+    if (!this.ready || !this.player) return 0;
 
-    audio.pause();
-    audio.currentTime = 0;
+    return this.player.getDuration() || 0;
+  }
 
-    stopExternal();
+  getPlayerState() {
+    if (!this.ready || !this.player) return -1;
 
-    state.externalTime = 0;
-    state.externalDuration = 0;
-
-    state.isLoading = false;
-    state.source = "none";
-
-    setPlaying(false, "stop");
-
-    updateTimeUI();
-
-    return true;
+    return this.player.getPlayerState();
   }
 
   /* =========================================
-     ALEATORIO Y REPETICIÓN
+     PLAYER STATE
   ========================================= */
 
-  function toggleShuffle() {
-    state.shuffle = !state.shuffle;
+  handleState(event) {
+    this.lastState = event.data;
 
-    elements.shuffle?.classList.toggle(
-      "active",
-      state.shuffle
-    );
+    const states = window.YT.PlayerState;
 
-    emit("shufflechange", {
-      enabled: state.shuffle
-    });
+    this.callbacks.onStateChange?.(event.data);
 
-    saveSettings();
-
-    return state.shuffle;
-  }
-
-  function toggleRepeat() {
-    const modes = ["off", "all", "one"];
-
-    const index = modes.indexOf(state.repeat);
-
-    state.repeat = modes[
-      (index + 1) % modes.length
-    ];
-
-    if (elements.repeat) {
-      elements.repeat.classList.toggle(
-        "active",
-        state.repeat !== "off"
-      );
-
-      elements.repeat.dataset.mode = state.repeat;
-    }
-
-    emit("repeatchange", {
-      mode: state.repeat
-    });
-
-    saveSettings();
-
-    return state.repeat;
-  }
-
-  /* =========================================
-     CONFIGURACIÓN
-  ========================================= */
-
-  function saveSettings() {
-    try {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({
-          volume: state.volume,
-          shuffle: state.shuffle,
-          repeat: state.repeat
-        })
-      );
-    } catch (error) {
-      console.warn(
-        "[Shunel Player] No se pudo guardar:",
-        error
-      );
-    }
-  }
-
-  function loadSettings() {
-    try {
-      const settings = JSON.parse(
-        localStorage.getItem(STORAGE_KEY) || "{}"
-      );
-
-      if (Number.isFinite(settings.volume)) {
-        state.volume = Math.max(
-          0,
-          Math.min(1, settings.volume)
-        );
-      }
-
-      state.shuffle = Boolean(settings.shuffle);
-
-      if (
-        ["off", "all", "one"].includes(settings.repeat)
-      ) {
-        state.repeat = settings.repeat;
-      }
-
-    } catch {
-      console.warn(
-        "[Shunel Player] Configuración inválida."
-      );
-    }
-
-    audio.volume = state.volume;
-
-    if (elements.volume) {
-      elements.volume.value =
-        getVolumeSliderValue(state.volume);
-    }
-
-    elements.shuffle?.classList.toggle(
-      "active",
-      state.shuffle
-    );
-
-    elements.repeat?.classList.toggle(
-      "active",
-      state.repeat !== "off"
-    );
-
-    if (elements.repeat) {
-      elements.repeat.dataset.mode = state.repeat;
+    if (event.data === states.ENDED) {
+      this.callbacks.onEnded?.();
     }
   }
 
   /* =========================================
-     CONTROLES
+     DESTROY
   ========================================= */
 
-  function bindControls() {
-    elements.miniPlay?.addEventListener(
-      "click",
-      togglePlay
-    );
+  destroy() {
+    this.destroyed = true;
+    this.ready = false;
+    this.initializing = false;
 
-    elements.play?.addEventListener(
-      "click",
-      togglePlay
-    );
+    this.pendingVideoId = null;
 
-    elements.miniNext?.addEventListener(
-      "click",
-      next
-    );
+    if (this.player) {
+      this.player.destroy();
+      this.player = null;
+    }
 
-    elements.next?.addEventListener(
-      "click",
-      next
-    );
-
-    elements.miniPrevious?.addEventListener(
-      "click",
-      previous
-    );
-
-    elements.previous?.addEventListener(
-      "click",
-      previous
-    );
-
-    elements.shuffle?.addEventListener(
-      "click",
-      toggleShuffle
-    );
-
-    elements.repeat?.addEventListener(
-      "click",
-      toggleRepeat
-    );
-
-    elements.volume?.addEventListener("input", event => {
-      const value = normalizeVolumeValue(
-        event.target.value
-      );
-
-      setVolume(value);
-    });
-
-    elements.seek?.addEventListener("change", event => {
-      seek(event.target.value);
-    });
-
-    audio.addEventListener("play", () => {
-      if (state.source === "local") {
-        setPlaying(true, "audio");
-      }
-    });
-
-    audio.addEventListener("pause", () => {
-      if (state.source === "local") {
-        setPlaying(false, "audio");
-      }
-    });
-
-    audio.addEventListener("ended", () => {
-      if (state.source !== "local") return;
-
-      if (state.repeat === "one") {
-        audio.currentTime = 0;
-        play();
-      } else {
-        next();
-      }
-    });
-
-    audio.addEventListener(
-      "timeupdate",
-      updateTimeUI
-    );
-
-    audio.addEventListener(
-      "loadedmetadata",
-      updateTimeUI
-    );
-
-    audio.addEventListener("error", () => {
-      if (
-        state.source === "local" &&
-        state.currentTrack
-      ) {
-        emit("playerror", {
-          track: getCurrentTrack(),
-          message: "Error al cargar el archivo de audio."
-        });
-      }
-    });
-
-    registerMediaSession();
+    this.lastState = -1;
   }
-
-  /* =========================================
-     INICIALIZACIÓN
-  ========================================= */
-
-  function initialize() {
-    if (state.initialized) return true;
-
-    loadSettings();
-    bindControls();
-
-    state.initialized = true;
-
-    emit("player:ready", {
-      version: "2.2.0"
-    });
-
-    console.info(
-      "[Shunel Player] Motor inicializado."
-    );
-
-    return true;
-  }
-
-  /* =========================================
-     API PÚBLICA
-  ========================================= */
-
-  window.ShunelPlayer = Object.freeze({
-    initialize,
-
-    play,
-    pause,
-    togglePlay,
-    stop,
-
-    playTrack,
-
-    setQueue,
-    addToQueue,
-    removeFromQueue,
-    clearQueue,
-
-    next,
-    previous,
-
-    seek,
-    seekToTime,
-
-    getCurrentTime,
-    getDuration,
-
-    setVolume,
-    toggleShuffle,
-    toggleRepeat,
-
-    getCurrentTrack,
-    getQueue,
-    getState,
-
-    getAudio: () => audio,
-    formatTime,
-    isYouTube,
-
-    setExternalController,
-    setExternalState,
-    updateExternalProgress
-  });
-
-  initialize();
-
-})();
+}

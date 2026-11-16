@@ -1,0 +1,395 @@
+
+/* =========================================
+   SHUNEL — COMPONENTS
+   MOBILE BLACK EDITION
+   SVG ICON EDITION
+========================================= */
+
+/* =========================================
+   SVG ICON SYSTEM
+========================================= */
+
+.icon-button,
+.track-action,
+.text-button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.icon-button svg,
+.track-action svg,
+.text-button svg {
+  width: 19px;
+  height: 19px;
+
+  display: block;
+  flex-shrink: 0;
+
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+
+  pointer-events: none;
+}
+
+.track-action svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* =========================================
+   TRACK LIST
+========================================= */
+
+.track-list {
+  display: grid;
+  gap: 7px;
+  width: 100%;
+}
+
+/* =========================================
+   TRACK ROW
+========================================= */
+
+.track-row {
+  width: 100%;
+  min-width: 0;
+  min-height: 65px;
+
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+
+  padding: 8px;
+
+  border: 1px solid transparent;
+  border-radius: 11px;
+
+  background: #111111;
+
+  transition:
+    background .18s ease,
+    border-color .18s ease,
+    transform .18s ease;
+}
+
+.track-row:hover {
+  background: #191919;
+  border-color: rgba(255,255,255,.07);
+}
+
+.track-row:active {
+  transform: scale(.99);
+}
+
+/* =========================================
+   TRACK ART
+========================================= */
+
+.track-art {
+  width: 46px;
+  height: 46px;
+
+  display: block;
+
+  object-fit: cover;
+
+  border-radius: 8px;
+
+  background: #222222;
+}
+
+/* =========================================
+   TRACK INFORMATION
+========================================= */
+
+.track-main {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.track-name {
+  overflow: hidden;
+
+  color: #ffffff;
+
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.track-channel {
+  overflow: hidden;
+
+  margin-top: 4px;
+
+  color: #898989;
+
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 1.4;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* =========================================
+   TRACK ACTIONS
+========================================= */
+
+.track-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 3px;
+}
+
+.icon-button,
+.track-action {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+
+  display: grid;
+  place-items: center;
+
+  border: 0;
+  border-radius: 9px;
+
+  background: transparent;
+  color: #929292;
+
+  cursor: pointer;
+
+  transition:
+    background .18s ease,
+    color .18s ease,
+    transform .18s ease;
+}
+
+.icon-button:hover,
+.track-action:hover {
+  background: #252525;
+  color: #ffffff;
+}
+
+.icon-button:active,
+.track-action:active {
+  transform: scale(.92);
+}
+
+/* =========================================
+   FAVORITES SVG
+========================================= */
+
+.track-action.is-favorite,
+.favorite-current.is-favorite,
+.full-player-info .icon-button.is-favorite {
+  color: #ffffff;
+}
+
+.track-action.is-favorite svg,
+.favorite-current.is-favorite svg,
+.full-player-info .icon-button.is-favorite svg {
+  fill: #ffffff;
+  stroke: #ffffff;
+}
+
+.track-action.is-favorite:hover,
+.favorite-current.is-favorite:hover {
+  color: #cccccc;
+}
+
+/* =========================================
+   EMPTY STATE
+========================================= */
+
+.empty-state {
+  width: 100%;
+
+  padding: 38px 20px;
+
+  border: 1px dashed rgba(255,255,255,.12);
+  border-radius: 13px;
+
+  background: #111111;
+
+  color: #929292;
+
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* =========================================
+   TOAST
+========================================= */
+
+.toast {
+  position: fixed;
+
+  z-index: 500;
+
+  left: 50%;
+  bottom: calc(
+    65px + 76px +
+    env(safe-area-inset-bottom) +
+    18px
+  );
+
+  width: max-content;
+  max-width: calc(100% - 35px);
+
+  padding: 12px 17px;
+
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 10px;
+
+  background: #202020;
+  color: #ffffff;
+
+  font-size: 11px;
+  line-height: 1.4;
+  text-align: center;
+
+  opacity: 0;
+  pointer-events: none;
+
+  transform: translate(-50%, 10px);
+
+  transition:
+    opacity .2s ease,
+    transform .2s ease;
+
+  box-shadow: 0 8px 25px rgba(0,0,0,.4);
+}
+
+.toast.visible,
+.toast.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+/* =========================================
+   TEXT BUTTON
+========================================= */
+
+.text-button {
+  padding: 8px 0;
+
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+
+  border: 0;
+  background: transparent;
+
+  color: #b5b5b5;
+
+  font-size: 11px;
+  font-weight: 600;
+
+  cursor: pointer;
+
+  transition: color .18s ease;
+}
+
+.text-button:hover {
+  color: #ffffff;
+}
+
+/* =========================================
+   MOBILE
+========================================= */
+
+@media (max-width: 650px) {
+
+  .track-list {
+    gap: 6px;
+  }
+
+  .track-row {
+    min-height: 62px;
+
+    grid-template-columns: 43px minmax(0, 1fr) auto;
+
+    gap: 10px;
+    padding: 7px;
+  }
+
+  .track-art {
+    width: 43px;
+    height: 43px;
+  }
+
+  .track-name {
+    font-size: 11px;
+  }
+
+  .track-channel {
+    font-size: 10px;
+  }
+
+  .track-actions {
+    gap: 0;
+  }
+
+  .track-action,
+  .icon-button {
+    width: 31px;
+    height: 33px;
+  }
+
+}
+
+/* =========================================
+   SMALL PHONES
+========================================= */
+
+@media (max-width: 380px) {
+
+  .track-row {
+    grid-template-columns: 40px minmax(0, 1fr) auto;
+    gap: 8px;
+  }
+
+  .track-art {
+    width: 40px;
+    height: 40px;
+  }
+
+  .track-action,
+  .icon-button {
+    width: 29px;
+    height: 31px;
+  }
+
+}
+
+/* =========================================
+   ACCESSIBILITY
+========================================= */
+
+.icon-button:focus-visible,
+.track-action:focus-visible,
+.text-button:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  .track-row,
+  .icon-button,
+  .track-action,
+  .toast,
+  .text-button {
+    transition: none !important;
+  }
+
+}

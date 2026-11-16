@@ -1,852 +1,525 @@
 
+import { searchTracks } from "./search.js";
+import { YouTubePlayer } from "./player.js";
+import { QueueManager } from "./queue.js";
+import { MusicLibrary } from "./library.js";
+import { ShunelUI } from "./ui.js";
+
 /* =========================================
-   SHUNEL — APPLICATION CORE
-   Navegación, búsqueda e integración
-   Version: 2.2.0
+   SHUNEL — APP CONTROLLER
 ========================================= */
 
-(() => {
-  "use strict";
+const ui = new ShunelUI();
+const queue = new QueueManager();
+const library = new MusicLibrary();
 
-  if (window.ShunelApp) return;
+let player = null;
+let currentTrack = null;
+let searchController = null;
+let isPlaying = false;
+let progressTimer = null;
+let queuePanelOpen = false;
 
-  const CONFIG = {
-    defaultPage: "home",
-    searchEndpoint: "/api/search",
-    searchTimeout: 15000,
-    toastDuration: 2800
-  };
+/* =========================================
+   NAVIGATION
+========================================= */
 
-  const state = {
-    initialized: false,
-    currentPage: CONFIG.defaultPage,
-    searching: false,
-    searchController: null,
-    searchRequestId: 0,
-    lastSearchResults: [],
-    toastTimer: null,
-    boundElements: new WeakSet()
-  };
+function navigateToView(viewName) {
+  if (!viewName) return;
 
-  const pages = {
-    home: "homePage",
-    library: "libraryPage",
-    playlists: "playlistsPage",
-    favorites: "favoritesPage",
-    artists: "artistsPage",
-    profile: "profilePage",
-    stats: "statsPage",
-    rooms: "roomsPage",
-    ai: "aiPage",
-    settings: "settingsPage"
-  };
+  const target = document.getElementById(`view-${viewName}`);
 
-  const $ = (selector, parent = document) =>
-    parent.querySelector(selector);
-
-  const $$ = (selector, parent = document) =>
-    [...parent.querySelectorAll(selector)];
-
-  /* =========================================
-     EVENTOS
-  ========================================= */
-
-  function emit(name, detail = {}) {
-    if (window.ShunelEvents) {
-      window.ShunelEvents.emit(name, detail);
-    } else {
-      window.dispatchEvent(
-        new CustomEvent(`shunel:${name}`, { detail })
-      );
-    }
+  if (!target) {
+    console.warn(`[Shunel] Vista no encontrada: ${viewName}`);
+    return;
   }
 
-  function bind(element, event, callback) {
-    if (!element || state.boundElements.has(element)) {
-      return;
-    }
+  // Usa el controlador visual existente.
+  ui.showView(viewName);
 
-    element.addEventListener(event, callback);
-    state.boundElements.add(element);
-  }
+  // Sincroniza la navegación inferior.
+  document.querySelectorAll(".bottom-nav-item").forEach(button => {
+    const active = button.dataset.view === viewName;
 
-  /* =========================================
-     NOTIFICACIONES
-  ========================================= */
-
-  function notify(message, duration = CONFIG.toastDuration) {
-    const toast = $("#toast");
-
-    if (!toast) {
-      console.info("[Shunel]", message);
-      return;
-    }
-
-    toast.textContent = String(message);
-
-    toast.hidden = false;
-    toast.classList.add("show");
-    toast.setAttribute("role", "status");
-    toast.setAttribute("aria-live", "polite");
-
-    clearTimeout(state.toastTimer);
-
-    state.toastTimer = setTimeout(() => {
-      toast.classList.remove("show");
-      toast.hidden = true;
-    }, duration);
-  }
-
-  /* =========================================
-     NAVEGACIÓN
-  ========================================= */
-
-  function normalizePageName(value) {
-    return String(value || "")
-      .trim()
-      .replace(/^#/, "")
-      .replace(/Page$/i, "");
-  }
-
-  function getPageName(element) {
-    if (!element) return null;
-
-    return normalizePageName(
-      element.dataset.page ||
-      element.dataset.target ||
-      element.getAttribute("data-navigation") ||
-      ""
+    button.classList.toggle("active", active);
+    button.setAttribute(
+      "aria-current",
+      active ? "page" : "false"
     );
-  }
-
-  function navigate(page, options = {}) {
-    const pageName = normalizePageName(page);
-    const pageId = pages[pageName];
-
-    if (!pageId) {
-      console.warn("[Shunel] Página desconocida:", pageName);
-      return false;
-    }
-
-    const target = document.getElementById(pageId);
-
-    if (!target) {
-      console.warn(
-        "[Shunel] No existe el contenedor:",
-        pageId
-      );
-
-      return false;
-    }
-
-    Object.entries(pages).forEach(([name, id]) => {
-      const section = document.getElementById(id);
-
-      if (!section) return;
-
-      const active = name === pageName;
-
-      section.hidden = !active;
-      section.classList.toggle("active", active);
-      section.setAttribute("aria-hidden", String(!active));
-    });
-
-    $$("[data-page], [data-navigation], [data-target]").forEach(item => {
-      const active = getPageName(item) === pageName;
-
-      item.classList.toggle("active", active);
-
-      if (active) {
-        item.setAttribute("aria-current", "page");
-      } else {
-        item.removeAttribute("aria-current");
-      }
-    });
-
-    state.currentPage = pageName;
-
-    if (options.history !== false) {
-      try {
-        history.pushState(
-          { page: pageName },
-          "",
-          `#${pageName}`
-        );
-      } catch (error) {
-        console.warn("[Shunel] Error actualizando historial:", error);
-      }
-    }
-
-    $("#mainMenu")?.classList.remove("open");
-
-    emit("navigation:change", {
-      page: pageName
-    });
-
-    return true;
-  }
-
-  function initializeNavigation() {
-    $$("[data-page], [data-navigation], [data-target]").forEach(item => {
-      bind(item, "click", event => {
-        const page = getPageName(item);
-
-        if (!page) return;
-
-        event.preventDefault();
-        navigate(page);
-      });
-    });
-
-    window.addEventListener("popstate", () => {
-      const page = normalizePageName(location.hash);
-
-      navigate(
-        pages[page] ? page : CONFIG.defaultPage,
-        { history: false }
-      );
-    });
-
-    const initialPage = normalizePageName(location.hash);
-
-    navigate(
-      pages[initialPage]
-        ? initialPage
-        : CONFIG.defaultPage,
-      { history: false }
-    );
-
-    const menuButton = $("#menuButton");
-    const menu = $("#mainMenu");
-
-    bind(menuButton, "click", () => {
-      menu?.classList.toggle("open");
-    });
-  }
-
-  /* =========================================
-     REPRODUCTOR
-     Los controles pertenecen a player.js.
-  ========================================= */
-
-  function getPlayer() {
-    return window.ShunelPlayer || null;
-  }
-
-  function play() {
-    const player = getPlayer();
-
-    if (!player) {
-      notify("El reproductor no está disponible.");
-      return false;
-    }
-
-    return player.togglePlay();
-  }
-
-  function pause() {
-    return getPlayer()?.pause?.() ?? false;
-  }
-
-  function next() {
-    return getPlayer()?.next?.() ?? false;
-  }
-
-  function previous() {
-    return getPlayer()?.previous?.() ?? false;
-  }
-
-  function initializePlayerControls() {
-    /*
-      No registrar aquí los botones de reproducción,
-      volumen ni progreso.
-
-      player.js ya administra esos controles.
-      Evitamos eventos duplicados.
-    */
-  }
-
-  /* =========================================
-     BÚSQUEDA MUSICAL
-  ========================================= */
-
-  function showSearchResults() {
-    const section = $("#searchResults");
-
-    if (section) {
-      section.hidden = false;
-    }
-  }
-
-  function hideSearchResults() {
-    const section = $("#searchResults");
-
-    if (section) {
-      section.hidden = true;
-    }
-  }
-
-  function normalizeSearchResult(item) {
-    if (!item || typeof item !== "object") {
-      return null;
-    }
-
-    /*
-      Los resultados de ShunelSearch ya llegan
-      normalizados. Esto también admite la
-      respuesta directa de YouTube.
-    */
-
-    const snippet = item.snippet || {};
-
-    const videoId =
-      item.videoId ||
-      item.youtubeId ||
-      item.id?.videoId ||
-      (typeof item.id === "string" ? item.id : "");
-
-    if (!videoId) return null;
-
-    const thumbnail =
-      item.thumbnail ||
-      item.artwork ||
-      snippet.thumbnails?.high?.url ||
-      snippet.thumbnails?.medium?.url ||
-      snippet.thumbnails?.default?.url ||
-      "";
-
-    return {
-      id: item.id?.videoId
-        ? `youtube:${videoId}`
-        : item.id || `youtube:${videoId}`,
-
-      videoId,
-      youtubeId: videoId,
-
-      title:
-        item.title ||
-        snippet.title ||
-        "Canción desconocida",
-
-      artist:
-        item.artist ||
-        item.channelTitle ||
-        snippet.channelTitle ||
-        "Artista desconocido",
-
-      channelTitle:
-        item.channelTitle ||
-        snippet.channelTitle ||
-        "",
-
-      thumbnail,
-      artwork: thumbnail,
-      source: "youtube",
-
-      duration: Number(item.duration) || 0,
-
-      metadata: item.metadata || {
-        platform: "YouTube",
-        description: snippet.description || "",
-        publishedAt: snippet.publishedAt || ""
-      }
-    };
-  }
-
-  function renderSearchResults(results) {
-    const container = $("#searchResultsList");
-
-    if (!container) {
-      console.warn("[Shunel] Falta #searchResultsList.");
-      return;
-    }
-
-    container.replaceChildren();
-    showSearchResults();
-
-    if (!Array.isArray(results) || !results.length) {
-      const empty = document.createElement("p");
-
-      empty.className = "search-empty";
-      empty.textContent = "No se encontraron canciones.";
-
-      container.appendChild(empty);
-      return;
-    }
-
-    const fragment = document.createDocumentFragment();
-
-    results.forEach((track, index) => {
-      const item = document.createElement("button");
-
-      item.type = "button";
-      item.className = "search-result";
-      item.dataset.index = String(index);
-      item.setAttribute(
-        "aria-label",
-        `Reproducir ${track.title}`
-      );
-
-      const artwork = document.createElement("img");
-
-      artwork.alt = "";
-      artwork.loading = "lazy";
-
-      const image = track.artwork || track.thumbnail;
-
-      if (image) {
-        try {
-          const url = new URL(image);
-
-          if (["https:", "http:"].includes(url.protocol)) {
-            artwork.src = url.href;
-          }
-        } catch {}
-      }
-
-      const information = document.createElement("span");
-      information.className = "search-result-info";
-
-      const title = document.createElement("strong");
-      title.textContent = track.title || "Canción desconocida";
-
-      const artist = document.createElement("small");
-      artist.textContent = track.artist || "Artista desconocido";
-
-      information.append(title, artist);
-      item.append(artwork, information);
-
-      bind(item, "click", async () => {
-        await playSearchResult(index);
-      });
-
-      fragment.appendChild(item);
-    });
-
-    container.appendChild(fragment);
-  }
-
-  async function playSearchResult(index) {
-    const track = state.lastSearchResults[index];
-
-    if (!track) return false;
-
-    const player = getPlayer();
-
-    if (!player) {
-      notify("El reproductor no está disponible.");
-      return false;
-    }
-
-    try {
-      const result = await player.playTrack(track);
-
-      if (result === false) {
-        notify("No se pudo reproducir esta canción.");
-        return false;
-      }
-
-      return true;
-
-    } catch (error) {
-      console.error("[Shunel] Error reproduciendo:", error);
-
-      notify("Error al reproducir la canción.");
-
-      return false;
-    }
-  }
-
-  async function searchMusic(query) {
-    const searchQuery = String(query || "").trim();
-
-    if (!searchQuery) {
-      notify("Escribe el nombre de una canción o artista.");
-      return false;
-    }
-
-    if (state.searchController) {
-      state.searchController.abort();
-    }
-
-    const requestId = ++state.searchRequestId;
-    const controller = new AbortController();
-
-    state.searchController = controller;
-    state.searching = true;
-
-    const timeout = setTimeout(() => {
-      controller.abort();
-    }, CONFIG.searchTimeout);
-
-    emit("search:start", {
-      query: searchQuery
-    });
-
-    try {
-      let results = [];
-
-      if (
-        window.ShunelSearch &&
-        typeof window.ShunelSearch.search === "function"
-      ) {
-        results = await window.ShunelSearch.search(
-          searchQuery,
-          { signal: controller.signal }
-        );
-
-      } else {
-        const params = new URLSearchParams({
-          q: searchQuery,
-          maxResults: "20"
-        });
-
-        const response = await fetch(
-          `${CONFIG.searchEndpoint}?${params.toString()}`,
-          {
-            method: "GET",
-            signal: controller.signal,
-            headers: {
-              Accept: "application/json"
-            }
-          }
-        );
-
-        if (!response.ok) {
-          throw new Error(
-            `Error de búsqueda: ${response.status}`
-          );
-        }
-
-        const data = await response.json();
-
-        results = Array.isArray(data)
-          ? data
-          : data.results || data.items || [];
-      }
-
-      if (requestId !== state.searchRequestId) {
-        return false;
-      }
-
-      state.lastSearchResults = Array.isArray(results)
-        ? results.map(normalizeSearchResult).filter(Boolean)
-        : [];
-
-      renderSearchResults(state.lastSearchResults);
-
-      emit("search:results", {
-        query: searchQuery,
-        results: state.lastSearchResults
-      });
-
-      if (!state.lastSearchResults.length) {
-        notify("No se encontraron resultados.");
-      }
-
-      return state.lastSearchResults;
-
-    } catch (error) {
-      if (requestId !== state.searchRequestId) {
-        return false;
-      }
-
-      if (error.name === "AbortError") {
-        notify("La búsqueda fue cancelada o tardó demasiado.");
-      } else {
-        console.error("[Shunel] Error de búsqueda:", error);
-        notify("No se pudo realizar la búsqueda.");
-      }
-
-      emit("search:error", {
-        query: searchQuery,
-        message: error.message
-      });
-
-      return false;
-
-    } finally {
-      clearTimeout(timeout);
-
-      if (requestId === state.searchRequestId) {
-        state.searching = false;
-        state.searchController = null;
-      }
-    }
-  }
-
-  function initializeSearch() {
-    const form = $("#searchForm");
-    const input = $("#searchInput");
-    const button = $("#searchButton");
-
-    if (form) {
-      bind(form, "submit", event => {
-        event.preventDefault();
-        searchMusic(input?.value || "");
-      });
-
-      return;
-    }
-
-    /*
-      Compatibilidad si el HTML todavía no
-      contiene un formulario.
-    */
-
-    bind(button, "click", () => {
-      searchMusic(input?.value || "");
-    });
-
-    bind(input, "keydown", event => {
-      if (event.key !== "Enter") return;
-
+  });
+}
+
+function bindNavigation() {
+  document.querySelectorAll("[data-view]").forEach(button => {
+    button.addEventListener("click", event => {
       event.preventDefault();
-      searchMusic(input.value);
+
+      navigateToView(button.dataset.view);
     });
-  }
+  });
+}
 
-  /* =========================================
-     OVERLAYS
-  ========================================= */
+/* =========================================
+   LIBRARY FILTERS
+========================================= */
 
-  function initializeOverlays() {
-    const overlayPairs = [
-      ["lyricsButton", "lyricsOverlay"],
-      ["openLyricsButton", "lyricsOverlay"],
-      ["closeLyricsButton", "lyricsOverlay"],
-      ["openAIButton", "aiOverlay"],
-      ["closeAIButton", "aiOverlay"],
-      ["openQueueButton", "queueOverlay"],
-      ["closeQueueButton", "queueOverlay"]
-    ];
+function bindLibraryFilters() {
+  const filters = document.querySelectorAll("[data-library-filter]");
+  const libraryList = document.getElementById("libraryList");
+  const favoritesList = document.getElementById("favoritesList");
 
-    overlayPairs.forEach(([buttonId, overlayId]) => {
-      const button = document.getElementById(buttonId);
-      const overlay = document.getElementById(overlayId);
+  if (!libraryList || !favoritesList) return;
 
-      if (!button || !overlay) return;
+  filters.forEach(button => {
+    button.addEventListener("click", () => {
+      const filter = button.dataset.libraryFilter;
+      const showFavorites = filter === "favorites";
 
-      bind(button, "click", () => {
-        const isCloseButton = buttonId.startsWith("close");
+      libraryList.hidden = showFavorites;
+      favoritesList.hidden = !showFavorites;
 
-        if (isCloseButton) {
-          overlay.classList.remove("active");
-          overlay.hidden = true;
-          overlay.setAttribute("aria-hidden", "true");
-          return;
-        }
+      filters.forEach(item => {
+        const active = item === button;
 
-        if (overlayId === "lyricsOverlay") {
-          window.ShunelLyrics?.show?.();
-          return;
-        }
-
-        overlay.hidden = false;
-        overlay.classList.add("active");
-        overlay.setAttribute("aria-hidden", "false");
+        item.classList.toggle("active", active);
+        item.setAttribute("aria-pressed", String(active));
       });
     });
-  }
+  });
+}
 
-  /* =========================================
-     SUPABASE
-  ========================================= */
+/* =========================================
+   TRACK ACTIONS
+========================================= */
 
-  function getSupabase() {
-    return (
-      window.shunelSupabase ||
-      window.supabaseClient ||
-      window._supabase ||
-      null
+function trackActions(track) {
+  return {
+    play: playTrack,
+    favorite: toggleFavorite,
+    isFavorite: library.isFavorite(track.videoId),
+    save: saveTrack,
+    add: addToQueue
+  };
+}
+
+/* =========================================
+   COLLECTIONS
+========================================= */
+
+function refreshCollections() {
+  // Biblioteca general.
+  ui.renderCollection(
+    "library",
+    library.getLibrary(),
+    track => ({
+      play: playTrack,
+      favorite: toggleFavorite,
+      isFavorite: library.isFavorite(track.videoId),
+
+      remove: item => {
+        library.remove(item.videoId);
+        refreshCollections();
+
+        ui.toastMessage("Canción eliminada de tu biblioteca.");
+      },
+
+      add: addToQueue
+    })
+  );
+
+  // Favoritos dentro de Biblioteca.
+  ui.renderCollection(
+    "favorites",
+    library.getFavorites(),
+    track => ({
+      play: playTrack,
+      favorite: toggleFavorite,
+      isFavorite: true,
+      add: addToQueue
+    })
+  );
+
+  // Historial de reproducción.
+  ui.renderCollection(
+    "history",
+    library.getHistory(),
+    track => ({
+      play: playTrack,
+      favorite: toggleFavorite,
+      isFavorite: library.isFavorite(track.videoId),
+      add: addToQueue
+    })
+  );
+}
+
+/* =========================================
+   QUEUE
+========================================= */
+
+function refreshQueue() {
+  ui.renderQueue(
+    queue.getItems(),
+    currentTrack?.videoId,
+
+    playTrack,
+
+    index => {
+      queue.remove(index);
+      refreshQueue();
+    }
+  );
+}
+
+/* =========================================
+   LIBRARY ACTIONS
+========================================= */
+
+function saveTrack(track) {
+  const saved = library.save(track);
+
+  ui.toastMessage(
+    saved
+      ? "Agregada a tu biblioteca."
+      : "Ya está en tu biblioteca."
+  );
+
+  refreshCollections();
+}
+
+function toggleFavorite(track) {
+  const added = library.toggleFavorite(track);
+
+  ui.toastMessage(
+    added
+      ? "Agregada a favoritos."
+      : "Eliminada de favoritos."
+  );
+
+  refreshCollections();
+
+  if (currentTrack?.videoId === track.videoId) {
+    ui.setCurrentTrack(
+      currentTrack,
+      library.isFavorite(track.videoId)
     );
   }
+}
 
-  async function initializeAccount() {
-    const client = getSupabase();
+function addToQueue(track) {
+  queue.add(track);
+  refreshQueue();
 
-    if (!client?.auth) return;
+  ui.toastMessage("Agregada a la cola.");
+}
 
-    try {
-      const { data, error } = await client.auth.getSession();
+/* =========================================
+   PLAYBACK
+========================================= */
 
-      if (error) throw error;
+function playTrack(track) {
+  if (!track?.videoId) return;
 
-      if (data?.session?.user) {
-        await window.ShunelProfiles?.load?.();
-        await window.ShunelSocial?.load?.();
-        await window.ShunelStatistics?.load?.();
-      }
+  currentTrack = track;
 
-      client.auth.onAuthStateChange((event, session) => {
-        if (event === "SIGNED_OUT") {
-          window.ShunelProfiles?.clearLocal?.();
-          window.ShunelSocial?.clear?.();
+  queue.setCurrent(track);
+  library.addHistory(track);
 
-          emit("account:signed-out", {});
-          return;
-        }
+  ui.setCurrentTrack(
+    track,
+    library.isFavorite(track.videoId)
+  );
 
-        if (
-          event === "SIGNED_IN" ||
-          event === "TOKEN_REFRESHED"
-        ) {
-          Promise.resolve().then(async () => {
-            try {
-              await window.ShunelProfiles?.load?.();
-              await window.ShunelSocial?.load?.();
-              await window.ShunelStatistics?.load?.();
+  ui.setPlaying(true);
+  ui.setProgress(0, 0);
 
-              emit("account:signed-in", {
-                userId: session?.user?.id || null
-              });
-            } catch (error) {
-              console.error(
-                "[Shunel] Error sincronizando sesión:",
-                error
-              );
-            }
-          });
-        }
-      });
+  refreshCollections();
+  refreshQueue();
 
-    } catch (error) {
-      console.warn(
-        "[Shunel] Supabase no está disponible:",
-        error
-      );
+  player?.play(track.videoId);
+}
+
+function playNext() {
+  const next = queue.takeNext();
+
+  refreshQueue();
+
+  if (next) {
+    playTrack(next);
+  } else {
+    isPlaying = false;
+
+    ui.setPlaying(false);
+    ui.toastMessage("La cola terminó.");
+  }
+}
+
+function playPrevious() {
+  if (!player || !currentTrack) return;
+
+  // Si lleva más de 3 segundos, vuelve al inicio.
+  if (player.getCurrentTime() > 3) {
+    player.seekTo(0);
+    return;
+  }
+
+  // Busca la canción anterior en el historial.
+  const history = library.getHistory();
+
+  const previous = history.find(
+    track => track.videoId !== currentTrack.videoId
+  );
+
+  if (previous) {
+    playTrack(previous);
+  } else {
+    player.play(currentTrack.videoId);
+  }
+}
+
+/* =========================================
+   SEARCH
+========================================= */
+
+async function handleSearch(event) {
+  event.preventDefault();
+
+  const query = ui.elements.input.value.trim();
+
+  if (!query) {
+    ui.setStatus("Escribe el nombre de una canción.");
+    return;
+  }
+
+  if (searchController) {
+    searchController.abort();
+  }
+
+  const controller = new AbortController();
+  searchController = controller;
+
+  ui.setSearching(true);
+  ui.setStatus("Buscando música en YouTube...");
+  ui.renderSearchResults([], () => ({}));
+
+  try {
+    const tracks = await searchTracks(
+      query,
+      controller.signal
+    );
+
+    ui.renderSearchResults(tracks, trackActions);
+
+    ui.setStatus(
+      tracks.length
+        ? `Encontramos ${tracks.length} resultados para "${query}".`
+        : "No encontramos resultados. Prueba con otra búsqueda."
+    );
+
+  } catch (error) {
+    if (error.name === "AbortError") return;
+
+    console.error("[Shunel] Search error:", error);
+
+    ui.setStatus(
+      error.message || "No se pudo completar la búsqueda."
+    );
+
+  } finally {
+    if (searchController === controller) {
+      ui.setSearching(false);
+      searchController = null;
     }
   }
+}
 
-  /* =========================================
-     EVENTOS DEL SISTEMA
-  ========================================= */
+/* =========================================
+   QUEUE PANEL
+========================================= */
 
-  function initializeEvents() {
-    const events = window.ShunelEvents;
+function bindQueueEvents() {
+  const queueToggle = document.getElementById("queueToggle");
+  const closeQueue = document.getElementById("closeQueue");
+  const clearQueue = document.getElementById("clearQueue");
 
-    if (!events) return;
+  queueToggle?.addEventListener("click", () => {
+    queuePanelOpen = !queuePanelOpen;
+    ui.toggleQueue(queuePanelOpen);
+  });
 
-    events.on("trackchange", detail => {
-      emit("app:trackchange", detail);
-    });
+  closeQueue?.addEventListener("click", () => {
+    queuePanelOpen = false;
+    ui.toggleQueue(false);
+  });
 
-    events.on("play", () => {
-      emit("app:play", {});
-    });
+  clearQueue?.addEventListener("click", () => {
+    queue.clear();
+    refreshQueue();
 
-    events.on("pause", () => {
-      emit("app:pause", {});
-    });
+    ui.toastMessage("Cola vaciada.");
+  });
+}
 
-    events.on("player:error", detail => {
-      notify(detail?.message || "Error del reproductor.");
-    });
-  }
+/* =========================================
+   PLAYER CONTROLS
+========================================= */
 
-  /* =========================================
-     MÓDULOS
-  ========================================= */
-
-  async function initializeModules() {
-    const modules = [
-      ["ShunelYouTube", "initialize"],
-      ["ShunelAudioEngine", "initialize"],
-      ["ShunelCrossfade", "initialize"],
-      ["ShunelLyrics", "initialize"],
-      ["ShunelCanvas", "initialize"],
-      ["ShunelRadio", "initialize"],
-      ["ShunelAI", "initialize"],
-      ["ShunelProfiles", "initialize"],
-      ["ShunelSocial", "initialize"],
-      ["ShunelStatistics", "initialize"]
-    ];
-
-    for (const [moduleName, method] of modules) {
-      const module = window[moduleName];
-
-      if (typeof module?.[method] !== "function") {
-        console.warn(
-          `[Shunel] Módulo no disponible: ${moduleName}`
-        );
-
-        continue;
-      }
-
-      try {
-        await module[method]();
-      } catch (error) {
-        console.error(
-          `[Shunel] Error inicializando ${moduleName}:`,
-          error
-        );
-      }
-    }
-  }
-
-  /* =========================================
-     INICIALIZACIÓN
-  ========================================= */
-
-  async function initialize() {
-    if (state.initialized) return true;
-
-    if (document.readyState === "loading") {
-      await new Promise(resolve => {
-        document.addEventListener(
-          "DOMContentLoaded",
-          resolve,
-          { once: true }
-        );
-      });
+function bindPlayerEvents() {
+  ui.elements.playButton?.addEventListener("click", () => {
+    if (!currentTrack) {
+      ui.toastMessage("Primero elige una canción.");
+      return;
     }
 
-    window.ShunelEvents?.initialize?.();
+    player?.toggle();
+  });
 
-    initializeEvents();
-    initializeNavigation();
-    initializePlayerControls();
-    initializeSearch();
-    initializeOverlays();
+  ui.elements.nextButton?.addEventListener(
+    "click",
+    playNext
+  );
 
-    await initializeModules();
-    await initializeAccount();
+  ui.elements.previousButton?.addEventListener(
+    "click",
+    playPrevious
+  );
 
-    state.initialized = true;
-
-    emit("app:ready", {
-      page: state.currentPage
-    });
-
-    console.info("[Shunel] Aplicación inicializada.");
-
-    return true;
-  }
-
-  /* =========================================
-     API PÚBLICA
-  ========================================= */
-
-  window.ShunelApp = Object.freeze({
-    initialize,
-    navigate,
-    notify,
-    searchMusic,
-    play,
-    pause,
-    next,
-    previous,
-
-    getState() {
-      return {
-        initialized: state.initialized,
-        currentPage: state.currentPage,
-        searching: state.searching,
-        searchResults: state.lastSearchResults.length
-      };
+  ui.elements.favoriteCurrent?.addEventListener("click", () => {
+    if (currentTrack) {
+      toggleFavorite(currentTrack);
     }
   });
 
-  initialize();
+  ui.elements.volumeBar?.addEventListener("input", event => {
+    player?.setVolume(event.target.value);
+  });
 
-})();
+  ui.elements.progressBar?.addEventListener("change", event => {
+    player?.seekTo(Number(event.target.value));
+  });
+}
+
+/* =========================================
+   EVENT BINDING
+========================================= */
+
+function bindEvents() {
+  // Formularios de búsqueda.
+  ui.elements.form?.addEventListener(
+    "submit",
+    handleSearch
+  );
+
+  // Navegación principal y accesos con data-view.
+  bindNavigation();
+
+  // Filtros de Biblioteca: Todo y Favoritos.
+  bindLibraryFilters();
+
+  // Controles del reproductor.
+  bindPlayerEvents();
+
+  // Panel de cola.
+  bindQueueEvents();
+
+  // Actualización automática de la cola.
+  queue.setOnChange(refreshQueue);
+}
+
+/* =========================================
+   PLAYER PROGRESS
+========================================= */
+
+function startProgressUpdates() {
+  window.clearInterval(progressTimer);
+
+  progressTimer = window.setInterval(() => {
+    if (!player || !isPlaying) return;
+
+    ui.setProgress(
+      player.getCurrentTime(),
+      player.getDuration()
+    );
+  }, 500);
+}
+
+/* =========================================
+   YOUTUBE PLAYER
+========================================= */
+
+function initializePlayer() {
+  player = new YouTubePlayer("youtubePlayerHost", {
+
+    onReady: () => {
+      player.setVolume(ui.elements.volumeBar?.value ?? 70);
+
+      console.info("[Shunel] YouTube Player listo.");
+    },
+
+    onStateChange: state => {
+      const playing =
+        state === window.YT.PlayerState.PLAYING;
+
+      isPlaying = playing;
+
+      ui.setPlaying(playing);
+
+      if (playing) {
+        startProgressUpdates();
+      } else {
+        window.clearInterval(progressTimer);
+      }
+    },
+
+    onEnded: playNext,
+
+    onError: code => {
+      isPlaying = false;
+
+      window.clearInterval(progressTimer);
+
+      ui.setPlaying(false);
+
+      console.warn(
+        "[Shunel] YouTube player error:",
+        code
+      );
+
+      ui.toastMessage(
+        "YouTube no pudo reproducir este video."
+      );
+    }
+  });
+
+  player.init().catch(error => {
+    console.error(
+      "[Shunel] Player initialization:",
+      error
+    );
+
+    ui.toastMessage(
+      "No se pudo cargar el reproductor de YouTube."
+    );
+  });
+}
+
+/* =========================================
+   INITIALIZATION
+========================================= */
+
+function initialize() {
+  bindEvents();
+
+  refreshCollections();
+  refreshQueue();
+
+  ui.setCurrentTrack(null, false);
+
+  // Iniciar siempre en Inicio.
+  navigateToView("home");
+
+  initializePlayer();
+
+  console.info("[Shunel] Aplicación iniciada.");
+}
+
+initialize();
