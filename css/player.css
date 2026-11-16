@@ -1,23 +1,25 @@
-
 /* =========================================
-   SHUNEL — PLAYER SYSTEM
-   Diseño mobile-first para iPhone
-========================================= */
+   SHUNEL — PLAYER SYSTEM (MASTER EDITION)
+   Diseño mobile-first premium para iPhone
+   ========================================= */
 
 :root {
-  --player-bg: #080D18;
-  --player-surface: #0D1423;
+  --player-bg: #060A14;
+  --player-surface: #0E182B;
   --player-elevated: #101B30;
   --player-hover: #192945;
-  --player-text: #E8EDF7;
-  --player-muted: #A5B3CA;
-  --player-subtle: #71819B;
+  --player-text: #F1F5FD;
+  --player-muted: #9EB0CC;
+  --player-subtle: #6B7D9A;
   --player-accent: #6699E8;
-  --player-border: rgba(165, 179, 202, 0.12);
+  --player-accent-glow: rgba(102, 153, 232, 0.25);
+  --player-border: rgba(160, 190, 230, 0.12);
   --player-safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 
-/* ELEMENTOS GENERALES */
+/* =========================================
+   ELEMENTOS GENERALES & ACCESIBILIDAD
+   ========================================= */
 
 .bottom-player button,
 .now-playing-screen button,
@@ -26,12 +28,19 @@
   color: inherit;
   -webkit-tap-highlight-color: transparent;
   cursor: pointer;
+  transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.15s ease, color 0.15s ease;
 }
 
 .bottom-player button,
 .now-playing-screen button {
   border: 0;
   background: transparent;
+}
+
+.bottom-player button:active,
+.now-playing-screen button:active,
+.overlay-screen button:active {
+  transform: scale(0.92);
 }
 
 .bottom-player button:focus-visible,
@@ -42,31 +51,34 @@
 }
 
 /* =========================================
-   MINI PLAYER
-========================================= */
+   MINI PLAYER (FLOTANTE PREMIUM)
+   ========================================= */
 
 .bottom-player {
   position: fixed;
   z-index: 900;
-  left: 10px;
-  right: 10px;
-  bottom: calc(64px + var(--player-safe-bottom));
+  left: 12px;
+  right: 12px;
+  bottom: calc(68px + var(--player-safe-bottom));
 
   overflow: hidden;
-  background: var(--player-elevated);
+  background: rgba(16, 27, 48, 0.92);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--player-border);
-  border-radius: 14px;
+  border-radius: 16px;
 
   color: var(--player-text);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
+  will-change: transform;
 }
 
 .mini-player-content {
   display: flex;
   align-items: center;
-  gap: 11px;
-  min-height: 66px;
-  padding: 9px 11px;
+  gap: 12px;
+  min-height: 64px;
+  padding: 8px 12px;
 }
 
 .mini-cover {
@@ -75,8 +87,9 @@
   height: 46px;
   padding: 0;
   overflow: hidden;
-  border-radius: 7px;
+  border-radius: 10px;
   background: var(--player-hover);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 .mini-cover img {
@@ -84,6 +97,11 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transition: transform 0.3s ease;
+}
+
+.mini-cover:hover img {
+  transform: scale(1.05);
 }
 
 .mini-info {
@@ -102,13 +120,14 @@
 #miniTrackTitle {
   color: var(--player-text);
   font-size: 13px;
-  font-weight: 650;
+  font-weight: 700;
+  letter-spacing: -0.2px;
 }
 
 #miniTrackArtist {
-  margin-top: 4px;
+  margin-top: 3px;
   color: var(--player-muted);
-  font-size: 11px;
+  font-size: 11.5px;
 }
 
 .mini-controls {
@@ -116,33 +135,37 @@
   align-items: center;
   justify-content: flex-end;
   flex: 0 0 auto;
-  gap: 5px;
+  gap: 4px;
 }
 
 .mini-controls button {
   display: grid;
   place-items: center;
-  width: 35px;
-  height: 42px;
+  width: 38px;
+  height: 40px;
   padding: 0;
   color: var(--player-muted);
-  font-size: 19px;
+  font-size: 18px;
+  border-radius: 50%;
+}
+
+.mini-controls button:hover {
+  background: var(--player-hover);
+  color: var(--player-text);
 }
 
 .mini-controls #miniPlayButton {
   color: var(--player-text);
-  font-size: 22px;
-}
-
-.mini-controls button:active {
-  color: var(--player-accent);
+  font-size: 21px;
+  background: var(--player-surface);
+  border: 1px solid var(--player-border);
 }
 
 .mini-progress {
-  height: 2px;
+  height: 3px;
   width: 100%;
   overflow: hidden;
-  background: rgba(165, 179, 202, 0.12);
+  background: rgba(160, 190, 230, 0.08);
 }
 
 .mini-progress span {
@@ -150,12 +173,13 @@
   width: 0;
   height: 100%;
   background: var(--player-accent);
-  transition: width 150ms linear;
+  box-shadow: 0 0 8px var(--player-accent-glow);
+  transition: width 120ms linear;
 }
 
 /* =========================================
-   REPRODUCTOR COMPLETO
-========================================= */
+   REPRODUCTOR COMPLETO (NOW PLAYING SCREEN)
+   ========================================= */
 
 .now-playing-screen {
   position: fixed;
@@ -168,64 +192,75 @@
   overscroll-behavior: contain;
 
   padding:
-    calc(12px + env(safe-area-inset-top, 0px))
-    22px
-    calc(20px + var(--player-safe-bottom));
+    calc(14px + env(safe-area-inset-top, 0px))
+    24px
+    calc(24px + var(--player-safe-bottom));
 
   background: var(--player-bg);
   color: var(--player-text);
-
+  backdrop-filter: blur(30px);
   -webkit-overflow-scrolling: touch;
 }
 
 .np-header {
   display: grid;
-  grid-template-columns: 48px 1fr 48px;
+  grid-template-columns: 44px 1fr 44px;
   align-items: center;
   min-height: 48px;
   flex-shrink: 0;
+  margin-bottom: 10px;
 }
 
 .np-header p {
   margin: 0;
   color: var(--player-muted);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 2px;
+  font-size: 10.5px;
+  font-weight: 750;
+  letter-spacing: 2.5px;
   text-align: center;
 }
 
 .np-header button {
   display: grid;
   place-items: center;
-  width: 44px;
-  height: 44px;
+  width: 40px;
+  height: 40px;
   color: var(--player-muted);
-  font-size: 25px;
+  font-size: 22px;
+  background: var(--player-surface);
+  border: 1px solid var(--player-border);
+  border-radius: 50%;
+}
+
+.np-header button:hover {
+  background: var(--player-hover);
+  color: var(--player-text);
 }
 
 .np-header button:last-child {
   justify-self: end;
 }
 
-/* CONTENIDO */
+/* CONTENIDO PRINCIPAL */
 
 .np-main {
   display: flex;
   flex-direction: column;
   width: 100%;
-  max-width: 520px;
+  max-width: 480px;
   margin: auto;
   gap: 0;
 }
 
 .np-artwork {
-  width: min(100%, 360px);
+  width: min(100%, 350px);
   aspect-ratio: 1;
-  margin: 18px auto 30px;
+  margin: 14px auto 26px;
   overflow: hidden;
-  border-radius: 8px;
+  border-radius: var(--radius-large, 20px);
   background: var(--player-surface);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--player-border);
+  position: relative;
 }
 
 .np-artwork img {
@@ -233,6 +268,11 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.np-artwork:hover img {
+  transform: scale(1.02);
 }
 
 .np-song-info {
@@ -241,7 +281,7 @@
   justify-content: space-between;
   gap: 14px;
   min-width: 0;
-  margin-bottom: 22px;
+  margin-bottom: 20px;
 }
 
 .np-song-info > div {
@@ -253,9 +293,10 @@
   overflow: hidden;
   margin: 0;
   color: var(--player-text);
-  font-size: clamp(20px, 5.5vw, 25px);
-  font-weight: 750;
-  line-height: 1.25;
+  font-size: clamp(21px, 6vw, 26px);
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -263,15 +304,17 @@
 #playerArtistButton {
   display: block;
   max-width: 100%;
-  margin-top: 7px;
+  margin-top: 6px;
   padding: 0;
   color: var(--player-muted);
-  font-size: 15px;
+  font-size: 14.5px;
+  font-weight: 600;
   text-align: left;
+  transition: color 0.15s ease;
 }
 
-#playerArtistButton:active {
-  color: var(--player-accent);
+#playerArtistButton:hover {
+  color: var(--player-text);
 }
 
 #playerFavoriteButton {
@@ -279,24 +322,35 @@
   width: 44px;
   height: 44px;
   color: var(--player-muted);
-  font-size: 27px;
+  font-size: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--player-surface);
+  border: 1px solid var(--player-border);
+}
+
+#playerFavoriteButton:hover {
+  color: var(--player-accent);
+  background: var(--player-hover);
 }
 
 /* =========================================
    LETRAS EN EL REPRODUCTOR
-========================================= */
+   ========================================= */
 
 .lyrics-preview {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: 48px;
+  min-height: 52px;
   margin-bottom: 20px;
-  padding: 11px 13px;
+  padding: 12px 16px;
   border: 1px solid var(--player-border);
-  border-radius: 10px;
+  border-radius: 14px;
   background: var(--player-surface);
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.04);
 }
 
 .lyrics-preview p {
@@ -305,7 +359,8 @@
   overflow: hidden;
   margin: 0;
   color: var(--player-muted);
-  font-size: 12px;
+  font-size: 12.5px;
+  font-weight: 500;
   line-height: 1.5;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -313,49 +368,74 @@
 
 .lyrics-preview button {
   flex: 0 0 auto;
-  padding: 8px 0 8px 8px;
+  padding: 6px 0 6px 8px;
   color: var(--player-accent);
-  font-size: 12px;
-  font-weight: 650;
+  font-size: 12.5px;
+  font-weight: 700;
 }
 
 /* =========================================
-   PROGRESO
-========================================= */
+   PROGRESO (SLIDER PERSONALIZADO)
+   ========================================= */
 
 .np-progress-area {
   width: 100%;
-  margin-top: 4px;
+  margin-top: 6px;
 }
 
 #playerProgress {
-  display: block;
+  -webkit-appearance: none;
+  appearance: none;
   width: 100%;
-  height: 22px;
-  margin: 0;
-  accent-color: var(--player-accent);
+  height: 6px;
+  background: var(--player-hover);
+  border-radius: 3px;
+  outline: none;
   cursor: pointer;
+  transition: height 0.15s ease;
+}
+
+#playerProgress:hover {
+  height: 8px;
+}
+
+/* Track de progreso para WebKit */
+#playerProgress::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--player-text);
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.5), 0 0 0 2px var(--player-accent);
+  transition: transform 0.1s ease;
+}
+
+#playerProgress::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
 }
 
 .progress-times {
   display: flex;
   justify-content: space-between;
-  margin-top: 1px;
+  margin-top: 6px;
   color: var(--player-subtle);
-  font-size: 11px;
+  font-size: 11.5px;
   font-variant-numeric: tabular-nums;
+  font-weight: 600;
 }
 
 /* =========================================
    CONTROLES PRINCIPALES
-========================================= */
+   ========================================= */
 
 .np-controls {
   display: flex;
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  margin-top: 20px;
+  margin-top: 18px;
+  padding: 0 8px;
 }
 
 .np-controls button {
@@ -366,58 +446,74 @@
   padding: 0;
   color: var(--player-muted);
   font-size: 21px;
+  border-radius: 50%;
 }
 
-.np-controls button:active {
-  color: var(--player-accent);
+.np-controls button:hover {
+  color: var(--player-text);
+  background: var(--player-surface);
 }
 
 .np-controls #playButton {
-  width: 62px;
-  height: 62px;
+  width: 68px;
+  height: 68px;
   border-radius: 50%;
   background: var(--player-text);
   color: var(--player-bg);
-  font-size: 25px;
+  font-size: 26px;
+  box-shadow: 0 8px 24px rgba(241, 245, 253, 0.25);
+  transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1), background 0.15s ease;
+}
+
+.np-controls #playButton:hover {
+  transform: scale(1.05);
+  background: var(--player-text);
 }
 
 .np-controls #playButton:active {
-  background: var(--player-accent);
+  transform: scale(0.95);
 }
 
 .np-controls button.active,
 .np-extra-controls button.active {
   color: var(--player-accent);
+  background: var(--player-surface);
 }
 
 /* =========================================
    CONTROLES SECUNDARIOS
-========================================= */
+   ========================================= */
 
 .np-extra-controls {
   display: flex;
   align-items: center;
   justify-content: space-around;
-  gap: 8px;
-  margin-top: 22px;
-  padding-top: 16px;
+  gap: 10px;
+  margin-top: 24px;
+  padding-top: 18px;
   border-top: 1px solid var(--player-border);
 }
 
 .np-extra-controls button {
-  min-height: 38px;
-  padding: 7px 9px;
+  min-height: 40px;
+  padding: 8px 14px;
   color: var(--player-muted);
-  font-size: 12px;
+  font-size: 12.5px;
+  font-weight: 650;
+  background: var(--player-surface);
+  border: 1px solid var(--player-border);
+  border-radius: 10px;
 }
 
-.np-extra-controls button:active {
-  color: var(--player-accent);
+.np-extra-controls button:hover {
+  color: var(--player-text);
+  background: var(--player-hover);
+  border-color: var(--player-subtle);
 }
 
 /* =========================================
-   PANTALLAS DE LETRAS, COLA Y CANVAS
-========================================= */
+   PANTALLAS DE LETRAS, COLA Y CANVAS (OVERLAYS)
+   ========================================= */
 
 .overlay-screen {
   position: fixed;
@@ -427,11 +523,12 @@
   flex-direction: column;
   overflow-y: auto;
   padding:
-    calc(14px + env(safe-area-inset-top, 0px))
-    20px
-    calc(20px + var(--player-safe-bottom));
+    calc(16px + env(safe-area-inset-top, 0px))
+    22px
+    calc(24px + var(--player-safe-bottom));
   background: var(--player-bg);
   color: var(--player-text);
+  backdrop-filter: blur(30px);
   -webkit-overflow-scrolling: touch;
 }
 
@@ -439,40 +536,53 @@
   display: flex;
   align-items: center;
   gap: 16px;
-  min-height: 48px;
-  margin-bottom: 20px;
+  min-height: 50px;
+  margin-bottom: 22px;
 }
 
 .overlay-screen > header h2 {
   margin: 0;
-  font-size: 19px;
-  font-weight: 700;
+  font-size: 20px;
+  font-weight: 750;
+  letter-spacing: -0.4px;
 }
 
 .overlay-screen > header button {
   min-height: 42px;
-  padding: 8px 12px;
+  padding: 8px 14px;
   border: 1px solid var(--player-border);
-  border-radius: 9px;
+  border-radius: 12px;
   background: var(--player-surface);
   color: var(--player-text);
   font-size: 13px;
+  font-weight: 650;
+}
+
+.overlay-screen > header button:hover {
+  background: var(--player-hover);
 }
 
 .lyrics-content {
   width: 100%;
   max-width: 620px;
   margin: 10px auto;
-  padding: 15px 0 40px;
+  padding: 15px 0 50px;
   color: var(--player-muted);
-  font-size: 19px;
-  font-weight: 600;
-  line-height: 2;
+  font-size: 20px;
+  font-weight: 650;
+  line-height: 2.2;
   text-align: center;
 }
 
 .lyrics-content p {
-  margin: 0 0 18px;
+  margin: 0 0 20px;
+  transition: color 0.2s ease, transform 0.2s ease;
+}
+
+.lyrics-content .current-line {
+  color: var(--player-accent);
+  transform: scale(1.05);
+  text-shadow: 0 0 20px var(--player-accent-glow);
 }
 
 #queueList {
@@ -484,13 +594,19 @@
 #clearQueueButton {
   align-self: center;
   min-height: 44px;
-  margin: 20px auto;
-  padding: 10px 18px;
+  margin: 24px auto;
+  padding: 10px 20px;
   border: 1px solid var(--player-border);
-  border-radius: 10px;
+  border-radius: 12px;
   background: var(--player-surface);
   color: var(--player-muted);
   font-size: 13px;
+  font-weight: 650;
+}
+
+#clearQueueButton:hover {
+  color: var(--player-text);
+  background: var(--player-hover);
 }
 
 #visualizerCanvas {
@@ -499,24 +615,25 @@
   max-width: 700px;
   height: min(55vh, 420px);
   margin: auto;
-  border-radius: 12px;
+  border-radius: 16px;
   background: var(--player-surface);
+  border: 1px solid var(--player-border);
 }
 
 /* =========================================
-   iPHONE PEQUEÑO
-========================================= */
+   MEDIA QUERIES (RESPONSIVE ADAPTATIONS)
+   ========================================= */
 
 @media (max-width: 375px) {
   .bottom-player {
-    left: 7px;
-    right: 7px;
+    left: 8px;
+    right: 8px;
   }
 
   .mini-player-content {
-    gap: 8px;
-    min-height: 62px;
-    padding: 8px;
+    gap: 10px;
+    min-height: 60px;
+    padding: 6px 10px;
   }
 
   .mini-cover {
@@ -525,24 +642,54 @@
     height: 42px;
   }
 
-  .mini-controls {
-    gap: 1px;
-  }
-
-  .mini-controls button {
-    width: 31px;
-    font-size: 17px;
-  }
-
   .now-playing-screen {
     padding-right: 18px;
     padding-left: 18px;
   }
 
   .np-artwork {
-    width: min(100%, 320px);
-    margin-top: 12px;
-    margin-bottom: 24px;
+    width: min(100%, 300px);
+    margin-top: 10px;
+    margin-bottom: 20px;
+  }
+}
+
+@media (min-width: 600px) {
+  .bottom-player {
+    right: 24px;
+    bottom: calc(24px + var(--player-safe-bottom));
+    left: auto;
+    width: min(420px, calc(100% - 48px));
+  }
+
+  .now-playing-screen {
+    align-items: center;
+    padding-right: 36px;
+    padding-left: 36px;
+  }
+
+  .np-main {
+    width: 100%;
+  }
+
+  .np-artwork {
+    width: min(100%, 380px);
+  }
+}
+
+@media (min-width: 900px) {
+  .now-playing-screen {
+    padding-top: 32px;
+  }
+
+  .np-artwork {
+    width: min(100%, 330px);
+    margin-top: 10px;
+    margin-bottom: 18px;
+  }
+
+  .np-song-info {
+    margin-bottom: 14px;
   }
 
   .np-controls {
@@ -551,64 +698,14 @@
 }
 
 /* =========================================
-   iPHONE GRANDE Y TABLETS
-========================================= */
-
-@media (min-width: 600px) {
-  .bottom-player {
-    right: 22px;
-    bottom: calc(20px + var(--player-safe-bottom));
-    left: auto;
-    width: min(430px, calc(100% - 44px));
-  }
-
-  .now-playing-screen {
-    align-items: center;
-    padding-right: 32px;
-    padding-left: 32px;
-  }
-
-  .np-main {
-    width: 100%;
-  }
-
-  .np-artwork {
-    width: min(100%, 390px);
-  }
-}
-
-/* =========================================
-   ESCRITORIO
-========================================= */
-
-@media (min-width: 900px) {
-  .now-playing-screen {
-    padding-top: 28px;
-  }
-
-  .np-artwork {
-    width: min(100%, 340px);
-    margin-top: 12px;
-    margin-bottom: 22px;
-  }
-
-  .np-song-info {
-    margin-bottom: 16px;
-  }
-
-  .np-controls {
-    margin-top: 12px;
-  }
-}
-
-/* =========================================
-   REDUCIR MOVIMIENTO
-========================================= */
+   ACCESIBILIDAD & REDUCED MOTION
+   ========================================= */
 
 @media (prefers-reduced-motion: reduce) {
   .mini-progress span,
   .bottom-player *,
-  .now-playing-screen * {
+  .now-playing-screen *,
+  .np-artwork img {
     transition: none !important;
     animation: none !important;
   }

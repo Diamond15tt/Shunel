@@ -1,10 +1,8 @@
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-
   <meta name="theme-color" content="#080D18">
   <meta name="description" content="Shunel, tu espacio personal para descubrir y escuchar música.">
 
@@ -22,10 +20,10 @@
 
 <body data-theme="dark">
 
-  <div id="app">
+  <div id="app" data-offline-sync="pending-changes">
 
-    <!-- Navegación principal -->
-    <aside class="sidebar" id="sidebar">
+    <!-- Navegación lateral (Sidebar) -->
+    <aside class="sidebar" id="sidebar" aria-label="Navegación lateral">
       <a class="brand" href="#home" aria-label="Shunel, inicio">
         <span class="brand-name">shunel</span>
       </a>
@@ -34,19 +32,15 @@
         <a href="#home" class="nav-link active" data-page="home">
           <span>Inicio</span>
         </a>
-
         <a href="#library" class="nav-link" data-page="library">
           <span>Biblioteca</span>
         </a>
-
         <a href="#playlists" class="nav-link" data-page="playlists">
           <span>Playlists</span>
         </a>
-
         <a href="#favorites" class="nav-link" data-page="favorites">
           <span>Favoritos</span>
         </a>
-
         <a href="#artists" class="nav-link" data-page="artists">
           <span>Artistas</span>
         </a>
@@ -56,11 +50,9 @@
         <a href="#profile" class="nav-link" data-page="profile">
           <span>Mi perfil</span>
         </a>
-
         <a href="#stats" class="nav-link" data-page="stats">
           <span>Estadísticas</span>
         </a>
-
         <a href="#settings" class="nav-link" data-page="settings">
           <span>Ajustes</span>
         </a>
@@ -70,6 +62,7 @@
     <!-- Contenido principal -->
     <main class="main-content">
 
+      <!-- Topbar -->
       <header class="topbar">
         <button
           type="button"
@@ -84,7 +77,6 @@
           <label class="visually-hidden" for="searchInput">
             Buscar música, artistas o álbumes
           </label>
-
           <input
             type="search"
             id="searchInput"
@@ -92,10 +84,7 @@
             placeholder="Buscar música, artistas o álbumes..."
             autocomplete="off"
           >
-
-          <button type="submit" id="searchButton">
-            Buscar
-          </button>
+          <button type="submit" id="searchButton">Buscar</button>
         </form>
 
         <button
@@ -108,12 +97,13 @@
         </button>
       </header>
 
+      <!-- Resultados de búsqueda -->
       <div id="searchResults" class="search-results" hidden>
         <h2>Resultados de búsqueda</h2>
         <div id="searchResultsList"></div>
       </div>
 
-      <!-- Inicio -->
+      <!-- Página: Inicio -->
       <section id="homePage" class="page active" data-page="home">
         <header class="page-heading">
           <p id="currentGreeting">Bienvenido</p>
@@ -126,7 +116,6 @@
             <h2 id="recentTitle">Escuchado recientemente</h2>
             <a href="#library" data-page="library">Ver biblioteca</a>
           </div>
-
           <div id="recentTracks" class="music-grid">
             <p class="empty-state">Tu historial aparecerá aquí.</p>
           </div>
@@ -136,7 +125,6 @@
           <div class="section-heading">
             <h2 id="recommendationsTitle">Para descubrir</h2>
           </div>
-
           <div id="recommendedTracks" class="music-grid">
             <p class="empty-state">Tus recomendaciones aparecerán aquí.</p>
           </div>
@@ -146,7 +134,6 @@
           <div class="section-heading">
             <h2 id="dailyMixTitle">Tu música</h2>
           </div>
-
           <div id="dailyMixes" class="music-grid"></div>
         </section>
 
@@ -154,7 +141,6 @@
           <div class="section-heading">
             <h2 id="radioTitle">Smart Radio</h2>
           </div>
-
           <div id="smartRadioContent">
             <button type="button" id="startSmartRadio">
               Crear radio personalizada
@@ -163,7 +149,7 @@
         </section>
       </section>
 
-      <!-- Biblioteca -->
+      <!-- Página: Biblioteca -->
       <section id="libraryPage" class="page" data-page="library" hidden>
         <header class="page-heading">
           <h1>Biblioteca</h1>
@@ -177,12 +163,12 @@
           <button type="button" data-library-filter="artists">Artistas</button>
         </div>
 
-        <div id="libraryContent" class="track-list">
+        <div id="libraryContent" class="track-list" data-loading-state="idle">
           <p class="empty-state">Todavía no tienes música guardada.</p>
         </div>
       </section>
 
-      <!-- Playlists -->
+      <!-- Página: Playlists -->
       <section id="playlistsPage" class="page" data-page="playlists" hidden>
         <header class="page-heading">
           <h1>Playlists</h1>
@@ -193,21 +179,20 @@
           Crear playlist
         </button>
 
-        <div id="playlistsGrid" class="music-grid">
+        <div id="playlistsGrid" class="music-grid" data-supabase-table="playlists">
           <p class="empty-state">Todavía no has creado playlists.</p>
         </div>
 
-        <section id="playlistDetail" hidden>
+        <div id="playlistDetail" class="sub-view" hidden>
           <button type="button" id="backToPlaylists">
             Volver a playlists
           </button>
-
           <div id="playlistHeader"></div>
           <div id="playlistTracks" class="track-list"></div>
-        </section>
+        </div>
       </section>
 
-      <!-- Favoritos -->
+      <!-- Página: Favoritos -->
       <section id="favoritesPage" class="page" data-page="favorites" hidden>
         <header class="page-heading">
           <h1>Favoritos</h1>
@@ -219,7 +204,7 @@
         </div>
       </section>
 
-      <!-- Artistas -->
+      <!-- Página: Artistas -->
       <section id="artistsPage" class="page" data-page="artists" hidden>
         <header class="page-heading">
           <h1>Artistas</h1>
@@ -228,7 +213,7 @@
 
         <div id="artistsGrid" class="music-grid"></div>
 
-        <section id="artistDetail" hidden>
+        <div id="artistDetail" class="sub-view" hidden>
           <button type="button" id="backToArtists">
             Volver a artistas
           </button>
@@ -236,66 +221,61 @@
           <div id="artistHeader"></div>
 
           <div class="artist-actions">
-            <button type="button" id="followArtistButton">
-              Seguir artista
-            </button>
-
-            <button type="button" id="artistRadioButton">
-              Iniciar radio
-            </button>
+            <button type="button" id="followArtistButton">Seguir artista</button>
+            <button type="button" id="artistRadioButton">Iniciar radio</button>
           </div>
 
-          <section>
+          <div class="artist-section">
             <h2>Canciones</h2>
             <div id="artistTracks" class="track-list"></div>
-          </section>
+          </div>
 
-          <section>
+          <div class="artist-section">
             <h2>Álbumes</h2>
             <div id="artistAlbums" class="music-grid"></div>
-          </section>
+          </div>
 
-          <section>
+          <div class="artist-section">
             <h2>Artistas relacionados</h2>
             <div id="relatedArtists" class="music-grid"></div>
-          </section>
-        </section>
+          </div>
+        </div>
       </section>
 
-      <!-- Perfil -->
+      <!-- Página: Perfil -->
       <section id="profilePage" class="page" data-page="profile" hidden>
         <header class="page-heading">
           <h1>Mi perfil</h1>
         </header>
 
         <div id="profileContent">
-          <div id="profileAvatar"></div>
-          <h2 id="profileDisplayName">Usuario</h2>
-          <p id="profileUsername"></p>
-          <p id="profileBio"></p>
+          <div id="profileAvatar" data-user-avatar class="profile-avatar-container"></div>
+          <h2 id="profileDisplayName" data-supabase-field="display_name">Usuario</h2>
+          <p id="profileUsername" data-supabase-field="email"></p>
+          <p id="profileBio" data-supabase-field="bio">Sin biografía</p>
 
           <button type="button" id="editProfileButton">
             Editar perfil
           </button>
         </div>
 
-        <section>
+        <div class="profile-sub-section">
           <h2>Mis playlists públicas</h2>
           <div id="publicPlaylists" class="music-grid"></div>
-        </section>
+        </div>
 
-        <section>
+        <div class="profile-sub-section">
           <h2>Seguidores</h2>
           <div id="followersList"></div>
-        </section>
+        </div>
 
-        <section>
+        <div class="profile-sub-section">
           <h2>Siguiendo</h2>
           <div id="followingList"></div>
-        </section>
+        </div>
       </section>
 
-      <!-- Estadísticas -->
+      <!-- Página: Estadísticas -->
       <section id="statsPage" class="page" data-page="stats" hidden>
         <header class="page-heading">
           <h1>Estadísticas</h1>
@@ -303,71 +283,69 @@
         </header>
 
         <div class="stats-grid">
-          <section>
+          <div class="stat-card" data-supabase-stat="total_plays">
             <h2>Reproducciones</h2>
             <p id="totalPlays">0</p>
-          </section>
+          </div>
 
-          <section>
+          <div class="stat-card" data-supabase-stat="total_minutes">
             <h2>Minutos escuchados</h2>
             <p id="totalMinutes">0</p>
-          </section>
+          </div>
 
-          <section>
+          <div class="stat-card">
             <h2>Canción más escuchada</h2>
             <div id="topTrack"></div>
-          </section>
+          </div>
 
-          <section>
+          <div class="stat-card">
             <h2>Artista más escuchado</h2>
             <div id="topArtist"></div>
-          </section>
+          </div>
         </div>
 
-        <section>
+        <div class="stats-section">
           <h2>Actividad reciente</h2>
           <div id="listeningActivity"></div>
-        </section>
+        </div>
 
-        <section>
+        <div class="stats-section">
           <h2>Tu resumen musical</h2>
           <div id="yearlySummary"></div>
-        </section>
+        </div>
       </section>
 
-      <!-- Salas -->
+      <!-- Página: Salas -->
       <section id="roomsPage" class="page" data-page="rooms" hidden>
         <header class="page-heading">
           <h1>Salas de escucha</h1>
           <p>Comparte música con otras personas.</p>
         </header>
 
-        <button type="button" id="createRoomButton">
-          Crear sala
-        </button>
+        <div id="roomRealtimeIndicator" data-realtime-status="disconnected" class="realtime-badge">
+          <span>●</span> Sincronización en tiempo real
+        </div>
+
+        <button type="button" id="createRoomButton">Crear sala</button>
 
         <div id="roomsList"></div>
 
-        <section id="roomDetail" hidden>
-          <button type="button" id="leaveRoomButton">
-            Salir de la sala
-          </button>
-
+        <div id="roomDetail" class="sub-view" hidden>
+          <button type="button" id="leaveRoomButton">Salir de la sala</button>
           <div id="roomInformation"></div>
           <div id="roomMembers"></div>
-          <div id="roomQueue"></div>
-        </section>
+          <div id="roomQueue" data-room-sync="queue"></div>
+        </div>
       </section>
 
-      <!-- Shunel AI -->
+      <!-- Página: Shunel AI -->
       <section id="aiPage" class="page" data-page="ai" hidden>
         <header class="page-heading">
           <h1>Shunel AI</h1>
           <p>Un asistente para explorar tu música.</p>
         </header>
 
-        <div id="aiConversation" class="ai-conversation"
-             aria-live="polite">
+        <div id="aiConversation" class="ai-conversation" aria-live="polite">
           <div id="aiMessages"></div>
         </div>
 
@@ -375,21 +353,17 @@
           <label class="visually-hidden" for="aiInput">
             Escribe un mensaje para Shunel AI
           </label>
-
           <textarea
             id="aiInput"
             name="message"
             rows="2"
             placeholder="¿Qué quieres escuchar?"
           ></textarea>
-
-          <button type="submit" id="sendAIButton">
-            Enviar
-          </button>
+          <button type="submit" id="sendAIButton">Enviar</button>
         </form>
       </section>
 
-      <!-- Ajustes -->
+      <!-- Página: Ajustes -->
       <section id="settingsPage" class="page" data-page="settings" hidden>
         <header class="page-heading">
           <h1>Ajustes</h1>
@@ -398,94 +372,56 @@
 
         <section class="settings-section">
           <h2>Cuenta</h2>
-
-          <button type="button" id="accountSettingsButton">
-            Configuración de cuenta
-          </button>
-
-          <button type="button" id="signOutButton">
-            Cerrar sesión
-          </button>
+          <button type="button" id="accountSettingsButton">Configuración de cuenta</button>
+          <button type="button" id="signOutButton">Cerrar sesión</button>
         </section>
 
         <section class="settings-section">
           <h2>Apariencia</h2>
-
           <label for="themeSetting">Tema</label>
           <select id="themeSetting" name="theme">
             <option value="dark">Azul noche</option>
             <option value="blue">Azul profundo</option>
             <option value="light">Claro</option>
+            <option value="forest">Esmeralda bosque</option>
+            <option value="neon">Cyberpunk neón</option>
           </select>
         </section>
 
         <section class="settings-section">
           <h2>Reproducción</h2>
 
-          <label for="crossfadeSetting">
-            Crossfade
-          </label>
-          <input
-            type="checkbox"
-            id="crossfadeSetting"
-            name="crossfade"
-          >
+          <div class="setting-item">
+            <label for="crossfadeSetting">Crossfade</label>
+            <input type="checkbox" id="crossfadeSetting" name="crossfade">
+          </div>
 
-          <label for="crossfadeDuration">
-            Duración del crossfade
-          </label>
-          <input
-            type="range"
-            id="crossfadeDuration"
-            min="1"
-            max="12"
-            value="5"
-          >
+          <div class="setting-item">
+            <label for="crossfadeDuration">Duración del crossfade</label>
+            <input type="range" id="crossfadeDuration" min="1" max="12" value="5">
+          </div>
 
-          <label for="normalizationSetting">
-            Normalizar volumen
-          </label>
-          <input
-            type="checkbox"
-            id="normalizationSetting"
-            name="normalization"
-          >
+          <div class="setting-item">
+            <label for="normalizationSetting">Normalizar volumen</label>
+            <input type="checkbox" id="normalizationSetting" name="normalization">
+          </div>
 
-          <label for="gaplessSetting">
-            Reproducción sin pausas
-          </label>
-          <input
-            type="checkbox"
-            id="gaplessSetting"
-            name="gapless"
-          >
+          <div class="setting-item">
+            <label for="gaplessSetting">Reproducción sin pausas</label>
+            <input type="checkbox" id="gaplessSetting" name="gapless">
+          </div>
         </section>
 
         <section class="settings-section">
           <h2>Fuentes de música</h2>
-
-          <button type="button" id="externalMusicSettings">
-            Configurar fuentes externas
-          </button>
+          <button type="button" id="externalMusicSettings">Configurar fuentes externas</button>
         </section>
 
         <section class="settings-section">
           <h2>Datos</h2>
-
-          <button type="button" id="exportDataButton">
-            Exportar datos
-          </button>
-
-          <button type="button" id="importDataButton">
-            Importar datos
-          </button>
-
-          <input
-            type="file"
-            id="importDataInput"
-            accept="application/json"
-            hidden
-          >
+          <button type="button" id="exportDataButton">Exportar datos</button>
+          <button type="button" id="importDataButton">Importar datos</button>
+          <input type="file" id="importDataInput" accept="application/json" hidden>
         </section>
       </section>
 
@@ -518,14 +454,9 @@
         </div>
 
         <div class="mini-controls">
-          <button type="button" id="miniPreviousButton"
-                  aria-label="Canción anterior">⏮</button>
-
-          <button type="button" id="miniPlayButton"
-                  aria-label="Reproducir o pausar">▶</button>
-
-          <button type="button" id="miniNextButton"
-                  aria-label="Siguiente canción">⏭</button>
+          <button type="button" id="miniPreviousButton" aria-label="Canción anterior">⏮</button>
+          <button type="button" id="miniPlayButton" aria-label="Reproducir o pausar">▶</button>
+          <button type="button" id="miniNextButton" aria-label="Siguiente canción">⏭</button>
         </div>
       </div>
 
@@ -534,7 +465,7 @@
       </div>
     </section>
 
-    <!-- Reproductor completo -->
+    <!-- Reproductor completo (Now Playing) -->
     <section
       id="nowPlayingScreen"
       class="now-playing-screen"
@@ -542,13 +473,9 @@
       hidden
     >
       <header class="np-header">
-        <button type="button" id="closePlayerButton"
-                aria-label="Cerrar reproductor">⌄</button>
-
+        <button type="button" id="closePlayerButton" aria-label="Cerrar reproductor">⌄</button>
         <p>REPRODUCIENDO</p>
-
-        <button type="button" id="openQueueButton"
-                aria-label="Abrir cola">☷</button>
+        <button type="button" id="openQueueButton" aria-label="Abrir cola">☷</button>
       </header>
 
       <div class="np-main">
@@ -564,17 +491,14 @@
             </button>
           </div>
 
-          <button type="button" id="playerFavoriteButton"
-                  aria-label="Añadir a favoritos">
+          <button type="button" id="playerFavoriteButton" data-supabase-favorite="true" aria-label="Añadir a favoritos">
             ♡
           </button>
         </div>
 
         <div class="lyrics-preview" id="lyricsPreview">
           <p id="lyricsPreviewText">Las letras aparecerán aquí.</p>
-          <button type="button" id="openLyricsButton">
-            Ver letras
-          </button>
+          <button type="button" id="openLyricsButton">Ver letras</button>
         </div>
 
         <div class="np-progress-area">
@@ -586,7 +510,6 @@
             value="0"
             aria-label="Progreso de reproducción"
           >
-
           <div class="progress-times">
             <span id="currentTime">0:00</span>
             <span id="durationTime">0:00</span>
@@ -594,112 +517,66 @@
         </div>
 
         <div class="np-controls">
-          <button type="button" id="shuffleButton"
-                  aria-label="Reproducción aleatoria">🔀</button>
-
-          <button type="button" id="previousButton"
-                  aria-label="Canción anterior">⏮</button>
-
-          <button type="button" id="playButton"
-                  aria-label="Reproducir o pausar">▶</button>
-
-          <button type="button" id="nextButton"
-                  aria-label="Siguiente canción">⏭</button>
-
-          <button type="button" id="repeatButton"
-                  aria-label="Repetir">🔁</button>
+          <button type="button" id="shuffleButton" aria-label="Reproducción aleatoria">🔀</button>
+          <button type="button" id="previousButton" aria-label="Canción anterior">⏮</button>
+          <button type="button" id="playButton" aria-label="Reproducir o pausar">▶</button>
+          <button type="button" id="nextButton" aria-label="Siguiente canción">⏭</button>
+          <button type="button" id="repeatButton" aria-label="Repetir">🔁</button>
         </div>
 
         <div class="np-extra-controls">
-          <button type="button" id="openCanvasButton">
-            Canvas
-          </button>
-
-          <button type="button" id="openPlayerQueueButton">
-            Cola
-          </button>
-
-          <button type="button" id="sleepTimerButton">
-            Temporizador
-          </button>
+          <button type="button" id="openCanvasButton">Canvas</button>
+          <button type="button" id="openPlayerQueueButton">Cola</button>
+          <button type="button" id="sleepTimerButton">Temporizador</button>
         </div>
       </div>
     </section>
 
-    <!-- Letras -->
+    <!-- Pantalla de Letras -->
     <section id="lyricsScreen" class="overlay-screen" hidden>
       <header>
-        <button type="button" id="closeLyricsButton">
-          Volver
-        </button>
-
+        <button type="button" id="closeLyricsButton">Volver</button>
         <h2>Letras</h2>
       </header>
-
       <div id="lyricsContent" class="lyrics-content">
         <p>Las letras aparecerán aquí.</p>
       </div>
     </section>
 
-    <!-- Cola -->
+    <!-- Pantalla de Cola -->
     <section id="queueScreen" class="overlay-screen" hidden>
       <header>
-        <button type="button" id="closeQueueButton">
-          Volver
-        </button>
-
+        <button type="button" id="closeQueueButton">Volver</button>
         <h2>Cola de reproducción</h2>
       </header>
-
       <div id="queueList" class="track-list"></div>
-
-      <button type="button" id="clearQueueButton">
-        Limpiar cola
-      </button>
+      <button type="button" id="clearQueueButton">Limpiar cola</button>
     </section>
 
-    <!-- Canvas -->
+    <!-- Pantalla de Canvas -->
     <section id="canvasScreen" class="overlay-screen" hidden>
       <header>
-        <button type="button" id="closeCanvasButton">
-          Volver
-        </button>
-
+        <button type="button" id="closeCanvasButton">Volver</button>
         <h2>Canvas</h2>
       </header>
-
-      <canvas id="visualizerCanvas" aria-label="Visualizador de música">
-      </canvas>
+      <canvas id="visualizerCanvas" aria-label="Visualizador de música"></canvas>
     </section>
 
-    <!-- AI en pantalla independiente -->
+    <!-- Pantalla de IA -->
     <section id="aiScreen" class="overlay-screen" hidden>
       <header>
-        <button type="button" id="closeAIScreenButton">
-          Volver
-        </button>
-
+        <button type="button" id="closeAIScreenButton">Volver</button>
         <h2>Shunel AI</h2>
       </header>
-
       <div id="aiScreenMessages" aria-live="polite"></div>
-
       <form id="aiScreenForm">
-        <label class="visually-hidden" for="aiScreenInput">
-          Mensaje para Shunel AI
-        </label>
-
-        <input
-          type="text"
-          id="aiScreenInput"
-          placeholder="Escribe un mensaje..."
-        >
-
+        <label class="visually-hidden" for="aiScreenInput">Mensaje para Shunel AI</label>
+        <input type="text" id="aiScreenInput" placeholder="Escribe un mensaje...">
         <button type="submit">Enviar</button>
       </form>
     </section>
 
-    <!-- Modal -->
+    <!-- Modal General -->
     <div id="modalBackdrop" class="modal-backdrop" hidden>
       <section
         id="modal"
@@ -710,109 +587,62 @@
       >
         <header>
           <h2 id="modalTitle">Shunel</h2>
-
-          <button type="button" id="closeModalButton"
-                  aria-label="Cerrar ventana">×</button>
+          <button type="button" id="closeModalButton" aria-label="Cerrar ventana">×</button>
         </header>
-
         <div id="modalContent"></div>
         <div id="modalActions"></div>
       </section>
     </div>
 
-    <!-- Autenticación -->
-    <section id="authScreen" class="auth-screen" hidden>
+    <!-- Pantalla de Autenticación -->
+    <section id="authScreen" class="auth-screen">
       <div class="auth-content">
         <h1>shunel</h1>
         <p>Tu música, tu espacio.</p>
 
         <form id="loginForm">
           <label for="loginEmail">Correo electrónico</label>
-          <input
-            type="email"
-            id="loginEmail"
-            name="email"
-            autocomplete="email"
-            required
-          >
+          <input type="email" id="loginEmail" name="email" autocomplete="email" required>
 
           <label for="loginPassword">Contraseña</label>
-          <input
-            type="password"
-            id="loginPassword"
-            name="password"
-            autocomplete="current-password"
-            required
-          >
+          <input type="password" id="loginPassword" name="password" autocomplete="current-password" required>
 
           <button type="submit">Iniciar sesión</button>
         </form>
 
-        <button type="button" id="showRegisterButton">
-          Crear cuenta
-        </button>
+        <button type="button" id="showRegisterButton">Crear cuenta</button>
 
         <form id="registerForm" hidden>
           <label for="registerUsername">Nombre de usuario</label>
-          <input
-            type="text"
-            id="registerUsername"
-            name="username"
-            autocomplete="username"
-            required
-          >
+          <input type="text" id="registerUsername" name="username" autocomplete="username" required>
 
           <label for="registerDisplayName">Nombre para mostrar</label>
-          <input
-            type="text"
-            id="registerDisplayName"
-            name="displayName"
-            autocomplete="name"
-            required
-          >
+          <input type="text" id="registerDisplayName" name="displayName" autocomplete="name" required>
 
           <label for="registerEmail">Correo electrónico</label>
-          <input
-            type="email"
-            id="registerEmail"
-            name="email"
-            autocomplete="email"
-            required
-          >
+          <input type="email" id="registerEmail" name="email" autocomplete="email" required>
 
           <label for="registerPassword">Contraseña</label>
-          <input
-            type="password"
-            id="registerPassword"
-            name="password"
-            autocomplete="new-password"
-            required
-          >
+          <input type="password" id="registerPassword" name="password" autocomplete="new-password" required>
 
           <button type="submit">Registrarme</button>
         </form>
       </div>
     </section>
 
-    <!-- Reproductores y medios -->
+    <!-- Reproductores y medios ocultos -->
     <audio id="localAudio" preload="metadata"></audio>
 
     <div id="youtubePlayerContainer" hidden>
       <div id="youtubePlayer"></div>
     </div>
 
-    <!-- Notificaciones -->
-    <div
-      id="toast"
-      class="toast"
-      role="status"
-      aria-live="polite"
-      hidden
-    ></div>
+    <!-- Notificaciones (Toast) -->
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   </div>
 
-  <!-- Servicios externos -->
+  <!-- Servicios externos: SDK de Supabase actualizado para soportar Publishable Keys -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://www.youtube.com/iframe_api"></script>
 
