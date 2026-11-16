@@ -20,6 +20,139 @@ let isPlaying = false;
 let progressTimer = null;
 let queuePanelOpen = false;
 
+const $ = selector => document.querySelector(selector);
+const byId = id => document.getElementById(id);
+
+/* =========================================
+   MEDIA SESSION
+   CONTROLES DEL SISTEMA / PANTALLA BLOQUEADA
+========================================= */
+
+const mediaSession = navigator.mediaSession || null;
+
+function getTrackArtwork(track) {
+  return (
+    track?.thumbnail ||
+    track?.thumbnailUrl ||
+    track?.image ||
+    "/assets/placeholder.svg"
+  );
+}
+
+function updateMediaMetadata(track) {
+  if (!mediaSession || !track) return;
+
+  try {
+    if ("MediaMetadata" in window) {
+      mediaSession.metadata = new MediaMetadata({
+        title: track.title || track.name || "Reproduciendo",
+        artist: track.channel || track.artist || "Shunel",
+        album: "Shunel",
+        artwork: [
+          {
+            src: getTrackArtwork(track),
+            sizes: "512x512",
+            type: "image/jpeg"
+          }
+        ]
+      });
+    }
+  } catch (error) {
+    console.warn("[Shunel] No se pudo actualizar Media Session:", error);
+  }
+}
+
+function updateMediaPlaybackState(playing) {
+  if (!mediaSession) return;
+
+  try {
+    mediaSession.playbackState = playing ? "playing" : "paused";
+  } catch (error) {
+    console.warn("[Shunel] Error de estado multimedia:", error);
+  }
+}
+
+function updateMediaPosition() {
+  if (!mediaSession || !player) return;
+  if (typeof mediaSession.setPositionState !== "function") return;
+
+  try {
+    const duration = Number(player.getDuration());
+    const position = Number(player.getCurrentTime());
+
+    if (!Number.isFinite(duration) || duration <= 0) return;
+
+    mediaSession.setPositionState({
+      duration,
+      playbackRate: 1,
+      position: Math.min(Math.max(position || 0, 0), duration)
+    });
+  } catch {
+    // Algunos navegadores no permiten actualizar la posición.
+  }
+}
+
+function setupMediaSession() {
+  if (!mediaSession) {
+    console.info("[Shunel] Media Session no disponible.");
+    return;
+  }
+
+  const actions = {
+    play: () => {
+      if (!currentTrack) return;
+      player?.resume?.();
+    },
+
+    pause: () => {
+      player?.pause?.();
+    },
+
+    nexttrack: () => {
+      playNext();
+    },
+
+    previoustrack: () => {
+      playPrevious();
+    },
+
+    seekto: details => {
+      if (Number.isFinite(details.seekTime)) {
+        player?.seekTo(details.seekTime);
+      }
+    },
+
+    seekbackward: details => {
+      const current = player?.getCurrentTime() || 0;
+      const offset = details.seekOffset || 10;
+
+      player?.seekTo(Math.max(0, current - offset));
+    },
+
+    seekforward: details => {
+      const current = player?.getCurrentTime() || 0;
+      const duration = player?.getDuration() || 0;
+      const offset = details.seekOffset || 10;
+
+      player?.seekTo(
+        duration > 0
+          ? Math.min(duration, current + offset)
+          : current + offset
+      );
+    }
+  };
+
+  Object.entries(actions).forEach(([action, handler]) => {
+    try {
+      mediaSession.setActionHandler(action, handler);
+    } catch {
+      // Acción no compatible con este navegador.
+    }
+  });
+
+  console.info("[Shunel] Media Session configurada.");
+}
+
 /* =========================================
    NAVIGATION
 ========================================= */
@@ -27,25 +160,20 @@ let queuePanelOpen = false;
 function navigateToView(viewName) {
   if (!viewName) return;
 
-  const target = document.getElementById(`view-${viewName}`);
+  const target = byId(`view-${viewName}`);
 
   if (!target) {
     console.warn(`[Shunel] Vista no encontrada: ${viewName}`);
     return;
   }
 
-  // Usa el controlador visual existente.
   ui.showView(viewName);
 
-  // Sincroniza la navegación inferior.
   document.querySelectorAll(".bottom-nav-item").forEach(button => {
     const active = button.dataset.view === viewName;
 
     button.classList.toggle("active", active);
-    button.setAttribute(
-      "aria-current",
-      active ? "page" : "false"
-    );
+    button.setAttribute("aria-current", active ? "page" : "false");
   });
 }
 
@@ -53,7 +181,6 @@ function bindNavigation() {
   document.querySelectorAll("[data-view]").forEach(button => {
     button.addEventListener("click", event => {
       event.preventDefault();
-
       navigateToView(button.dataset.view);
     });
   });
@@ -65,15 +192,15 @@ function bindNavigation() {
 
 function bindLibraryFilters() {
   const filters = document.querySelectorAll("[data-library-filter]");
-  const libraryList = document.getElementById("libraryList");
-  const favoritesList = document.getElementById("favoritesList");
+  const libraryList = byId("libraryList");
+  const favoritesList = byId("favoritesList");
 
   if (!libraryList || !favoritesList) return;
 
   filters.forEach(button => {
     button.addEventListener("click", () => {
-      const filter = button.dataset.libraryFilter;
-      const showFavorites = filter === "favorites";
+      const showFavorites =
+        button.dataset.libraryFilter === "favorites";
 
       libraryList.hidden = showFavorites;
       favoritesList.hidden = !showFavorites;
@@ -107,7 +234,6 @@ function trackActions(track) {
 ========================================= */
 
 function refreshCollections() {
-  // Biblioteca general.
   ui.renderCollection(
     "library",
     library.getLibrary(),
@@ -119,7 +245,6 @@ function refreshCollections() {
       remove: item => {
         library.remove(item.videoId);
         refreshCollections();
-
         ui.toastMessage("Canción eliminada de tu biblioteca.");
       },
 
@@ -127,7 +252,6 @@ function refreshCollections() {
     })
   );
 
-  // Favoritos dentro de Biblioteca.
   ui.renderCollection(
     "favorites",
     library.getFavorites(),
@@ -139,7 +263,6 @@ function refreshCollections() {
     })
   );
 
-  // Historial de reproducción.
   ui.renderCollection(
     "history",
     library.getHistory(),
@@ -160,14 +283,17 @@ function refreshQueue() {
   ui.renderQueue(
     queue.getItems(),
     currentTrack?.videoId,
-
     playTrack,
-
     index => {
       queue.remove(index);
       refreshQueue();
     }
   );
+}
+
+function toggleQueuePanel(open) {
+  queuePanelOpen = Boolean(open);
+  ui.toggleQueue(queuePanelOpen);
 }
 
 /* =========================================
@@ -208,7 +334,6 @@ function toggleFavorite(track) {
 function addToQueue(track) {
   queue.add(track);
   refreshQueue();
-
   ui.toastMessage("Agregada a la cola.");
 }
 
@@ -229,13 +354,28 @@ function playTrack(track) {
     library.isFavorite(track.videoId)
   );
 
-  ui.setPlaying(true);
+  // Esperar la confirmación real de YouTube.
+  isPlaying = false;
+  ui.setPlaying(false);
   ui.setProgress(0, 0);
+
+  updateMediaMetadata(track);
+  updateMediaPlaybackState(false);
 
   refreshCollections();
   refreshQueue();
 
-  player?.play(track.videoId);
+  if (!player) {
+    ui.toastMessage("El reproductor todavía se está cargando.");
+    return;
+  }
+
+  try {
+    player.play(track.videoId);
+  } catch (error) {
+    console.error("[Shunel] Error al reproducir:", error);
+    ui.toastMessage("No se pudo iniciar la canción.");
+  }
 }
 
 function playNext() {
@@ -248,7 +388,11 @@ function playNext() {
   } else {
     isPlaying = false;
 
+    player?.pause?.();
+
     ui.setPlaying(false);
+    updateMediaPlaybackState(false);
+
     ui.toastMessage("La cola terminó.");
   }
 }
@@ -256,13 +400,11 @@ function playNext() {
 function playPrevious() {
   if (!player || !currentTrack) return;
 
-  // Si lleva más de 3 segundos, vuelve al inicio.
   if (player.getCurrentTime() > 3) {
     player.seekTo(0);
     return;
   }
 
-  // Busca la canción anterior en el historial.
   const history = library.getHistory();
 
   const previous = history.find(
@@ -276,6 +418,15 @@ function playPrevious() {
   }
 }
 
+function togglePlayback() {
+  if (!currentTrack) {
+    ui.toastMessage("Primero elige una canción.");
+    return;
+  }
+
+  player?.toggle();
+}
+
 /* =========================================
    SEARCH
 ========================================= */
@@ -283,16 +434,14 @@ function playPrevious() {
 async function handleSearch(event) {
   event.preventDefault();
 
-  const query = ui.elements.input.value.trim();
+  const query = ui.elements.input?.value.trim();
 
   if (!query) {
     ui.setStatus("Escribe el nombre de una canción.");
     return;
   }
 
-  if (searchController) {
-    searchController.abort();
-  }
+  searchController?.abort();
 
   const controller = new AbortController();
   searchController = controller;
@@ -333,69 +482,134 @@ async function handleSearch(event) {
 }
 
 /* =========================================
-   QUEUE PANEL
+   QUEUE EVENTS
 ========================================= */
 
 function bindQueueEvents() {
-  const queueToggle = document.getElementById("queueToggle");
-  const closeQueue = document.getElementById("closeQueue");
-  const clearQueue = document.getElementById("clearQueue");
-
-  queueToggle?.addEventListener("click", () => {
-    queuePanelOpen = !queuePanelOpen;
-    ui.toggleQueue(queuePanelOpen);
+  byId("queueToggle")?.addEventListener("click", () => {
+    toggleQueuePanel(!queuePanelOpen);
   });
 
-  closeQueue?.addEventListener("click", () => {
-    queuePanelOpen = false;
-    ui.toggleQueue(false);
+  byId("closeQueue")?.addEventListener("click", () => {
+    toggleQueuePanel(false);
   });
 
-  clearQueue?.addEventListener("click", () => {
+  byId("clearQueue")?.addEventListener("click", () => {
     queue.clear();
     refreshQueue();
-
     ui.toastMessage("Cola vaciada.");
+  });
+
+  // Botones de cola del reproductor grande.
+  byId("fullPlayerQueue")?.addEventListener("click", () => {
+    toggleQueuePanel(!queuePanelOpen);
+  });
+
+  byId("fullQueueToggle")?.addEventListener("click", () => {
+    toggleQueuePanel(!queuePanelOpen);
   });
 }
 
 /* =========================================
-   PLAYER CONTROLS
+   FULL PLAYER
 ========================================= */
 
-function bindPlayerEvents() {
-  ui.elements.playButton?.addEventListener("click", () => {
-    if (!currentTrack) {
-      ui.toastMessage("Primero elige una canción.");
-      return;
-    }
+function openFullPlayer() {
+  if (!currentTrack) {
+    ui.toastMessage("Primero elige una canción.");
+    return;
+  }
 
-    player?.toggle();
-  });
+  ui.toggleFullPlayer(true);
+}
 
-  ui.elements.nextButton?.addEventListener(
+function closeFullPlayer() {
+  ui.toggleFullPlayer(false);
+}
+
+function bindFullPlayerEvents() {
+  // Cerrar.
+  byId("closeFullPlayer")?.addEventListener(
     "click",
-    playNext
+    closeFullPlayer
   );
 
-  ui.elements.previousButton?.addEventListener(
+  // Reproducir / pausar.
+  byId("fullPlayButton")?.addEventListener(
+    "click",
+    togglePlayback
+  );
+
+  // Canción anterior.
+  byId("fullPreviousButton")?.addEventListener(
     "click",
     playPrevious
   );
 
+  // Canción siguiente.
+  byId("fullNextButton")?.addEventListener(
+    "click",
+    playNext
+  );
+
+  // Favoritos.
+  byId("fullPlayerFavorite")?.addEventListener("click", () => {
+    if (currentTrack) {
+      toggleFavorite(currentTrack);
+    }
+  });
+
+  // Progreso.
+  byId("fullProgressBar")?.addEventListener("change", event => {
+    player?.seekTo(Number(event.target.value));
+  });
+}
+
+/* =========================================
+   MINI PLAYER EVENTS
+========================================= */
+
+function bindPlayerEvents() {
+  // Mini player: reproducir / pausar.
+  ui.elements.playButton?.addEventListener(
+    "click",
+    togglePlayback
+  );
+
+  // Canciones.
+  ui.elements.nextButton?.addEventListener("click", playNext);
+  ui.elements.previousButton?.addEventListener("click", playPrevious);
+
+  // Favoritos.
   ui.elements.favoriteCurrent?.addEventListener("click", () => {
     if (currentTrack) {
       toggleFavorite(currentTrack);
     }
   });
 
+  // Volumen.
   ui.elements.volumeBar?.addEventListener("input", event => {
-    player?.setVolume(event.target.value);
+    player?.setVolume(Number(event.target.value));
   });
 
+  // Progreso.
   ui.elements.progressBar?.addEventListener("change", event => {
     player?.seekTo(Number(event.target.value));
   });
+
+  // Tocar la portada, título o artista abre el reproductor grande.
+  $(".now-playing")?.addEventListener("click", event => {
+    if (event.target.closest("button")) return;
+    openFullPlayer();
+  });
+
+  // Flecha de expansión.
+  byId("expandPlayer")?.addEventListener(
+    "click",
+    openFullPlayer
+  );
+
+  bindFullPlayerEvents();
 }
 
 /* =========================================
@@ -403,48 +617,16 @@ function bindPlayerEvents() {
 ========================================= */
 
 function bindEvents() {
-  // Formularios de búsqueda.
   ui.elements.form?.addEventListener(
     "submit",
     handleSearch
   );
 
-  // Navegación principal y accesos con data-view.
   bindNavigation();
-
-  // Filtros de Biblioteca: Todo y Favoritos.
   bindLibraryFilters();
-
-  // Controles del reproductor.
   bindPlayerEvents();
-    // Abrir reproductor grande desde el mini reproductor
-  const openFullPlayer = () => {
-    if (!currentTrack) {
-      ui.toastMessage("Primero elige una canción.");
-      return;
-    }
-    
-    ui.toggleFullPlayer(true);
-  };
-  
-  const nowPlaying = document.querySelector(".now-playing");
-  
-  nowPlaying?.addEventListener("click", (event) => {
-    // Evitar que el botón de favoritos abra el reproductor
-    if (event.target.closest("button")) return;
-    
-    openFullPlayer();
-  });
-  
-  ui.elements.expandPlayer?.addEventListener(
-    "click",
-    openFullPlayer
-  );
-
-  // Panel de cola.
   bindQueueEvents();
 
-  // Actualización automática de la cola.
   queue.setOnChange(refreshQueue);
 }
 
@@ -458,11 +640,13 @@ function startProgressUpdates() {
   progressTimer = window.setInterval(() => {
     if (!player || !isPlaying) return;
 
-    ui.setProgress(
-      player.getCurrentTime(),
-      player.getDuration()
-    );
-  }, 500);
+    const current = player.getCurrentTime();
+    const duration = player.getDuration();
+
+    ui.setProgress(current, duration);
+    updateMediaPosition();
+
+  }, 1000);
 }
 
 /* =========================================
@@ -473,7 +657,9 @@ function initializePlayer() {
   player = new YouTubePlayer("youtubePlayerHost", {
 
     onReady: () => {
-      player.setVolume(ui.elements.volumeBar?.value ?? 70);
+      player.setVolume(
+        Number(ui.elements.volumeBar?.value ?? 75)
+      );
 
       console.info("[Shunel] YouTube Player listo.");
     },
@@ -485,15 +671,19 @@ function initializePlayer() {
       isPlaying = playing;
 
       ui.setPlaying(playing);
+      updateMediaPlaybackState(playing);
 
       if (playing) {
         startProgressUpdates();
+        updateMediaPosition();
       } else {
         window.clearInterval(progressTimer);
       }
     },
 
-    onEnded: playNext,
+    onEnded: () => {
+      playNext();
+    },
 
     onError: code => {
       isPlaying = false;
@@ -501,6 +691,7 @@ function initializePlayer() {
       window.clearInterval(progressTimer);
 
       ui.setPlaying(false);
+      updateMediaPlaybackState(false);
 
       console.warn(
         "[Shunel] YouTube player error:",
@@ -531,13 +722,16 @@ function initializePlayer() {
 
 function initialize() {
   bindEvents();
+  setupMediaSession();
 
   refreshCollections();
   refreshQueue();
 
   ui.setCurrentTrack(null, false);
+  ui.setPlaying(false);
 
-  // Iniciar siempre en Inicio.
+  updateMediaPlaybackState(false);
+
   navigateToView("home");
 
   initializePlayer();
