@@ -14,378 +14,361 @@
   <meta name="description" content="Shunel, tu espacio musical.">
 
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta
-    name="apple-mobile-web-app-status-bar-style"
-    content="black-translucent"
-  >
-
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="mobile-web-app-capable" content="yes">
+
+  <meta name="color-scheme" content="dark">
 
   <title>Shunel — Music</title>
 
+  <link rel="icon" type="image/png" href="/assets/favicon.png">
+  <link rel="apple-touch-icon" href="/assets/logo.png">
   <link rel="manifest" href="/manifest.json">
 
-  <!-- STYLES -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://i.ytimg.com">
+  <link rel="preconnect" href="https://www.youtube.com">
+
+  <link
+    href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap"
+    rel="stylesheet"
+  >
+
   <link rel="stylesheet" href="/css/style.css">
   <link rel="stylesheet" href="/css/components.css">
   <link rel="stylesheet" href="/css/player.css">
   <link rel="stylesheet" href="/css/animations.css">
-
 </head>
 
 <body>
 
+  <!-- =====================================
+       SVG ICON SPRITE
+  ====================================== -->
+
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    aria-hidden="true"
+    style="position:absolute;width:0;height:0;overflow:hidden"
+  >
+    <symbol id="icon-home" viewBox="0 0 24 24">
+      <path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/>
+    </symbol>
+
+    <symbol id="icon-search" viewBox="0 0 24 24">
+      <circle cx="10.8" cy="10.8" r="7"/>
+      <path d="m16 16 5 5"/>
+    </symbol>
+
+    <symbol id="icon-library" viewBox="0 0 24 24">
+      <path d="M4 4v16M9 4v16M14 4v16M19 4v16"/>
+    </symbol>
+
+    <symbol id="icon-heart" viewBox="0 0 24 24">
+      <path d="M20.8 8.8c0 5.2-8.8 11-8.8 11S3.2 14 3.2 8.8A4.8 4.8 0 0 1 12 6.1a4.8 4.8 0 0 1 8.8 2.7z"/>
+    </symbol>
+
+    <symbol id="icon-play" viewBox="0 0 24 24">
+      <path d="m8 5 12 7-12 7z" fill="currentColor" stroke="none"/>
+    </symbol>
+
+    <symbol id="icon-pause" viewBox="0 0 24 24">
+      <path d="M8 5h3v14H8zM15 5h3v14h-3z" fill="currentColor" stroke="none"/>
+    </symbol>
+
+    <symbol id="icon-previous" viewBox="0 0 24 24">
+      <path d="M6 5v14M19 5 8 12l11 7z"/>
+    </symbol>
+
+    <symbol id="icon-next" viewBox="0 0 24 24">
+      <path d="M18 5v14M5 5l11 7-11 7z"/>
+    </symbol>
+
+    <symbol id="icon-queue" viewBox="0 0 24 24">
+      <path d="M4 6h16M4 12h16M4 18h10"/>
+      <path d="m17 16 3 2-3 2"/>
+    </symbol>
+
+    <symbol id="icon-chevron-down" viewBox="0 0 24 24">
+      <path d="m6 9 6 6 6-6"/>
+    </symbol>
+
+    <symbol id="icon-chevron-up" viewBox="0 0 24 24">
+      <path d="m6 15 6-6 6 6"/>
+    </symbol>
+
+    <symbol id="icon-close" viewBox="0 0 24 24">
+      <path d="m18 6-12 12M6 6l12 12"/>
+    </symbol>
+
+    <symbol id="icon-more" viewBox="0 0 24 24">
+      <circle cx="5" cy="12" r="1"/>
+      <circle cx="12" cy="12" r="1"/>
+      <circle cx="19" cy="12" r="1"/>
+    </symbol>
+
+    <symbol id="icon-user" viewBox="0 0 24 24">
+      <circle cx="12" cy="8" r="4"/>
+      <path d="M4 21a8 8 0 0 1 16 0"/>
+    </symbol>
+
+    <symbol id="icon-music" viewBox="0 0 24 24">
+      <path d="M9 18V5l12-2v13"/>
+      <circle cx="6" cy="18" r="3"/>
+      <circle cx="18" cy="16" r="3"/>
+    </symbol>
+
+    <symbol id="icon-sparkles" viewBox="0 0 24 24">
+      <path d="m12 3 1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/>
+      <path d="m19 14 1 2.5 2.5 1-2.5 1L19 21l-1-2.5-2.5-1 2.5-1z"/>
+    </symbol>
+
+    <symbol id="icon-volume" viewBox="0 0 24 24">
+      <path d="M4 9v6h4l5 4V5L8 9z"/>
+      <path d="M17 9a5 5 0 0 1 0 6M19 5a10 10 0 0 1 0 14"/>
+    </symbol>
+
+    <symbol id="icon-shuffle" viewBox="0 0 24 24">
+      <path d="M3 7h2a5 5 0 0 1 4 2l6 6a5 5 0 0 0 4 2h2"/>
+      <path d="m17 13 4 4-4 4"/>
+      <path d="M3 17h2a5 5 0 0 0 4-2l2-2"/>
+      <path d="m17 3 4 4-4 4"/>
+      <path d="M14 9l1-1a5 5 0 0 1 4-1h1"/>
+    </symbol>
+
+    <symbol id="icon-history" viewBox="0 0 24 24">
+      <path d="M3 12a9 9 0 1 0 3-6.7L3 8"/>
+      <path d="M3 3v5h5M12 7v5l3 2"/>
+    </symbol>
+  </svg>
+
+
+  <!-- =====================================
+       APPLICATION
+  ====================================== -->
+
   <div class="app-shell">
 
-    <!-- =====================================
-         SVG ICON SPRITE
-    ====================================== -->
-
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      style="position:absolute;width:0;height:0;overflow:hidden"
-      aria-hidden="true"
-    >
-
-      <symbol id="icon-home" viewBox="0 0 24 24">
-        <path d="m3 10 9-7 9 7"/>
-        <path d="M5 9v12h14V9"/>
-        <path d="M9 21v-7h6v7"/>
-      </symbol>
-
-      <symbol id="icon-search" viewBox="0 0 24 24">
-        <circle cx="10.8" cy="10.8" r="7.3"/>
-        <path d="m16.2 16.2 4.3 4.3"/>
-      </symbol>
-
-      <symbol id="icon-library" viewBox="0 0 24 24">
-        <path d="M4 5h16M4 10h16M4 15h11M4 20h11"/>
-        <path d="M19 15v5M16.5 17.5h5"/>
-      </symbol>
-
-      <symbol id="icon-heart" viewBox="0 0 24 24">
-        <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21l7.8-7.5 1.1-1.1a5.5 5.5 0 0 0-.1-7.8z"/>
-      </symbol>
-
-      <symbol id="icon-play" viewBox="0 0 24 24">
-        <path d="M8 5.5v13L19 12 8 5.5z" fill="currentColor" stroke="none"/>
-      </symbol>
-
-      <symbol id="icon-pause" viewBox="0 0 24 24">
-        <path d="M8 5v14M16 5v14" stroke-width="3"/>
-      </symbol>
-
-      <symbol id="icon-previous" viewBox="0 0 24 24">
-        <path d="M6 5v14"/>
-        <path d="M19 5 8 12l11 7V5z"/>
-      </symbol>
-
-      <symbol id="icon-next" viewBox="0 0 24 24">
-        <path d="M18 5v14"/>
-        <path d="M5 5l11 7-11 7V5z"/>
-      </symbol>
-
-      <symbol id="icon-queue" viewBox="0 0 24 24">
-        <path d="M4 6h16M4 12h16M4 18h10"/>
-        <path d="M17 16l3 2-3 2"/>
-      </symbol>
-
-      <symbol id="icon-chevron-down" viewBox="0 0 24 24">
-        <path d="m6 9 6 6 6-6"/>
-      </symbol>
-
-      <symbol id="icon-chevron-up" viewBox="0 0 24 24">
-        <path d="m6 15 6-6 6 6"/>
-      </symbol>
-
-      <symbol id="icon-close" viewBox="0 0 24 24">
-        <path d="M18 6 6 18M6 6l12 12"/>
-      </symbol>
-
-      <symbol id="icon-more" viewBox="0 0 24 24">
-        <circle cx="5" cy="12" r="1"/>
-        <circle cx="12" cy="12" r="1"/>
-        <circle cx="19" cy="12" r="1"/>
-      </symbol>
-
-      <symbol id="icon-user" viewBox="0 0 24 24">
-        <circle cx="12" cy="8" r="4"/>
-        <path d="M4 21a8 8 0 0 1 16 0"/>
-      </symbol>
-
-      <symbol id="icon-music" viewBox="0 0 24 24">
-        <path d="M9 18V5l12-2v13"/>
-        <circle cx="6" cy="18" r="3"/>
-        <circle cx="18" cy="16" r="3"/>
-      </symbol>
-
-      <symbol id="icon-sparkles" viewBox="0 0 24 24">
-        <path d="m12 3 1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z"/>
-        <path d="m19 14 1.1 2.9L23 18l-2.9 1.1L19 22l-1.1-2.9L15 18l2.9-1.1L19 14z"/>
-      </symbol>
-
-      <symbol id="icon-volume" viewBox="0 0 24 24">
-        <path d="M4 10v4h4l5 4V6l-5 4H4z"/>
-        <path d="M17 9a5 5 0 0 1 0 6"/>
-        <path d="M19.5 6.5a9 9 0 0 1 0 11"/>
-      </symbol>
-
-      <symbol id="icon-shuffle" viewBox="0 0 24 24">
-        <path d="M16 3h5v5"/>
-        <path d="m4 20 17-17"/>
-        <path d="M21 16v5h-5"/>
-        <path d="m15 15 6 6"/>
-        <path d="M4 4l5 5"/>
-      </symbol>
-
-      <symbol id="icon-history" viewBox="0 0 24 24">
-        <path d="M3 12a9 9 0 1 0 2.6-6.4L3 8"/>
-        <path d="M3 3v5h5"/>
-        <path d="M12 7v5l3 2"/>
-      </symbol>
-
-    </svg>
-
-
-    <!-- =====================================
-         HEADER
-    ====================================== -->
+    <!-- HEADER -->
 
     <header class="topbar">
 
       <a
         class="mobile-brand"
         href="#"
-        aria-label="Shunel inicio"
         data-view="home"
+        aria-label="Shunel, inicio"
       >
-
         <img
-          src="/assets/logo.png"
-          alt="Shunel"
           class="brand-logo"
+          src="/assets/logo.png"
+          alt=""
+          width="34"
+          height="34"
         >
 
         <strong>shunel</strong>
-
       </a>
 
       <div class="topbar-spacer"></div>
 
-      <button
-        class="icon-button profile-button"
-        id="profileButton"
-        type="button"
-        aria-label="Perfil"
-      >
-        <svg viewBox="0 0 24 24">
-          <use href="#icon-user"/>
-        </svg>
-      </button>
-
     </header>
 
 
-    <!-- =====================================
+    <!-- =================================
          MAIN CONTENT
-    ====================================== -->
+    ================================== -->
 
     <main class="main-content">
 
 
-      <!-- =====================================
-           INICIO
-    ====================================== -->
+      <!-- HOME -->
 
       <section
-        class="view active"
         id="view-home"
+        class="view active"
         aria-hidden="false"
       >
 
-        <div class="home-greeting">
+        <header class="home-greeting">
 
-          <p class="eyebrow">TU ESPACIO MUSICAL</p>
+          <span class="eyebrow">TU ESPACIO MUSICAL</span>
 
-          <h1>
-            Tu música.
-            <span>Tu momento.</span>
-          </h1>
+          <h1>Buenas noches.</h1>
 
-          <p class="hero-copy">
-            Encuentra algo que te guste escuchar.
+          <p>
+            Tu música, a tu manera.
           </p>
 
-        </div>
+        </header>
 
 
-        <!-- ACCESOS RÁPIDOS -->
+        <!-- QUICK ACCESS -->
 
-        <div class="quick-access">
+        <section class="home-section">
 
-          <button
-            class="quick-card"
-            type="button"
-            data-view="library"
-            data-library-filter="favorites"
-          >
+          <div class="section-heading">
+            <h2>Tu biblioteca</h2>
+          </div>
 
-            <span class="quick-card-icon">
-              <svg viewBox="0 0 24 24">
-                <use href="#icon-heart"/>
-              </svg>
-            </span>
+          <div class="quick-access">
 
-            <span>Favoritos</span>
+            <button
+              class="quick-card"
+              type="button"
+              data-view="library"
+              data-library-filter="all"
+            >
+              <span class="quick-card-icon">
+                <svg><use href="#icon-library"></use></svg>
+              </span>
 
-          </button>
-
-
-          <button
-            class="quick-card"
-            type="button"
-            data-view="library"
-            data-library-filter="all"
-          >
-
-            <span class="quick-card-icon">
-              <svg viewBox="0 0 24 24">
-                <use href="#icon-library"/>
-              </svg>
-            </span>
-
-            <span>Biblioteca</span>
-
-          </button>
-
-        </div>
+              <span>Biblioteca</span>
+            </button>
 
 
-        <!-- RECIENTES -->
+            <button
+              class="quick-card"
+              type="button"
+              data-view="library"
+              data-library-filter="favorites"
+            >
+              <span class="quick-card-icon">
+                <svg><use href="#icon-heart"></use></svg>
+              </span>
 
-        <div class="section-heading">
+              <span>Favoritos</span>
+            </button>
 
-          <div>
-            <p class="eyebrow">TU MÚSICA</p>
+          </div>
+
+        </section>
+
+
+        <!-- RECENTLY PLAYED -->
+
+        <section class="home-section">
+
+          <div class="section-heading">
             <h2>Escuchado recientemente</h2>
+
+            <button
+              class="text-button"
+              type="button"
+              data-view="history"
+            >
+              Ver todo
+            </button>
           </div>
 
-          <button
-            class="text-button"
-            type="button"
-            data-view="history"
-          >
-            Ver todo
-          </button>
+          <div
+            id="homeRecentList"
+            class="track-list"
+          ></div>
 
-        </div>
-
-        <div
-          class="track-list"
-          id="homeRecentList"
-        ></div>
+        </section>
 
 
-        <!-- RECOMENDACIONES -->
+        <!-- DISCOVER -->
 
-        <div class="section-heading">
+        <section class="home-section">
 
-          <div>
-            <p class="eyebrow">DESCUBRE</p>
-            <h2>Explora música</h2>
+          <div class="section-heading">
+            <h2>Para descubrir</h2>
           </div>
 
-        </div>
+          <div class="home-discover">
 
-        <div class="home-discover">
+            <button
+              class="discover-card"
+              type="button"
+              data-search="música popular"
+            >
+              <span class="discover-card-icon">
+                <svg><use href="#icon-sparkles"></use></svg>
+              </span>
 
-          <button
-            class="discover-card"
-            type="button"
-            data-search="música popular"
-          >
+              <span class="discover-card-title">
+                Música popular
+              </span>
 
-            <span>
-              <svg viewBox="0 0 24 24">
-                <use href="#icon-music"/>
-              </svg>
-            </span>
-
-            <strong>Lo más escuchado</strong>
-
-          </button>
+              <span class="discover-card-description">
+                Descubre canciones que están sonando.
+              </span>
+            </button>
 
 
-          <button
-            class="discover-card"
-            type="button"
-            data-search="música nueva"
-          >
+            <button
+              class="discover-card"
+              type="button"
+              data-search="música nueva"
+            >
+              <span class="discover-card-icon">
+                <svg><use href="#icon-music"></use></svg>
+              </span>
 
-            <span>
-              <svg viewBox="0 0 24 24">
-                <use href="#icon-sparkles"/>
-              </svg>
-            </span>
+              <span class="discover-card-title">
+                Nuevos sonidos
+              </span>
 
-            <strong>Música nueva</strong>
+              <span class="discover-card-description">
+                Encuentra algo diferente.
+              </span>
+            </button>
 
-          </button>
+          </div>
 
-        </div>
+        </section>
 
       </section>
 
 
-      <!-- =====================================
-           BUSCAR
-    ====================================== -->
+
+      <!-- =================================
+           SEARCH
+      ================================== -->
 
       <section
-        class="view"
         id="view-search"
+        class="view"
         aria-hidden="true"
       >
 
-        <div class="page-heading">
-
-          <p class="eyebrow">DESCUBRE ALGO NUEVO</p>
-
+        <header class="page-heading">
+          <span class="eyebrow">ENCUENTRA TU MÚSICA</span>
           <h1>Buscar</h1>
+          <p>Busca canciones, artistas y más.</p>
+        </header>
 
-          <p class="hero-copy">
-            Encuentra canciones, artistas y álbumes.
-          </p>
-
-        </div>
-
-
-        <!-- BUSCADOR -->
 
         <form
-          class="search-form"
           id="searchForm"
+          class="search-form"
+          autocomplete="off"
         >
 
-          <span class="search-symbol" aria-hidden="true">
+          <label
+            class="sr-only"
+            for="searchInput"
+          >
+            Buscar música
+          </label>
 
-            <svg viewBox="0 0 24 24">
-              <use href="#icon-search"/>
-            </svg>
-
+          <span class="search-icon">
+            <svg><use href="#icon-search"></use></svg>
           </span>
 
           <input
             id="searchInput"
+            name="search"
             type="search"
-            maxlength="150"
             placeholder="¿Qué quieres escuchar?"
             autocomplete="off"
-            required
+            enterkeyhint="search"
           >
 
           <button
-            class="primary-button"
             id="searchButton"
             type="submit"
           >
@@ -395,230 +378,195 @@
         </form>
 
 
-        <p
-          class="status-message"
+        <div
           id="status"
+          class="search-status"
           role="status"
           aria-live="polite"
-        >
-          Busca una canción para comenzar.
-        </p>
+        ></div>
 
 
-        <!-- RESULTADOS -->
+        <div class="results-heading">
+          <h2>Resultados</h2>
 
-        <div class="section-heading">
-
-          <div>
-            <p class="eyebrow">TU BÚSQUEDA</p>
-            <h2>Resultados</h2>
-          </div>
-
-          <span
-            class="muted tiny"
-            id="resultCount"
-          ></span>
-
+          <span id="resultCount"></span>
         </div>
 
+
         <div
-          class="track-list"
           id="results"
+          class="track-list"
           aria-live="polite"
         ></div>
 
       </section>
 
 
-      <!-- =====================================
-           BIBLIOTECA
-    ====================================== -->
+
+      <!-- =================================
+           LIBRARY
+      ================================== -->
 
       <section
-        class="view"
         id="view-library"
+        class="view"
         aria-hidden="true"
       >
 
-        <div class="page-heading">
-
-          <p class="eyebrow">TU COLECCIÓN</p>
-
+        <header class="page-heading">
+          <span class="eyebrow">TU COLECCIÓN</span>
           <h1>Biblioteca</h1>
+          <p>Todo lo que guardas en Shunel.</p>
+        </header>
 
-          <p class="hero-copy">
-            Todo lo que has guardado en Shunel.
-          </p>
-
-        </div>
-
-        <!-- FILTROS DE BIBLIOTECA -->
 
         <div class="library-filters">
 
           <button
-            class="filter-chip active"
+            class="library-filter active"
             type="button"
             data-library-filter="all"
-            aria-pressed="true"
           >
             Todo
           </button>
 
           <button
-            class="filter-chip"
+            class="library-filter"
             type="button"
             data-library-filter="favorites"
-            aria-pressed="false"
           >
-            <svg viewBox="0 0 24 24">
-              <use href="#icon-heart"/>
-            </svg>
-
             Favoritos
           </button>
 
         </div>
 
-        <!-- CANCIONES GUARDADAS -->
 
         <div
-          class="track-list"
-          id="libraryList"
-        ></div>
+          class="library-panel"
+          id="libraryPanel"
+        >
 
-        <!-- FAVORITOS -->
-
-        <div
-          class="track-list"
-          id="favoritesList"
-          hidden
-        ></div>
-
-      </section>
-
-
-      <!-- =====================================
-           HISTORIAL
-    ====================================== -->
-
-      <section
-        class="view"
-        id="view-history"
-        aria-hidden="true"
-      >
-
-        <div class="page-heading">
-
-          <p class="eyebrow">RECIENTEMENTE</p>
-
-          <h1>Historial</h1>
-
-          <p class="hero-copy">
-            Vuelve a escuchar lo que te gusta.
-          </p>
+          <div
+            id="libraryList"
+            class="track-list"
+          ></div>
 
         </div>
 
+
         <div
-          class="track-list"
+          class="library-panel"
+          id="favoritesPanel"
+          hidden
+        >
+
+          <div
+            id="favoritesList"
+            class="track-list"
+          ></div>
+
+        </div>
+
+      </section>
+
+
+
+      <!-- =================================
+           HISTORY
+      ================================== -->
+
+      <section
+        id="view-history"
+        class="view"
+        aria-hidden="true"
+      >
+
+        <header class="page-heading">
+          <span class="eyebrow">TU ACTIVIDAD</span>
+          <h1>Historial</h1>
+          <p>Vuelve a escuchar lo que ya descubriste.</p>
+        </header>
+
+
+        <div
           id="historyList"
+          class="track-list"
         ></div>
 
       </section>
 
 
-      <!-- =====================================
+
+      <!-- =================================
            YOUTUBE PLAYER
-    ====================================== -->
+      ================================== -->
 
       <section
         class="youtube-stage"
         aria-label="Reproductor de YouTube"
       >
 
-        <div class="section-heading">
-
-          <div>
-            <p class="eyebrow">REPRODUCTOR OFICIAL</p>
-            <h2>Ahora suena</h2>
-          </div>
-
+        <div class="youtube-section-heading">
+          <span class="eyebrow">REPRODUCTOR</span>
         </div>
 
         <div class="youtube-frame-wrap">
+
           <div id="youtubePlayerHost"></div>
+
         </div>
 
-        <p class="player-disclaimer">
-          La reproducción se realiza mediante el reproductor oficial de YouTube.
+        <p class="youtube-disclaimer">
+          Reproducción de contenido mediante YouTube.
         </p>
 
       </section>
 
 
-      <!-- FOOTER -->
-
-      <footer class="footer">
-
-        <span>SHUNEL</span>
-
-        <span>La música que te acompaña.</span>
-
-      </footer>
-
     </main>
 
 
-    <!-- =====================================
+
+    <!-- =================================
          MINI PLAYER
-    ====================================== -->
+    ================================== -->
 
     <section
       class="player-dock"
       aria-label="Reproductor musical"
     >
 
-      <div class="now-playing">
+      <div
+        class="now-playing"
+        aria-label="Canción actual"
+      >
 
         <img
           id="currentThumbnail"
+          class="current-art"
           src="/assets/placeholder.svg"
           alt=""
-          class="current-art"
+          width="47"
+          height="47"
         >
 
         <div class="now-playing-text">
 
           <div
-            class="current-title"
             id="currentTitle"
+            class="current-title"
           >
-            Elige una canción
+            Selecciona una canción
           </div>
 
           <div
-            class="current-channel"
             id="currentChannel"
+            class="current-channel"
           >
-            Tu música comienza aquí
+            Shunel
           </div>
 
         </div>
-
-        <button
-          class="icon-button favorite-current"
-          id="favoriteCurrent"
-          type="button"
-          aria-label="Agregar a favoritos"
-          title="Favorito"
-        >
-
-          <svg viewBox="0 0 24 24">
-            <use href="#icon-heart"/>
-          </svg>
-
-        </button>
 
       </div>
 
@@ -628,64 +576,37 @@
         <div class="player-controls">
 
           <button
-            class="control-button"
             id="previousButton"
+            class="control-button"
             type="button"
             aria-label="Canción anterior"
+            disabled
           >
-
-            <svg viewBox="0 0 24 24">
-              <use href="#icon-previous"/>
-            </svg>
-
+            <svg><use href="#icon-previous"></use></svg>
           </button>
 
 
           <button
-            class="play-button"
             id="playButton"
+            class="play-button"
             type="button"
             aria-label="Reproducir"
+            aria-pressed="false"
+            disabled
           >
-
-            <svg viewBox="0 0 24 24">
-              <use href="#icon-play"/>
-            </svg>
-
+            <svg><use href="#icon-play"></use></svg>
           </button>
 
 
           <button
-            class="control-button"
             id="nextButton"
+            class="control-button"
             type="button"
             aria-label="Siguiente canción"
+            disabled
           >
-
-            <svg viewBox="0 0 24 24">
-              <use href="#icon-next"/>
-            </svg>
-
+            <svg><use href="#icon-next"></use></svg>
           </button>
-
-        </div>
-
-
-        <div class="progress-row">
-
-          <span id="currentTime">0:00</span>
-
-          <input
-            id="progressBar"
-            type="range"
-            min="0"
-            max="100"
-            value="0"
-            step="0.1"
-            aria-label="Progreso de reproducción"
-          >
-
-          <span id="duration">0:00</span>
 
         </div>
 
@@ -695,116 +616,133 @@
       <div class="player-extra">
 
         <button
-          class="queue-toggle"
-          id="queueToggle"
+          id="favoriteCurrent"
+          class="favorite-current icon-button"
           type="button"
-          aria-label="Mostrar cola"
+          aria-label="Añadir a favoritos"
         >
-
-          <svg viewBox="0 0 24 24">
-            <use href="#icon-queue"/>
-          </svg>
-
-          <span>Cola</span>
-
+          <svg><use href="#icon-heart"></use></svg>
         </button>
 
-        <span class="volume-icon">
-
-          <svg viewBox="0 0 24 24">
-            <use href="#icon-volume"/>
-          </svg>
-
-        </span>
-
-        <input
-          id="volumeBar"
-          type="range"
-          min="0"
-          max="100"
-          value="75"
-          aria-label="Volumen"
+        <label
+          class="volume-control"
+          for="volumeBar"
         >
+          <svg><use href="#icon-volume"></use></svg>
+
+          <input
+            id="volumeBar"
+            type="range"
+            min="0"
+            max="100"
+            value="100"
+            aria-label="Volumen"
+          >
+        </label>
 
       </div>
 
 
       <button
-        class="expand-player"
-        id="expandPlayer"
+        id="queueToggle"
+        class="icon-button queue-toggle"
         type="button"
-        aria-label="Abrir reproductor"
+        aria-label="Abrir cola de reproducción"
       >
-
-        <svg viewBox="0 0 24 24">
-          <use href="#icon-chevron-up"/>
-        </svg>
-
+        <svg><use href="#icon-queue"></use></svg>
       </button>
+
+
+      <button
+        id="expandPlayer"
+        class="expand-player"
+        type="button"
+        aria-label="Expandir reproductor"
+      >
+        <svg><use href="#icon-chevron-up"></use></svg>
+      </button>
+
+
+      <div class="progress-row">
+
+        <span id="currentTime" class="sr-only">0:00</span>
+
+        <input
+          id="progressBar"
+          type="range"
+          min="0"
+          max="100"
+          value="0"
+          step="0.1"
+          aria-label="Progreso de reproducción"
+          disabled
+        >
+
+        <span id="duration" class="sr-only">0:00</span>
+
+      </div>
 
     </section>
 
 
-    <!-- =====================================
+
+    <!-- =================================
          FULL PLAYER
-    ====================================== -->
+    ================================== -->
 
     <section
-      class="full-player"
       id="fullPlayer"
+      class="full-player"
       aria-label="Reproductor expandido"
       aria-hidden="true"
     >
 
-      <div class="full-player-header">
+      <header class="full-player-header">
 
         <button
-          class="icon-button"
           id="closeFullPlayer"
+          class="icon-button"
           type="button"
           aria-label="Cerrar reproductor"
         >
-
-          <svg viewBox="0 0 24 24">
-            <use href="#icon-chevron-down"/>
-          </svg>
-
+          <svg><use href="#icon-chevron-down"></use></svg>
         </button>
 
         <span>REPRODUCIENDO</span>
 
         <button
-          class="icon-button"
           id="fullPlayerQueue"
+          class="icon-button"
           type="button"
           aria-label="Abrir cola"
         >
-
-          <svg viewBox="0 0 24 24">
-            <use href="#icon-queue"/>
-          </svg>
-
+          <svg><use href="#icon-queue"></use></svg>
         </button>
 
-      </div>
+      </header>
 
 
       <div class="full-player-content">
 
+
+        <!-- ARTWORK -->
+
         <img
           id="fullPlayerThumbnail"
+          class="full-player-art"
           src="/assets/placeholder.svg"
           alt="Portada de la canción"
-          class="full-player-art"
         >
 
+
+        <!-- SONG INFORMATION -->
 
         <div class="full-player-info">
 
           <div>
 
             <h2 id="fullPlayerTitle">
-              Elige una canción
+              Selecciona una canción
             </h2>
 
             <p id="fullPlayerChannel">
@@ -813,21 +751,20 @@
 
           </div>
 
+
           <button
-            class="icon-button"
             id="fullPlayerFavorite"
+            class="icon-button"
             type="button"
-            aria-label="Agregar a favoritos"
+            aria-label="Añadir a favoritos"
           >
-
-            <svg viewBox="0 0 24 24">
-              <use href="#icon-heart"/>
-            </svg>
-
+            <svg><use href="#icon-heart"></use></svg>
           </button>
 
         </div>
 
+
+        <!-- PROGRESS -->
 
         <div class="full-progress">
 
@@ -839,6 +776,7 @@
             value="0"
             step="0.1"
             aria-label="Progreso de reproducción"
+            disabled
           >
 
           <div class="full-time">
@@ -852,66 +790,56 @@
         </div>
 
 
+        <!-- CONTROLS -->
+
         <div class="full-player-controls">
 
           <button
-            class="control-button"
             id="fullPreviousButton"
+            class="control-button"
             type="button"
             aria-label="Canción anterior"
+            disabled
           >
-
-            <svg viewBox="0 0 24 24">
-              <use href="#icon-previous"/>
-            </svg>
-
+            <svg><use href="#icon-previous"></use></svg>
           </button>
 
 
           <button
-            class="play-button"
             id="fullPlayButton"
+            class="play-button"
             type="button"
             aria-label="Reproducir"
+            aria-pressed="false"
+            disabled
           >
-
-            <svg viewBox="0 0 24 24">
-              <use href="#icon-play"/>
-            </svg>
-
+            <svg><use href="#icon-play"></use></svg>
           </button>
 
 
           <button
-            class="control-button"
             id="fullNextButton"
+            class="control-button"
             type="button"
             aria-label="Siguiente canción"
+            disabled
           >
-
-            <svg viewBox="0 0 24 24">
-              <use href="#icon-next"/>
-            </svg>
-
+            <svg><use href="#icon-next"></use></svg>
           </button>
 
         </div>
 
 
+        <!-- PLAYER OPTIONS -->
+
         <div class="full-player-options">
 
           <button
-            class="queue-toggle"
             id="fullQueueToggle"
             type="button"
           >
-
-            <svg viewBox="0 0 24 24">
-              <use href="#icon-queue"/>
-            </svg>
-
-            Cola
-
+            <svg><use href="#icon-queue"></use></svg>
+            Cola de reproducción
           </button>
 
         </div>
@@ -921,9 +849,10 @@
     </section>
 
 
-    <!-- =====================================
+
+    <!-- =================================
          BOTTOM NAVIGATION
-    ====================================== -->
+    ================================== -->
 
     <nav
       class="bottom-nav"
@@ -937,17 +866,11 @@
         aria-label="Inicio"
         aria-current="page"
       >
-
         <span class="bottom-nav-icon">
-
-          <svg viewBox="0 0 24 24">
-            <use href="#icon-home"/>
-          </svg>
-
+          <svg><use href="#icon-home"></use></svg>
         </span>
 
         <span>Inicio</span>
-
       </button>
 
 
@@ -958,17 +881,11 @@
         aria-label="Buscar"
         aria-current="false"
       >
-
         <span class="bottom-nav-icon">
-
-          <svg viewBox="0 0 24 24">
-            <use href="#icon-search"/>
-          </svg>
-
+          <svg><use href="#icon-search"></use></svg>
         </span>
 
         <span>Buscar</span>
-
       </button>
 
 
@@ -979,17 +896,11 @@
         aria-label="Biblioteca"
         aria-current="false"
       >
-
         <span class="bottom-nav-icon">
-
-          <svg viewBox="0 0 24 24">
-            <use href="#icon-library"/>
-          </svg>
-
+          <svg><use href="#icon-library"></use></svg>
         </span>
 
         <span>Biblioteca</span>
-
       </button>
 
 
@@ -1000,66 +911,61 @@
         aria-label="Historial"
         aria-current="false"
       >
-
         <span class="bottom-nav-icon">
-
-          <svg viewBox="0 0 24 24">
-            <use href="#icon-history"/>
-          </svg>
-
+          <svg><use href="#icon-history"></use></svg>
         </span>
 
         <span>Historial</span>
-
       </button>
 
     </nav>
 
 
-    <!-- =====================================
+
+    <!-- =================================
          QUEUE PANEL
-    ====================================== -->
+    ================================== -->
 
     <aside
-      class="queue-panel"
       id="queuePanel"
+      class="queue-panel"
       aria-label="Cola de reproducción"
       aria-hidden="true"
     >
 
-      <div class="queue-header">
+      <header class="queue-header">
 
         <div>
 
-          <p class="eyebrow">A CONTINUACIÓN</p>
+          <span class="eyebrow">TU MÚSICA</span>
 
-          <h2>Tu cola</h2>
+          <h2>Cola de reproducción</h2>
 
         </div>
 
+
         <button
-          class="icon-button"
           id="closeQueue"
+          class="icon-button"
           type="button"
           aria-label="Cerrar cola"
         >
-
-          <svg viewBox="0 0 24 24">
-            <use href="#icon-close"/>
-          </svg>
-
+          <svg><use href="#icon-close"></use></svg>
         </button>
 
-      </div>
+      </header>
+
 
       <div
-        class="queue-list"
         id="queueList"
+        class="queue-list"
+        aria-live="polite"
       ></div>
 
+
       <button
-        class="text-button"
         id="clearQueue"
+        class="text-button"
         type="button"
       >
         Vaciar cola
@@ -1068,22 +974,25 @@
     </aside>
 
 
-    <!-- =====================================
+
+    <!-- =================================
          TOAST
-    ====================================== -->
+    ================================== -->
 
     <div
-      class="toast"
       id="toast"
+      class="toast"
       role="status"
       aria-live="polite"
+      aria-atomic="true"
     ></div>
+
 
   </div>
 
 
   <!-- =====================================
-       JAVASCRIPT
+       APPLICATION SCRIPT
   ====================================== -->
 
   <script type="module" src="/js/app.js"></script>

@@ -1,25 +1,92 @@
 
-/* =========================================
-   SHUNEL — MOBILE PLAYER
-   FULL BLACK EDITION
-   SVG ICON EDITION
-========================================= */
+/* =========================================================
+   SHUNEL — PLAYER SYSTEM
+   LIQUID GLASS EDITION
+   iOS / MOBILE FIRST
+========================================================= */
+
+/* =========================================================
+   01. DESIGN TOKENS
+========================================================= */
 
 :root {
-  --player-bg: #090909;
-  --player-surface: #151515;
-  --player-surface-2: #202020;
-  --player-border: rgba(255,255,255,.08);
+  color-scheme: dark;
 
-  --player-text: #ffffff;
-  --player-muted: #929292;
+  --player-bg: #080808;
+  --player-bg-soft: #101010;
 
-  --player-radius: 13px;
+  --player-surface: rgba(25, 25, 25, .78);
+  --player-surface-strong: rgba(31, 31, 31, .94);
+  --player-surface-light: rgba(255, 255, 255, .055);
+
+  --player-border: rgba(255, 255, 255, .09);
+  --player-border-light: rgba(255, 255, 255, .15);
+
+  --player-text: #f7f7f7;
+  --player-muted: #999999;
+  --player-subtle: #686868;
+
+  --player-accent: #ffffff;
+  --player-accent-soft: rgba(255, 255, 255, .12);
+
+  --player-radius: 16px;
+  --player-radius-small: 11px;
+  --player-radius-large: 23px;
+
+  --player-blur: 28px;
+  --player-blur-heavy: 42px;
+
+  --player-shadow:
+    0 12px 40px rgba(0, 0, 0, .42);
+
+  --player-shadow-deep:
+    0 25px 80px rgba(0, 0, 0, .65);
+
+  --player-transition:
+    .25s cubic-bezier(.2, .8, .2, 1);
+
+  --player-spring:
+    .42s cubic-bezier(.2, 1.3, .35, 1);
+
+  --player-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --player-safe-top: env(safe-area-inset-top, 0px);
 }
 
-/* =========================================
-   SVG ICON SYSTEM
-========================================= */
+/* =========================================================
+   02. PLAYER RESET
+========================================================= */
+
+.player-dock,
+.full-player,
+.queue-panel,
+.youtube-stage {
+  box-sizing: border-box;
+}
+
+.player-dock *,
+.full-player *,
+.queue-panel *,
+.youtube-stage * {
+  box-sizing: border-box;
+}
+
+.player-dock button,
+.full-player button,
+.queue-panel button {
+  -webkit-tap-highlight-color: transparent;
+  font-family: inherit;
+}
+
+.player-dock button:disabled,
+.full-player button:disabled,
+.queue-panel button:disabled {
+  opacity: .35;
+  cursor: not-allowed;
+}
+
+/* =========================================================
+   03. SVG ICON SYSTEM
+========================================================= */
 
 .player-dock svg,
 .full-player svg,
@@ -76,9 +143,73 @@
   height: 19px;
 }
 
-/* =========================================
-   MINI PLAYER
-========================================= */
+/* =========================================================
+   04. LIQUID GLASS MATERIAL
+========================================================= */
+
+.player-dock,
+.full-player-header .icon-button,
+.full-player-info .icon-button,
+.full-player-options button,
+.queue-panel,
+.queue-header .icon-button {
+  -webkit-backdrop-filter:
+    blur(var(--player-blur)) saturate(155%);
+
+  backdrop-filter:
+    blur(var(--player-blur)) saturate(155%);
+}
+
+.player-dock {
+  isolation: isolate;
+}
+
+.player-dock::before,
+.queue-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+
+  pointer-events: none;
+
+  border-radius: inherit;
+
+  background:
+    linear-gradient(
+      145deg,
+      rgba(255, 255, 255, .10),
+      transparent 35%,
+      transparent 70%,
+      rgba(255, 255, 255, .025)
+    );
+
+  opacity: .8;
+}
+
+.player-dock::after {
+  content: "";
+  position: absolute;
+
+  top: 0;
+  left: 15%;
+
+  width: 70%;
+  height: 1px;
+
+  pointer-events: none;
+
+  background:
+    linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, .20),
+      transparent
+    );
+}
+
+/* =========================================================
+   05. MINI PLAYER
+========================================================= */
 
 .player-dock {
   position: fixed;
@@ -87,34 +218,52 @@
   left: 10px;
   right: 10px;
 
-  bottom: calc(
-    65px + env(safe-area-inset-bottom) + 7px
-  );
+  bottom:
+    calc(65px + var(--player-safe-bottom) + 7px);
 
-  min-height: 66px;
+  min-height: 68px;
 
   display: grid;
-  grid-template-columns: minmax(0,1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
 
   padding: 8px 12px;
 
-  background: #191919;
-  border: 1px solid rgba(255,255,255,.09);
-  border-radius: 13px;
+  overflow: hidden;
 
-  box-shadow: 0 8px 30px rgba(0,0,0,.45);
+  background:
+    linear-gradient(
+      135deg,
+      rgba(35, 35, 35, .90),
+      rgba(17, 17, 17, .86)
+    );
 
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--player-border-light);
+  border-radius: 17px;
+
+  box-shadow:
+    0 8px 30px rgba(0, 0, 0, .38),
+    inset 0 1px 0 rgba(255, 255, 255, .08);
+
+  transition:
+    transform var(--player-transition),
+    opacity var(--player-transition),
+    background var(--player-transition);
 }
 
-/* =========================================
-   NOW PLAYING
-========================================= */
+.player-dock:active {
+  transform: scale(.992);
+}
+
+/* =========================================================
+   06. NOW PLAYING
+========================================================= */
 
 .now-playing {
+  position: relative;
+  z-index: 1;
+
   min-width: 0;
 
   display: flex;
@@ -126,16 +275,27 @@
 
 .current-art,
 .now-playing img {
-  width: 46px;
-  height: 46px;
+  width: 47px;
+  height: 47px;
 
-  flex: 0 0 46px;
+  flex: 0 0 47px;
 
   object-fit: cover;
 
-  border-radius: 7px;
+  border-radius: 9px;
 
-  background: #292929;
+  background: #202020;
+
+  box-shadow:
+    0 3px 12px rgba(0, 0, 0, .32);
+
+  transition:
+    transform var(--player-transition),
+    border-radius var(--player-transition);
+}
+
+.now-playing:active .current-art {
+  transform: scale(.95);
 }
 
 .now-playing-text {
@@ -151,10 +311,11 @@
   white-space: nowrap;
   text-overflow: ellipsis;
 
-  color: #ffffff;
+  color: var(--player-text);
 
   font-size: 12px;
   font-weight: 700;
+  letter-spacing: -.15px;
 }
 
 .current-channel {
@@ -162,20 +323,24 @@
   white-space: nowrap;
   text-overflow: ellipsis;
 
-  color: #999999;
+  color: var(--player-muted);
 
   font-size: 10px;
+  font-weight: 500;
 }
 
 .favorite-current {
   display: none;
 }
 
-/* =========================================
-   PLAYER CENTER
-========================================= */
+/* =========================================================
+   07. PLAYER CONTROLS
+========================================================= */
 
 .player-center {
+  position: relative;
+  z-index: 2;
+
   width: auto;
   max-width: none;
 
@@ -190,44 +355,53 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0;
+  gap: 2px;
 }
 
 .player-controls button,
-.player-extra button {
+.player-extra button,
+.expand-player {
   display: inline-flex;
   align-items: center;
   justify-content: center;
 
   border: 0;
-  background: transparent;
+  outline: 0;
 
-  color: #ffffff;
+  background: transparent;
+  color: var(--player-text);
 
   cursor: pointer;
 
-  transition: transform .15s ease, opacity .15s ease;
+  transition:
+    transform .16s ease,
+    opacity .16s ease,
+    background .16s ease;
 }
 
-.player-controls button:active {
-  transform: scale(.9);
+.player-controls button:active,
+.player-extra button:active,
+.expand-player:active {
+  transform: scale(.88);
   opacity: .7;
 }
 
 .control-button {
-  width: 34px;
-  height: 38px;
+  width: 35px;
+  height: 39px;
 
   font-size: 15px;
 }
 
-/* =========================================
-   PLAY BUTTON
-========================================= */
+/* =========================================================
+   08. PLAY BUTTON
+========================================================= */
 
 .play-button {
-  width: 37px !important;
-  height: 37px !important;
+  position: relative;
+
+  width: 39px !important;
+  height: 39px !important;
 
   display: inline-flex;
   align-items: center;
@@ -236,15 +410,20 @@
   border: 0;
   border-radius: 50%;
 
-  background: #ffffff !important;
-  color: #090909 !important;
+  background: #fff !important;
+  color: #080808 !important;
 
   font-size: 15px !important;
   font-weight: 800;
 
   cursor: pointer;
 
-  transition: transform .15s ease, background .15s ease;
+  box-shadow:
+    0 2px 12px rgba(255, 255, 255, .12);
+
+  transition:
+    transform var(--player-spring),
+    box-shadow var(--player-transition);
 }
 
 .play-button svg {
@@ -252,12 +431,13 @@
 }
 
 .play-button:active {
-  transform: scale(.92);
+  transform: scale(.89);
+  box-shadow: 0 0 0 5px rgba(255, 255, 255, .07);
 }
 
-/* =========================================
-   MINI PLAYER PROGRESS
-========================================= */
+/* =========================================================
+   09. MINI PLAYER PROGRESS
+========================================================= */
 
 .player-dock .progress-row {
   position: absolute;
@@ -276,8 +456,7 @@
 
   overflow: hidden;
 
-  background: #343434;
-  border-radius: 0 0 13px 13px;
+  background: rgba(255, 255, 255, .14);
 }
 
 .player-dock .progress-row span {
@@ -285,6 +464,9 @@
 }
 
 .player-dock .progress-row input {
+  position: absolute;
+  inset: 0;
+
   display: block;
 
   width: 100%;
@@ -306,7 +488,7 @@
 
 .player-dock .progress-row input::-webkit-slider-runnable-track {
   height: 2px;
-  background: #343434;
+  background: transparent;
 }
 
 .player-dock .progress-row input::-webkit-slider-thumb {
@@ -316,46 +498,38 @@
   appearance: none;
   -webkit-appearance: none;
 
-  background: #ffffff;
-  box-shadow: -500px 0 0 500px #ffffff;
+  background: #fff;
+  box-shadow: -500px 0 0 500px #fff;
 }
 
 .player-dock .progress-row input::-moz-range-track {
   height: 2px;
-  background: #343434;
+  background: transparent;
 }
 
 .player-dock .progress-row input::-moz-range-progress {
   height: 2px;
-  background: #ffffff;
+  background: #fff;
 }
 
-/* =========================================
-   HIDE DESKTOP EXTRAS
-========================================= */
+/* =========================================================
+   10. PLAYER EXPANSION
+========================================================= */
 
 .player-extra {
   display: none;
 }
 
 .expand-player {
-  display: inline-flex !important;
-  align-items: center;
-  justify-content: center;
-  
-  width: 34px;
-  height: 38px;
-  
-  border: 0;
-  background: transparent;
-  color: #ffffff;
-  
-  cursor: pointer;
+  width: 35px;
+  height: 39px;
+
+  color: #fff;
 }
 
-/* =========================================
-   FULL PLAYER
-========================================= */
+/* =========================================================
+   11. FULL PLAYER
+========================================================= */
 
 .full-player {
   position: fixed;
@@ -366,23 +540,38 @@
   display: flex;
   flex-direction: column;
 
-  padding: calc(12px + env(safe-area-inset-top)) 23px
-    calc(25px + env(safe-area-inset-bottom));
+  padding:
+    calc(12px + var(--player-safe-top))
+    23px
+    calc(25px + var(--player-safe-bottom));
 
-  background: #080808;
+  background:
+    radial-gradient(
+      ellipse at 50% 22%,
+      rgba(255, 255, 255, .055),
+      transparent 55%
+    ),
+    #080808;
 
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
 
-  transform: translateY(20px);
+  transform: translateY(22px);
 
   transition:
-    opacity .25s ease,
-    visibility .25s ease,
-    transform .25s ease;
+    opacity .32s ease,
+    visibility .32s ease,
+    transform .38s cubic-bezier(.2, .8, .2, 1);
 
   overflow-y: auto;
+  overscroll-behavior: contain;
+
+  scrollbar-width: none;
+}
+
+.full-player::-webkit-scrollbar {
+  display: none;
 }
 
 .full-player.active {
@@ -393,11 +582,14 @@
   transform: translateY(0);
 }
 
-/* =========================================
-   FULL PLAYER HEADER
-========================================= */
+/* =========================================================
+   12. FULL PLAYER HEADER
+========================================================= */
 
 .full-player-header {
+  position: relative;
+  z-index: 2;
+
   width: 100%;
   min-height: 48px;
 
@@ -409,17 +601,18 @@
 }
 
 .full-player-header > span {
-  color: #999999;
+  color: var(--player-muted);
 
   font-size: 9px;
   font-weight: 700;
 
-  letter-spacing: 1.5px;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
 }
 
 .full-player-header .icon-button {
-  width: 38px;
-  height: 38px;
+  width: 39px;
+  height: 39px;
 
   display: grid;
   place-items: center;
@@ -427,17 +620,26 @@
   border: 1px solid var(--player-border);
   border-radius: 50%;
 
-  background: #151515;
-  color: #ffffff;
+  background: rgba(255, 255, 255, .07);
+  color: #fff;
 
-  font-size: 20px;
+  transition:
+    transform var(--player-transition),
+    background var(--player-transition);
 }
 
-/* =========================================
-   FULL PLAYER CONTENT
-========================================= */
+.full-player-header .icon-button:active {
+  transform: scale(.88);
+  background: rgba(255, 255, 255, .15);
+}
+
+/* =========================================================
+   13. FULL PLAYER CONTENT
+========================================================= */
 
 .full-player-content {
+  position: relative;
+
   width: 100%;
   max-width: 450px;
 
@@ -448,26 +650,52 @@
   margin: auto;
 }
 
-/* =========================================
-   ALBUM ART
-========================================= */
+/* =========================================================
+   14. ALBUM ART
+========================================================= */
 
 .full-player-art {
+  position: relative;
+
   width: 100%;
   aspect-ratio: 1 / 1;
 
   object-fit: cover;
 
-  border-radius: 15px;
+  border-radius: 17px;
 
   background: #181818;
 
-  box-shadow: 0 15px 45px rgba(0,0,0,.45);
+  box-shadow:
+    0 18px 55px rgba(0, 0, 0, .55),
+    0 2px 8px rgba(255, 255, 255, .04);
+
+  transform: translateZ(0);
+
+  transition:
+    transform .45s cubic-bezier(.2, .8, .2, 1),
+    border-radius .3s ease;
 }
 
-/* =========================================
-   SONG INFORMATION
-========================================= */
+.full-player.active .full-player-art {
+  animation: album-enter .55s cubic-bezier(.2, .8, .2, 1) both;
+}
+
+@keyframes album-enter {
+  from {
+    opacity: .65;
+    transform: scale(.965) translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* =========================================================
+   15. SONG INFORMATION
+========================================================= */
 
 .full-player-info {
   display: flex;
@@ -476,52 +704,66 @@
   gap: 15px;
 }
 
+.full-player-info > div {
+  min-width: 0;
+}
+
 .full-player-info h2 {
   margin: 0 0 7px;
 
-  color: #ffffff;
+  overflow: hidden;
+  text-overflow: ellipsis;
 
-  font: 800 21px 'Manrope', sans-serif;
-  letter-spacing: -.6px;
+  color: #fff;
+
+  font: 800 22px 'Manrope', sans-serif;
+  letter-spacing: -.75px;
 }
 
 .full-player-info p {
   margin: 0;
 
-  color: #999999;
+  color: var(--player-muted);
   font-size: 13px;
 }
 
 .full-player-info .icon-button {
-  width: 40px;
-  height: 40px;
+  width: 42px;
+  height: 42px;
 
   flex: 0 0 auto;
+
+  display: grid;
+  place-items: center;
 
   border: 1px solid var(--player-border);
   border-radius: 50%;
 
-  background: #171717;
-  color: #ffffff;
+  background: rgba(255, 255, 255, .055);
+  color: #fff;
 
-  font-size: 21px;
+  transition:
+    transform var(--player-transition),
+    background var(--player-transition);
 }
 
-/* FAVORITE SVG */
+.full-player-info .icon-button:active {
+  transform: scale(.88);
+}
 
 .full-player-info .icon-button.is-favorite svg {
-  fill: #ffffff;
-  stroke: #ffffff;
+  fill: #fff;
+  stroke: #fff;
 }
 
-/* =========================================
-   FULL PROGRESS
-========================================= */
+/* =========================================================
+   16. FULL PROGRESS
+========================================================= */
 
 .full-progress {
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  gap: 10px;
 }
 
 .full-progress input {
@@ -535,9 +777,14 @@
 
   border-radius: 20px;
 
-  background: #353535;
+  background: rgba(255, 255, 255, .20);
 
   cursor: pointer;
+}
+
+.full-progress input::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 20px;
 }
 
 .full-progress input::-webkit-slider-thumb {
@@ -547,9 +794,14 @@
   appearance: none;
   -webkit-appearance: none;
 
+  margin-top: -4px;
+
+  border: 0;
   border-radius: 50%;
 
-  background: #ffffff;
+  background: #fff;
+
+  box-shadow: 0 1px 6px rgba(0, 0, 0, .4);
 }
 
 .full-progress input::-moz-range-thumb {
@@ -559,68 +811,100 @@
   border: 0;
   border-radius: 50%;
 
-  background: #ffffff;
+  background: #fff;
 }
 
 .full-time {
   display: flex;
   justify-content: space-between;
 
-  color: #858585;
+  color: #888;
 
   font-size: 10px;
   font-variant-numeric: tabular-nums;
 }
 
-/* =========================================
-   FULL PLAYER CONTROLS
-========================================= */
+/* =========================================================
+   17. FULL PLAYER CONTROLS
+========================================================= */
 
 .full-player-controls {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 38px;
+  gap: 37px;
+}
+
+.full-player-controls button {
+  border: 0;
+  background: transparent;
+
+  color: #fff;
+  cursor: pointer;
+
+  transition:
+    transform .16s ease,
+    opacity .16s ease;
+}
+
+.full-player-controls button:active {
+  transform: scale(.86);
+  opacity: .65;
 }
 
 .full-player-controls .control-button {
-  width: 43px;
-  height: 43px;
+  width: 45px;
+  height: 45px;
 
-  color: #ffffff;
+  color: #fff;
   font-size: 20px;
 }
 
 .full-player-controls .play-button {
-  width: 59px !important;
-  height: 59px !important;
+  width: 61px !important;
+  height: 61px !important;
 
   font-size: 21px !important;
 }
 
-/* =========================================
-   FULL PLAYER OPTIONS
-========================================= */
+/* =========================================================
+   18. FULL PLAYER OPTIONS
+========================================================= */
 
 .full-player-options {
   display: flex;
   justify-content: center;
+  flex-wrap: wrap;
+  gap: 9px;
 }
 
 .full-player-options button {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 9px;
 
-  padding: 11px 17px;
+  min-height: 42px;
+
+  padding: 10px 17px;
 
   border: 1px solid var(--player-border);
   border-radius: 30px;
 
-  background: #171717;
-  color: #cccccc;
+  background: rgba(255, 255, 255, .055);
+  color: #d0d0d0;
 
   font-size: 12px;
+
+  transition:
+    background var(--player-transition),
+    border-color var(--player-transition),
+    transform var(--player-transition);
+}
+
+.full-player-options button:active {
+  transform: scale(.96);
+  background: rgba(255, 255, 255, .12);
 }
 
 .full-player-options button svg {
@@ -628,9 +912,9 @@
   height: 18px;
 }
 
-/* =========================================
-   QUEUE PANEL
-========================================= */
+/* =========================================================
+   19. QUEUE PANEL
+========================================================= */
 
 .queue-panel {
   position: fixed;
@@ -640,35 +924,51 @@
   right: 0;
   bottom: 0;
 
-  max-height: 75vh;
-  max-height: 75dvh;
+  max-height: 80vh;
+  max-height: 80dvh;
 
   display: flex;
   flex-direction: column;
 
-  padding: 23px 20px calc(
-    20px + env(safe-area-inset-bottom)
-  );
+  padding:
+    23px
+    20px
+    calc(20px + var(--player-safe-bottom));
 
   overflow-y: auto;
+  overscroll-behavior: contain;
 
-  background: #131313;
+  background:
+    linear-gradient(
+      145deg,
+      rgba(34, 34, 34, .96),
+      rgba(15, 15, 15, .96)
+    );
 
-  border: 1px solid var(--player-border);
-  border-radius: 20px 20px 0 0;
+  border: 1px solid var(--player-border-light);
+  border-bottom: 0;
+  border-radius: 24px 24px 0 0;
 
-  box-shadow: 0 -12px 45px rgba(0,0,0,.55);
+  box-shadow:
+    0 -15px 55px rgba(0, 0, 0, .55),
+    inset 0 1px 0 rgba(255, 255, 255, .09);
+
+  -webkit-backdrop-filter:
+    blur(var(--player-blur-heavy)) saturate(160%);
+
+  backdrop-filter:
+    blur(var(--player-blur-heavy)) saturate(160%);
 
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
 
-  transform: translateY(30px);
+  transform: translateY(35px);
 
   transition:
-    opacity .25s ease,
-    visibility .25s ease,
-    transform .25s ease;
+    opacity .28s ease,
+    visibility .28s ease,
+    transform .35s cubic-bezier(.2, .8, .2, 1);
 }
 
 .queue-panel.active {
@@ -679,29 +979,61 @@
   transform: translateY(0);
 }
 
+/* =========================================================
+   20. QUEUE HANDLE
+========================================================= */
+
+.queue-panel::after {
+  content: "";
+
+  position: absolute;
+  top: 9px;
+  left: 50%;
+
+  width: 36px;
+  height: 4px;
+
+  transform: translateX(-50%);
+
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .25);
+}
+
+/* =========================================================
+   21. QUEUE HEADER
+========================================================= */
+
 .queue-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
 
-  margin-bottom: 17px;
+  margin-bottom: 18px;
 }
 
 .queue-header .eyebrow {
   margin-bottom: 5px;
+
+  color: var(--player-muted);
+
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
 }
 
 .queue-header h2 {
   margin: 0;
 
-  color: #ffffff;
+  color: #fff;
 
   font: 700 21px 'Manrope', sans-serif;
+  letter-spacing: -.5px;
 }
 
 .queue-header .icon-button {
-  width: 36px;
-  height: 36px;
+  width: 38px;
+  height: 38px;
 
   display: grid;
   place-items: center;
@@ -709,11 +1041,13 @@
   border: 1px solid var(--player-border);
   border-radius: 50%;
 
-  background: #222222;
-  color: #ffffff;
-
-  font-size: 20px;
+  background: rgba(255, 255, 255, .08);
+  color: #fff;
 }
+
+/* =========================================================
+   22. QUEUE LIST
+========================================================= */
 
 .queue-list {
   display: grid;
@@ -721,20 +1055,30 @@
 }
 
 .queue-item {
+  position: relative;
+
   display: flex;
   align-items: center;
   gap: 11px;
 
+  min-height: 62px;
+
   padding: 9px;
 
-  border-radius: 9px;
+  border: 1px solid transparent;
+  border-radius: 11px;
 
   cursor: pointer;
-  transition: background .15s ease;
+
+  transition:
+    background var(--player-transition),
+    border-color var(--player-transition),
+    transform var(--player-transition);
 }
 
 .queue-item:active {
-  background: #242424;
+  background: rgba(255, 255, 255, .09);
+  transform: scale(.99);
 }
 
 .queue-item img {
@@ -744,7 +1088,7 @@
   flex: 0 0 44px;
 
   object-fit: cover;
-  border-radius: 7px;
+  border-radius: 8px;
 }
 
 .queue-item-info {
@@ -757,7 +1101,7 @@
   white-space: nowrap;
   text-overflow: ellipsis;
 
-  color: #ffffff;
+  color: #fff;
 
   font-size: 12px;
   font-weight: 600;
@@ -779,15 +1123,17 @@
   border: 0;
   background: transparent;
 
-  color: #bbbbbb;
+  color: #ccc;
   font-size: 11px;
 }
 
-/* =========================================
-   YOUTUBE PLAYER
-========================================= */
+/* =========================================================
+   23. YOUTUBE PLAYER
+========================================================= */
 
 .youtube-stage {
+  position: relative;
+
   width: 100%;
   max-width: 1050px;
 
@@ -803,14 +1149,23 @@
 
   overflow: hidden;
 
-  border-radius: 12px;
-  background: #000000;
+  border: 1px solid rgba(255, 255, 255, .08);
+  border-radius: 15px;
+
+  background: #000;
+
+  box-shadow:
+    0 15px 45px rgba(0, 0, 0, .45);
 }
 
 #youtubePlayerHost {
+  position: absolute;
+  inset: 0;
+
   width: 100%;
   height: 100%;
-  background: #000000;
+
+  background: #000;
 }
 
 #youtubePlayerHost iframe {
@@ -823,9 +1178,257 @@
   border: 0;
 }
 
-/* =========================================
-   RESPONSIVE — SMALL PHONES
-========================================= */
+/* =========================================================
+   24. OPTIONAL: LYRICS PANEL
+   Works when these classes exist in HTML.
+========================================================= */
+
+.player-lyrics {
+  width: 100%;
+  max-height: 60vh;
+
+  overflow-y: auto;
+
+  padding: 20px 0;
+
+  scrollbar-width: none;
+}
+
+.player-lyrics::-webkit-scrollbar {
+  display: none;
+}
+
+.player-lyrics p {
+  margin: 16px 0;
+
+  color: #777;
+
+  font-size: 21px;
+  font-weight: 700;
+  line-height: 1.45;
+
+  transition:
+    color .25s ease,
+    transform .25s ease;
+}
+
+.player-lyrics p.active {
+  color: #fff;
+  transform: scale(1.025);
+}
+
+/* =========================================================
+   25. OPTIONAL: AUDIO VISUALIZER
+========================================================= */
+
+.player-visualizer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+
+  height: 42px;
+}
+
+.player-visualizer span {
+  width: 3px;
+  height: 8px;
+
+  border-radius: 5px;
+
+  background: rgba(255, 255, 255, .85);
+}
+
+.player-visualizer.is-playing span {
+  animation: visualizer-wave .8s ease-in-out infinite alternate;
+}
+
+.player-visualizer span:nth-child(2n) {
+  animation-delay: .15s;
+}
+
+.player-visualizer span:nth-child(3n) {
+  animation-delay: .3s;
+}
+
+@keyframes visualizer-wave {
+  from {
+    height: 6px;
+    opacity: .5;
+  }
+
+  to {
+    height: 32px;
+    opacity: 1;
+  }
+}
+
+/* =========================================================
+   26. OPTIONAL: SLEEP TIMER
+========================================================= */
+
+.sleep-timer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+
+  padding: 12px 16px;
+
+  border: 1px solid var(--player-border);
+  border-radius: 14px;
+
+  background: rgba(255, 255, 255, .055);
+  color: #eee;
+
+  font-size: 12px;
+}
+
+/* =========================================================
+   27. OPTIONAL: PLAYER MENUS
+========================================================= */
+
+.player-menu {
+  position: absolute;
+  z-index: 400;
+
+  min-width: 190px;
+
+  padding: 7px;
+
+  border: 1px solid var(--player-border-light);
+  border-radius: 15px;
+
+  background: rgba(28, 28, 28, .94);
+
+  -webkit-backdrop-filter: blur(25px);
+  backdrop-filter: blur(25px);
+
+  box-shadow: var(--player-shadow-deep);
+}
+
+.player-menu button {
+  width: 100%;
+
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  padding: 12px;
+
+  border: 0;
+  border-radius: 9px;
+
+  background: transparent;
+  color: #eee;
+
+  text-align: left;
+  font-size: 12px;
+}
+
+.player-menu button:active {
+  background: rgba(255, 255, 255, .09);
+}
+
+/* =========================================================
+   28. OPTIONAL: LOADING STATE
+========================================================= */
+
+.player-loading {
+  position: relative;
+  overflow: hidden;
+}
+
+.player-loading::after {
+  content: "";
+
+  position: absolute;
+  inset: 0;
+
+  transform: translateX(-100%);
+
+  background:
+    linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, .09),
+      transparent
+    );
+
+  animation: player-shimmer 1.4s infinite;
+}
+
+@keyframes player-shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* =========================================================
+   29. OPTIONAL: SONG CHANGE ANIMATION
+========================================================= */
+
+.song-changing {
+  animation: song-change .35s ease both;
+}
+
+@keyframes song-change {
+  0% {
+    opacity: .5;
+    transform: translateY(5px);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* =========================================================
+   30. OPTIONAL: ACTIVE STATES
+========================================================= */
+
+.player-controls button.active,
+.full-player-controls button.active,
+.full-player-options button.active {
+  color: #fff;
+  background-color: rgba(255, 255, 255, .12);
+}
+
+.queue-item.active {
+  background: rgba(255, 255, 255, .075);
+  border-color: rgba(255, 255, 255, .10);
+}
+
+.queue-item.active .queue-item-title {
+  color: #fff;
+}
+
+/* =========================================================
+   31. TOUCH AND INTERACTION
+========================================================= */
+
+.current-art,
+.now-playing-text {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.current-art:active,
+.now-playing-text:active {
+  opacity: .78;
+  transition: opacity .15s ease;
+}
+
+.player-dock button,
+.full-player button,
+.queue-panel button {
+  touch-action: manipulation;
+}
+
+/* =========================================================
+   32. SMALL PHONES
+========================================================= */
 
 @media (max-width: 380px) {
   .player-dock {
@@ -836,7 +1439,8 @@
     padding-right: 9px;
   }
 
-  .current-art {
+  .current-art,
+  .now-playing img {
     width: 41px;
     height: 41px;
     flex-basis: 41px;
@@ -854,6 +1458,10 @@
     font-size: 9px;
   }
 
+  .control-button {
+    width: 31px;
+  }
+
   .full-player {
     padding-left: 17px;
     padding-right: 17px;
@@ -862,37 +1470,146 @@
   .full-player-content {
     gap: 22px;
   }
+
+  .full-player-controls {
+    gap: 27px;
+  }
+
+  .full-player-info h2 {
+    font-size: 19px;
+  }
 }
 
-/* =========================================
-   ACCESSIBILITY
-========================================= */
+/* =========================================================
+   33. LARGER PHONES
+========================================================= */
+
+@media (min-width: 430px) {
+  .full-player-content {
+    max-width: 390px;
+  }
+
+  .full-player-art {
+    border-radius: 19px;
+  }
+
+  .full-player-controls {
+    gap: 43px;
+  }
+}
+
+/* =========================================================
+   34. LANDSCAPE
+========================================================= */
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .full-player {
+    padding-top: calc(8px + var(--player-safe-top));
+    padding-bottom: calc(12px + var(--player-safe-bottom));
+  }
+
+  .full-player-header {
+    min-height: 36px;
+    margin-bottom: 8px;
+  }
+
+  .full-player-content {
+    display: grid;
+    grid-template-columns: minmax(150px, .8fr) minmax(220px, 1fr);
+    align-items: center;
+    column-gap: 25px;
+    row-gap: 12px;
+
+    max-width: 750px;
+  }
+
+  .full-player-art {
+    grid-column: 1;
+    grid-row: 1 / 6;
+
+    max-height: 65vh;
+    width: auto;
+    max-width: 100%;
+
+    justify-self: center;
+  }
+
+  .full-player-info,
+  .full-progress,
+  .full-player-controls,
+  .full-player-options {
+    grid-column: 2;
+  }
+
+  .full-player-info h2 {
+    font-size: 18px;
+  }
+
+  .full-player-controls .play-button {
+    width: 48px !important;
+    height: 48px !important;
+  }
+
+  .full-player-controls {
+    gap: 25px;
+  }
+}
+
+/* =========================================================
+   35. ACCESSIBILITY
+========================================================= */
 
 .player-dock button:focus-visible,
 .full-player button:focus-visible,
 .queue-panel button:focus-visible {
-  outline: 2px solid #ffffff;
+  outline: 2px solid #fff;
   outline-offset: 3px;
 }
+
+.player-dock button:focus:not(:focus-visible),
+.full-player button:focus:not(:focus-visible),
+.queue-panel button:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* =========================================================
+   36. REDUCED MOTION
+========================================================= */
 
 @media (prefers-reduced-motion: reduce) {
   .player-dock *,
   .full-player *,
-  .queue-panel * {
+  .queue-panel *,
+  .youtube-stage * {
     animation: none !important;
     transition: none !important;
+    scroll-behavior: auto !important;
   }
 }
-/* Mini reproductor: zonas que abren el reproductor completo */
 
-.current-art,
-.now-playing-text {
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
+/* =========================================================
+   37. FALLBACK WITHOUT BACKDROP FILTER
+========================================================= */
+
+@supports not (
+  (backdrop-filter: blur(1px)) or
+  (-webkit-backdrop-filter: blur(1px))
+) {
+  .player-dock {
+    background: #191919;
+  }
+
+  .queue-panel {
+    background: #171717;
+  }
+
+  .full-player-header .icon-button,
+  .full-player-info .icon-button,
+  .full-player-options button {
+    background: #202020;
+  }
 }
 
-.current-art:active,
-.now-playing-text:active {
-  opacity: 0.75;
-  transition: opacity 0.15s ease;
-}
+/* =========================================================
+   END — SHUNEL PLAYER LIQUID GLASS
+========================================================= */

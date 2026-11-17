@@ -1,0 +1,992 @@
+
+/* =========================================
+   SHUNEL — MOTION SYSTEM
+   Refined / Minimal / iOS-first
+========================================= */
+
+:root {
+  /* Timing */
+  --motion-instant: 110ms;
+  --motion-fast: 170ms;
+  --motion-base: 250ms;
+  --motion-slow: 360ms;
+  --motion-screen: 430ms;
+
+  /* Easing */
+  --ease-standard: cubic-bezier(.2, 0, 0, 1);
+  --ease-enter: cubic-bezier(.16, 1, .3, 1);
+  --ease-exit: cubic-bezier(.4, 0, 1, 1);
+  --ease-emphasized: cubic-bezier(.22, 1, .36, 1);
+
+  /* Motion values */
+  --motion-distance-sm: 6px;
+  --motion-distance-md: 14px;
+  --motion-scale-press: .975;
+
+  /* Silver */
+  --motion-silver: rgba(235, 235, 235, .9);
+}
+
+/* =========================================
+   01. GLOBAL INTERACTION BASE
+========================================= */
+
+button,
+a,
+[role="button"],
+.icon-button,
+.track-action,
+.text-button,
+.bottom-nav-item {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+a,
+[role="button"],
+input,
+textarea,
+select {
+  touch-action: manipulation;
+}
+
+button,
+a,
+[role="button"],
+.icon-button,
+.track-action,
+.text-button {
+  transition:
+    color var(--motion-fast) var(--ease-standard),
+    background-color var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard),
+    opacity var(--motion-fast) var(--ease-standard);
+}
+
+/* No aplicar escala a todos los botones.
+   Solo a controles que aceptan presión táctil. */
+
+.play-button,
+.control-button,
+.icon-button,
+.track-action,
+.bottom-nav-item,
+.quick-card,
+.discover-card {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+@media (hover: hover) {
+  button:hover,
+  a:hover,
+  [role="button"]:hover {
+    transition-duration: var(--motion-fast);
+  }
+}
+
+/* =========================================
+   02. PRESS FEEDBACK
+========================================= */
+
+.play-button,
+.icon-button,
+.track-action,
+.control-button,
+.quick-card,
+.discover-card {
+  transition:
+    transform var(--motion-fast) var(--ease-emphasized),
+    opacity var(--motion-fast) ease,
+    background-color var(--motion-fast) ease,
+    color var(--motion-fast) ease;
+}
+
+.play-button:active,
+.icon-button:active,
+.track-action:active,
+.control-button:active,
+.quick-card:active,
+.discover-card:active {
+  transform: scale(var(--motion-scale-press));
+}
+
+.text-button:active {
+  opacity: .62;
+}
+
+@media (hover: hover) {
+  .play-button:hover,
+  .icon-button:hover,
+  .track-action:hover,
+  .control-button:hover {
+    color: #fff;
+  }
+}
+
+/* =========================================
+   03. BRAND REVEAL
+========================================= */
+
+.mobile-brand .brand-logo {
+  animation: brandAppear 700ms var(--ease-enter) both;
+  transform-origin: center;
+}
+
+@keyframes brandAppear {
+  from {
+    opacity: 0;
+    transform: translateY(5px) scale(.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.mobile-brand:active .brand-logo {
+  filter: drop-shadow(0 0 7px rgba(255, 255, 255, .2));
+}
+
+/* =========================================
+   04. PAGE TRANSITIONS
+========================================= */
+
+.view {
+  will-change: auto;
+}
+
+.view.active {
+  animation: viewAppear var(--motion-slow) var(--ease-enter) both;
+}
+
+@keyframes viewAppear {
+  from {
+    opacity: 0;
+    transform: translateY(9px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* =========================================
+   05. NAVIGATION
+========================================= */
+
+.bottom-nav-item {
+  position: relative;
+  transition:
+    color var(--motion-fast) ease,
+    opacity var(--motion-fast) ease;
+}
+
+.bottom-nav-icon {
+  display: inline-flex;
+  transform-origin: center;
+  transition:
+    transform var(--motion-base) var(--ease-emphasized),
+    opacity var(--motion-fast) ease;
+}
+
+.bottom-nav-item.active {
+  color: #fff;
+}
+
+.bottom-nav-item.active .bottom-nav-icon {
+  animation: navActivate 260ms var(--ease-emphasized) both;
+}
+
+@keyframes navActivate {
+  0% {
+    transform: scale(.92);
+  }
+
+  65% {
+    transform: scale(1.07);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+.bottom-nav-item::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -5px;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0;
+  transform: translateX(-50%) scale(0);
+  transition:
+    opacity var(--motion-fast) ease,
+    transform var(--motion-base) var(--ease-enter);
+}
+
+.bottom-nav-item.active::after {
+  opacity: .85;
+  transform: translateX(-50%) scale(1);
+}
+
+/* =========================================
+   06. ICON TRANSITIONS
+========================================= */
+
+.play-button svg,
+.control-button svg,
+.icon-button svg,
+.track-action svg,
+.bottom-nav-icon svg {
+  transform-origin: center;
+  transition:
+    transform var(--motion-fast) var(--ease-emphasized),
+    opacity var(--motion-fast) ease,
+    fill var(--motion-fast) ease,
+    stroke var(--motion-fast) ease;
+}
+
+.play-button:active svg {
+  transform: scale(.88);
+}
+
+.icon-button:active svg,
+.track-action:active svg {
+  transform: scale(.9);
+}
+
+/* =========================================
+   07. PLAY / PAUSE STATE
+========================================= */
+
+.play-button svg {
+  transition:
+    transform 220ms var(--ease-emphasized),
+    opacity 150ms ease;
+}
+
+.play-button.is-playing svg {
+  transform: scale(1);
+}
+
+/* =========================================
+   08. PLAYER DOCK
+========================================= */
+
+.player-dock {
+  transition:
+    background-color var(--motion-base) ease,
+    border-color var(--motion-base) ease,
+    box-shadow var(--motion-base) ease;
+}
+
+.player-dock.is-playing {
+  border-color: rgba(255, 255, 255, .12);
+}
+
+.current-art,
+.full-player-art {
+  transform-origin: center;
+  transition:
+    transform 500ms var(--ease-emphasized),
+    filter 400ms ease;
+}
+
+.player-dock.is-playing .current-art {
+  filter: brightness(1.035);
+}
+
+.full-player.is-playing .full-player-art {
+  filter: brightness(1.04);
+}
+
+/* No hacer oscilar la portada constantemente.
+   El movimiento ocurre cuando cambia el estado. */
+
+.current-title,
+.current-channel,
+.full-player-info {
+  transition:
+    opacity 200ms ease,
+    transform 250ms var(--ease-enter);
+}
+
+.song-changing .current-title,
+.song-changing .current-channel {
+  animation: trackInfoChange 300ms var(--ease-enter);
+}
+
+@keyframes trackInfoChange {
+  from {
+    opacity: .35;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* =========================================
+   09. EQUALIZER
+========================================= */
+
+.equalizer {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  width: 20px;
+  height: 18px;
+}
+
+.equalizer span {
+  display: block;
+  width: 2px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--motion-silver);
+  transform-origin: center bottom;
+}
+
+.is-playing .equalizer span {
+  animation: equalizerMotion 720ms ease-in-out infinite alternate;
+}
+
+.equalizer span:nth-child(2) {
+  animation-delay: 180ms;
+}
+
+.equalizer span:nth-child(3) {
+  animation-delay: 360ms;
+}
+
+@keyframes equalizerMotion {
+  from {
+    transform: scaleY(.45);
+    opacity: .55;
+  }
+
+  to {
+    transform: scaleY(1.65);
+    opacity: 1;
+  }
+}
+
+/* =========================================
+   10. PROGRESS AND RANGE
+========================================= */
+
+.progress-row input,
+.full-progress input,
+.player-extra input[type="range"] {
+  accent-color: #e5e5e5;
+  cursor: pointer;
+}
+
+.progress-row input,
+.full-progress input {
+  transition: filter var(--motion-fast) ease;
+}
+
+.progress-row input:active,
+.full-progress input:active,
+.player-extra input[type="range"]:active {
+  filter: drop-shadow(0 0 4px rgba(255, 255, 255, .25));
+}
+
+/* =========================================
+   11. FULL PLAYER
+========================================= */
+
+.full-player {
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(18px) scale(.99);
+  transition:
+    opacity 260ms ease,
+    transform 380ms var(--ease-enter),
+    visibility 380ms;
+  pointer-events: none;
+}
+
+.full-player.active {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+.full-player-content {
+  animation: fullPlayerContent 430ms var(--ease-enter) both;
+}
+
+@keyframes fullPlayerContent {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.full-player-art {
+  transition:
+    transform 450ms var(--ease-emphasized),
+    filter 350ms ease;
+}
+
+.full-player.active .full-player-art {
+  animation: artworkAppear 500ms var(--ease-enter) both;
+}
+
+@keyframes artworkAppear {
+  from {
+    opacity: .7;
+    transform: scale(.965);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* =========================================
+   12. TRACK LIST
+========================================= */
+
+.track-row {
+  transition:
+    background-color var(--motion-fast) ease,
+    border-color var(--motion-fast) ease,
+    transform var(--motion-fast) var(--ease-emphasized),
+    opacity var(--motion-fast) ease;
+}
+
+.track-row:active {
+  transform: scale(.992);
+}
+
+.track-art {
+  transform-origin: center;
+  transition:
+    transform 300ms var(--ease-emphasized),
+    filter 300ms ease;
+}
+
+.track-row:active .track-art {
+  transform: scale(.97);
+}
+
+.track-name,
+.track-channel {
+  transition: color var(--motion-fast) ease;
+}
+
+.track-row.is-playing .track-name {
+  color: #fff;
+}
+
+@media (hover: hover) {
+  .track-row:hover .track-art {
+    transform: scale(1.035);
+  }
+}
+
+/* Entrada escalonada solo cuando se marca la lista */
+
+.track-list.is-entering .track-row {
+  animation: trackAppear 360ms var(--ease-enter) both;
+}
+
+.track-list.is-entering .track-row:nth-child(2) {
+  animation-delay: 25ms;
+}
+
+.track-list.is-entering .track-row:nth-child(3) {
+  animation-delay: 50ms;
+}
+
+.track-list.is-entering .track-row:nth-child(4) {
+  animation-delay: 75ms;
+}
+
+.track-list.is-entering .track-row:nth-child(5) {
+  animation-delay: 100ms;
+}
+
+.track-list.is-entering .track-row:nth-child(6) {
+  animation-delay: 125ms;
+}
+
+.track-list.is-entering .track-row:nth-child(7) {
+  animation-delay: 150ms;
+}
+
+.track-list.is-entering .track-row:nth-child(8) {
+  animation-delay: 175ms;
+}
+
+@keyframes trackAppear {
+  from {
+    opacity: 0;
+    transform: translateY(7px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* =========================================
+   13. FAVORITES
+========================================= */
+
+.is-favorite svg,
+.favorite-current.is-favorite svg {
+  fill: currentColor;
+  animation: favoriteOn 320ms var(--ease-emphasized);
+}
+
+@keyframes favoriteOn {
+  0% {
+    transform: scale(.78);
+  }
+
+  60% {
+    transform: scale(1.16);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* =========================================
+   14. SEARCH
+========================================= */
+
+.search-form {
+  transition:
+    border-color var(--motion-base) ease,
+    background-color var(--motion-base) ease,
+    box-shadow var(--motion-base) ease;
+}
+
+.search-form:focus-within {
+  border-color: rgba(230, 230, 230, .42);
+  box-shadow: 0 0 0 3px rgba(230, 230, 230, .045);
+}
+
+.search-form input {
+  transition: opacity var(--motion-fast) ease;
+}
+
+/* =========================================
+   15. QUEUE PANEL
+========================================= */
+
+.queue-panel {
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(14px);
+  transition:
+    opacity 230ms ease,
+    transform 330ms var(--ease-enter),
+    visibility 330ms;
+  pointer-events: none;
+}
+
+.queue-panel.open,
+.queue-panel.active {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.queue-item {
+  transition:
+    background-color var(--motion-fast) ease,
+    transform var(--motion-fast) var(--ease-emphasized);
+}
+
+.queue-item:active {
+  transform: scale(.99);
+}
+
+.queue-panel.open .queue-item,
+.queue-panel.active .queue-item {
+  animation: queueItemAppear 300ms var(--ease-enter) both;
+}
+
+@keyframes queueItemAppear {
+  from {
+    opacity: 0;
+    transform: translateX(7px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* =========================================
+   16. TOAST NOTIFICATIONS
+========================================= */
+
+.toast {
+  transition:
+    opacity 220ms ease,
+    transform 280ms var(--ease-enter);
+}
+
+.toast.visible,
+.toast.show {
+  animation: toastAppear 260ms var(--ease-enter) both;
+}
+
+@keyframes toastAppear {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* =========================================
+   17. EMPTY STATES
+========================================= */
+
+.empty-state {
+  animation: emptyStateAppear 400ms var(--ease-enter) both;
+}
+
+@keyframes emptyStateAppear {
+  from {
+    opacity: 0;
+    transform: translateY(7px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* =========================================
+   18. SKELETON LOADING
+========================================= */
+
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: #191919;
+  isolation: isolate;
+}
+
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, .055) 50%,
+    transparent 100%
+  );
+  animation: skeletonShimmer 1.7s ease-in-out infinite;
+}
+
+@keyframes skeletonShimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* =========================================
+   19. HOME AMBIENCE
+========================================= */
+
+.home-greeting {
+  position: relative;
+  isolation: isolate;
+}
+
+.home-greeting::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: -35px;
+  right: -40px;
+  width: 170px;
+  height: 170px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(220, 220, 220, .045),
+    transparent 70%
+  );
+  pointer-events: none;
+  opacity: .8;
+}
+
+/* Ambiente estático: sin pulsación permanente */
+
+/* =========================================
+   20. QUICK CARDS
+========================================= */
+
+.quick-card,
+.discover-card {
+  transition:
+    transform 220ms var(--ease-emphasized),
+    border-color 220ms ease,
+    background-color 220ms ease;
+}
+
+@media (hover: hover) {
+  .quick-card:hover,
+  .discover-card:hover {
+    transform: translateY(-2px);
+    border-color: rgba(255, 255, 255, .15);
+  }
+}
+
+/* =========================================
+   21. OVERLAYS AND MODALS
+========================================= */
+
+.modal,
+.overlay,
+.player-menu {
+  transition:
+    opacity 240ms ease,
+    visibility 240ms ease;
+}
+
+.modal.active,
+.overlay.active {
+  animation: overlayAppear 250ms ease both;
+}
+
+@keyframes overlayAppear {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.modal-content,
+.overlay-content {
+  animation: modalContentAppear 330ms var(--ease-enter) both;
+}
+
+@keyframes modalContentAppear {
+  from {
+    opacity: 0;
+    transform: translateY(9px) scale(.99);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* =========================================
+   22. LYRICS
+========================================= */
+
+.player-lyrics,
+.lyrics-panel {
+  transition:
+    opacity 260ms ease,
+    transform 320ms var(--ease-enter);
+}
+
+.lyric-line {
+  opacity: .42;
+  transition:
+    opacity 220ms ease,
+    color 220ms ease,
+    transform 220ms var(--ease-emphasized);
+}
+
+.lyric-line.active {
+  opacity: 1;
+  color: #fff;
+  transform: scale(1.015);
+}
+
+/* =========================================
+   23. VISUALIZER
+========================================= */
+
+.player-visualizer .bar,
+.visualizer-bar {
+  transform-origin: center bottom;
+  animation: visualizerMotion 850ms ease-in-out infinite alternate;
+}
+
+.player-visualizer .bar:nth-child(2),
+.visualizer-bar:nth-child(2) {
+  animation-delay: 140ms;
+}
+
+.player-visualizer .bar:nth-child(3),
+.visualizer-bar:nth-child(3) {
+  animation-delay: 280ms;
+}
+
+.player-visualizer .bar:nth-child(4),
+.visualizer-bar:nth-child(4) {
+  animation-delay: 420ms;
+}
+
+@keyframes visualizerMotion {
+  from {
+    transform: scaleY(.35);
+    opacity: .55;
+  }
+
+  to {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+
+/* =========================================
+   24. SLEEP TIMER
+========================================= */
+
+.sleep-timer {
+  transition:
+    opacity 220ms ease,
+    transform 280ms var(--ease-enter);
+}
+
+.sleep-timer.active {
+  animation: timerAppear 300ms var(--ease-enter) both;
+}
+
+@keyframes timerAppear {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* =========================================
+   25. FOCUS STATES
+========================================= */
+
+button:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid rgba(235, 235, 235, .7);
+  outline-offset: 3px;
+}
+
+/* =========================================
+   26. RESPONSIVE
+========================================= */
+
+@media (max-width: 650px) {
+  :root {
+    --motion-base: 230ms;
+    --motion-slow: 330ms;
+    --motion-screen: 390ms;
+  }
+
+  .view.active {
+    animation-duration: 320ms;
+  }
+
+  .full-player.active {
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (max-width: 380px) {
+  :root {
+    --motion-distance-md: 9px;
+  }
+
+  .home-greeting::after {
+    width: 125px;
+    height: 125px;
+  }
+}
+
+/* =========================================
+   27. HOVER ONLY ON POINTER DEVICES
+========================================= */
+
+@media (hover: hover) and (pointer: fine) {
+  .track-row:hover {
+    background-color: rgba(255, 255, 255, .025);
+  }
+
+  .icon-button:hover,
+  .track-action:hover {
+    background-color: rgba(255, 255, 255, .055);
+  }
+}
+
+/* =========================================
+   28. REDUCED MOTION
+========================================= */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+
+  .view.active,
+  .full-player-content,
+  .track-list.is-entering .track-row,
+  .full-player.active .full-player-art {
+    animation: none !important;
+  }
+
+  .current-art,
+  .full-player-art,
+  .track-art,
+  .bottom-nav-icon {
+    transform: none !important;
+  }
+}
