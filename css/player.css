@@ -1,7 +1,6 @@
-
 /* =========================================================
    SHUNEL — PLAYER SYSTEM
-   LIQUID GLASS EDITION
+   LIQUID GLASS EDITION (APPLE MUSIC STYLE - SPACIOUS)
    iOS / MOBILE FIRST
 ========================================================= */
 
@@ -208,43 +207,44 @@
 }
 
 /* =========================================================
-   05. MINI PLAYER
+   05. MINI PLAYER (APPLE MUSIC REFINED DOCK - SPACIOUS)
 ========================================================= */
 
 .player-dock {
   position: fixed;
   z-index: 50;
 
-  left: 10px;
-  right: 10px;
+  left: 14px;
+  right: 14px;
 
   bottom:
-    calc(65px + var(--player-safe-bottom) + 7px);
+    calc(64px + var(--player-safe-bottom) + 10px);
 
-  min-height: 68px;
+  height: 68px; /* Más altura para que respire */
 
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: space-between;
 
-  padding: 8px 12px;
+  padding: 0 16px; /* Más padding horizontal */
 
   overflow: hidden;
 
   background:
     linear-gradient(
       135deg,
-      rgba(35, 35, 35, .90),
-      rgba(17, 17, 17, .86)
+      rgba(28, 28, 30, 0.88),
+      rgba(18, 18, 20, 0.85)
     );
 
-  border: 1px solid var(--player-border-light);
-  border-radius: 17px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 18px;
 
   box-shadow:
-    0 8px 30px rgba(0, 0, 0, .38),
-    inset 0 1px 0 rgba(255, 255, 255, .08);
+    0 12px 35px rgba(0, 0, 0, .48),
+    inset 0 1px 0 rgba(255, 255, 255, .1);
+
+  cursor: pointer;
 
   transition:
     transform var(--player-transition),
@@ -253,7 +253,7 @@
 }
 
 .player-dock:active {
-  transform: scale(.992);
+  transform: scale(.985);
 }
 
 /* =========================================================
@@ -264,30 +264,32 @@
   position: relative;
   z-index: 1;
 
+  flex: 1;
   min-width: 0;
 
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: 12px; /* Más espacio entre carátula y texto */
 
   overflow: hidden;
+  cursor: pointer;
 }
 
 .current-art,
 .now-playing img {
-  width: 47px;
-  height: 47px;
+  width: 48px; /* Ligeramente más grande y proporcionada */
+  height: 48px;
 
-  flex: 0 0 47px;
+  flex: 0 0 48px;
 
   object-fit: cover;
 
-  border-radius: 9px;
+  border-radius: 10px;
 
   background: #202020;
 
   box-shadow:
-    0 3px 12px rgba(0, 0, 0, .32);
+    0 4px 12px rgba(0, 0, 0, .38);
 
   transition:
     transform var(--player-transition),
@@ -303,7 +305,8 @@
 
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  justify-content: center;
+  gap: 3px; /* Más espacio entre título y artista */
 }
 
 .current-title {
@@ -313,8 +316,8 @@
 
   color: var(--player-text);
 
-  font-size: 12px;
-  font-weight: 700;
+  font-size: 14px;
+  font-weight: 600;
   letter-spacing: -.15px;
 }
 
@@ -325,8 +328,8 @@
 
   color: var(--player-muted);
 
-  font-size: 10px;
-  font-weight: 500;
+  font-size: 12px;
+  font-weight: 400;
 }
 
 .favorite-current {
@@ -348,14 +351,14 @@
   align-items: center;
   justify-content: center;
 
-  justify-self: end;
+  flex-shrink: 0;
 }
 
 .player-controls {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 2px;
+  gap: 8px; /* Más espacio entre los botones de control */
 }
 
 .player-controls button,
@@ -387,10 +390,15 @@
 }
 
 .control-button {
-  width: 35px;
-  height: 39px;
+  width: 38px;
+  height: 38px;
 
   font-size: 15px;
+  border-radius: 50%;
+}
+
+.control-button:active {
+  background: rgba(255, 255, 255, 0.12);
 }
 
 /* =========================================================
@@ -400,8 +408,8 @@
 .play-button {
   position: relative;
 
-  width: 39px !important;
-  height: 39px !important;
+  width: 40px !important;
+  height: 40px !important;
 
   display: inline-flex;
   align-items: center;
@@ -411,7 +419,7 @@
   border-radius: 50%;
 
   background: #fff !important;
-  color: #080808 !important;
+  color: #000 !important;
 
   font-size: 15px !important;
   font-weight: 800;
@@ -419,7 +427,7 @@
   cursor: pointer;
 
   box-shadow:
-    0 2px 12px rgba(255, 255, 255, .12);
+    0 3px 12px rgba(0, 0, 0, .25);
 
   transition:
     transform var(--player-spring),
@@ -428,11 +436,12 @@
 
 .play-button svg {
   stroke: currentColor;
+  fill: currentColor;
 }
 
 .play-button:active {
   transform: scale(.89);
-  box-shadow: 0 0 0 5px rgba(255, 255, 255, .07);
+  box-shadow: 0 0 0 6px rgba(255, 255, 255, .08);
 }
 
 /* =========================================================
@@ -446,7 +455,7 @@
   right: 0;
   bottom: 0;
 
-  height: 2px;
+  height: 3px; /* Ligeramente más visible */
   width: 100%;
 
   display: block;
@@ -470,7 +479,7 @@
   display: block;
 
   width: 100%;
-  height: 2px;
+  height: 3px;
 
   margin: 0;
   padding: 0;
@@ -487,13 +496,13 @@
 }
 
 .player-dock .progress-row input::-webkit-slider-runnable-track {
-  height: 2px;
+  height: 3px;
   background: transparent;
 }
 
 .player-dock .progress-row input::-webkit-slider-thumb {
-  width: 2px;
-  height: 2px;
+  width: 3px;
+  height: 3px;
 
   appearance: none;
   -webkit-appearance: none;
@@ -503,12 +512,12 @@
 }
 
 .player-dock .progress-row input::-moz-range-track {
-  height: 2px;
+  height: 3px;
   background: transparent;
 }
 
 .player-dock .progress-row input::-moz-range-progress {
-  height: 2px;
+  height: 3px;
   background: #fff;
 }
 
@@ -521,10 +530,7 @@
 }
 
 .expand-player {
-  width: 35px;
-  height: 39px;
-
-  color: #fff;
+  display: none !important;
 }
 
 /* =========================================================
@@ -541,9 +547,9 @@
   flex-direction: column;
 
   padding:
-    calc(12px + var(--player-safe-top))
-    23px
-    calc(25px + var(--player-safe-bottom));
+    calc(16px + var(--player-safe-top))
+    26px
+    calc(30px + var(--player-safe-bottom)); /* Más padding interior general en el reproductor completo */
 
   background:
     radial-gradient(
@@ -597,7 +603,7 @@
   align-items: center;
   justify-content: space-between;
 
-  margin-bottom: 25px;
+  margin-bottom: 28px; /* Más espacio debajo de la cabecera */
 }
 
 .full-player-header > span {
@@ -611,8 +617,8 @@
 }
 
 .full-player-header .icon-button {
-  width: 39px;
-  height: 39px;
+  width: 42px; /* Ligeramente más cómodo al tacto */
+  height: 42px;
 
   display: grid;
   place-items: center;
@@ -645,7 +651,7 @@
 
   display: flex;
   flex-direction: column;
-  gap: 27px;
+  gap: 30px; /* Más separación entre elementos internos */
 
   margin: auto;
 }
@@ -662,12 +668,12 @@
 
   object-fit: cover;
 
-  border-radius: 17px;
+  border-radius: 20px; /* Esquinas más elegantes tipo Apple */
 
   background: #181818;
 
   box-shadow:
-    0 18px 55px rgba(0, 0, 0, .55),
+    0 20px 60px rgba(0, 0, 0, .58),
     0 2px 8px rgba(255, 255, 255, .04);
 
   transform: translateZ(0);
@@ -701,7 +707,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 15px;
+  gap: 18px;
 }
 
 .full-player-info > div {
@@ -709,7 +715,7 @@
 }
 
 .full-player-info h2 {
-  margin: 0 0 7px;
+  margin: 0 0 8px;
 
   overflow: hidden;
   text-overflow: ellipsis;
@@ -728,8 +734,8 @@
 }
 
 .full-player-info .icon-button {
-  width: 42px;
-  height: 42px;
+  width: 44px;
+  height: 44px;
 
   flex: 0 0 auto;
 
@@ -763,12 +769,12 @@
 .full-progress {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px; /* Más espacio para la barra de tiempo */
 }
 
 .full-progress input {
   width: 100%;
-  height: 4px;
+  height: 5px; /* Ligeramente más cómoda */
 
   margin: 0;
 
@@ -783,30 +789,30 @@
 }
 
 .full-progress input::-webkit-slider-runnable-track {
-  height: 4px;
+  height: 5px;
   border-radius: 20px;
 }
 
 .full-progress input::-webkit-slider-thumb {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
 
   appearance: none;
   -webkit-appearance: none;
 
-  margin-top: -4px;
+  margin-top: -4.5px;
 
   border: 0;
   border-radius: 50%;
 
   background: #fff;
 
-  box-shadow: 0 1px 6px rgba(0, 0, 0, .4);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .45);
 }
 
 .full-progress input::-moz-range-thumb {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
 
   border: 0;
   border-radius: 50%;
@@ -820,7 +826,7 @@
 
   color: #888;
 
-  font-size: 10px;
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -832,7 +838,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 37px;
+  gap: 40px; /* Más espacio entre los controles principales */
 }
 
 .full-player-controls button {
@@ -853,18 +859,18 @@
 }
 
 .full-player-controls .control-button {
-  width: 45px;
-  height: 45px;
+  width: 46px;
+  height: 46px;
 
   color: #fff;
   font-size: 20px;
 }
 
 .full-player-controls .play-button {
-  width: 61px !important;
-  height: 61px !important;
+  width: 64px !important;
+  height: 64px !important;
 
-  font-size: 21px !important;
+  font-size: 22px !important;
 }
 
 /* =========================================================
@@ -875,18 +881,18 @@
   display: flex;
   justify-content: center;
   flex-wrap: wrap;
-  gap: 9px;
+  gap: 12px;
 }
 
 .full-player-options button {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 9px;
+  gap: 10px;
 
-  min-height: 42px;
+  min-height: 44px;
 
-  padding: 10px 17px;
+  padding: 11px 20px;
 
   border: 1px solid var(--player-border);
   border-radius: 30px;
@@ -931,9 +937,9 @@
   flex-direction: column;
 
   padding:
-    23px
-    20px
-    calc(20px + var(--player-safe-bottom));
+    26px
+    22px
+    calc(24px + var(--player-safe-bottom)); /* Más padding en la cola */
 
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -947,7 +953,7 @@
 
   border: 1px solid var(--player-border-light);
   border-bottom: 0;
-  border-radius: 24px 24px 0 0;
+  border-radius: 26px 26px 0 0;
 
   box-shadow:
     0 -15px 55px rgba(0, 0, 0, .55),
@@ -987,10 +993,10 @@
   content: "";
 
   position: absolute;
-  top: 9px;
+  top: 10px;
   left: 50%;
 
-  width: 36px;
+  width: 40px;
   height: 4px;
 
   transform: translateX(-50%);
@@ -1008,7 +1014,7 @@
   align-items: center;
   justify-content: space-between;
 
-  margin-bottom: 18px;
+  margin-bottom: 20px;
 }
 
 .queue-header .eyebrow {
@@ -1032,8 +1038,8 @@
 }
 
 .queue-header .icon-button {
-  width: 38px;
-  height: 38px;
+  width: 40px;
+  height: 40px;
 
   display: grid;
   place-items: center;
@@ -1051,7 +1057,7 @@
 
 .queue-list {
   display: grid;
-  gap: 5px;
+  gap: 8px; /* Más espacio entre canciones en la cola */
 }
 
 .queue-item {
@@ -1059,14 +1065,14 @@
 
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: 12px;
 
-  min-height: 62px;
+  min-height: 64px;
 
-  padding: 9px;
+  padding: 10px; /* Más padding interior en cada elemento de la cola */
 
   border: 1px solid transparent;
-  border-radius: 11px;
+  border-radius: 12px;
 
   cursor: pointer;
 
@@ -1082,13 +1088,13 @@
 }
 
 .queue-item img {
-  width: 44px;
-  height: 44px;
+  width: 46px;
+  height: 46px;
 
-  flex: 0 0 44px;
+  flex: 0 0 46px;
 
   object-fit: cover;
-  border-radius: 8px;
+  border-radius: 9px;
 }
 
 .queue-item-info {
@@ -1103,28 +1109,28 @@
 
   color: #fff;
 
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
 }
 
 .queue-item-artist {
-  margin-top: 4px;
+  margin-top: 5px;
 
   color: #858585;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .queue-panel > .text-button {
   align-self: flex-start;
 
-  margin-top: 14px;
+  margin-top: 16px;
   padding: 10px 0;
 
   border: 0;
   background: transparent;
 
   color: #ccc;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 /* =========================================================
@@ -1150,7 +1156,7 @@
   overflow: hidden;
 
   border: 1px solid rgba(255, 255, 255, .08);
-  border-radius: 15px;
+  border-radius: 16px;
 
   background: #000;
 
@@ -1180,7 +1186,6 @@
 
 /* =========================================================
    24. OPTIONAL: LYRICS PANEL
-   Works when these classes exist in HTML.
 ========================================================= */
 
 .player-lyrics {
@@ -1294,10 +1299,10 @@
 
   min-width: 190px;
 
-  padding: 7px;
+  padding: 8px;
 
   border: 1px solid var(--player-border-light);
-  border-radius: 15px;
+  border-radius: 16px;
 
   background: rgba(28, 28, 28, .94);
 
@@ -1317,7 +1322,7 @@
   padding: 12px;
 
   border: 0;
-  border-radius: 9px;
+  border-radius: 10px;
 
   background: transparent;
   color: #eee;
@@ -1432,47 +1437,47 @@
 
 @media (max-width: 380px) {
   .player-dock {
-    left: 7px;
-    right: 7px;
+    left: 8px;
+    right: 8px;
 
-    padding-left: 9px;
-    padding-right: 9px;
+    padding-left: 12px;
+    padding-right: 12px;
   }
 
   .current-art,
   .now-playing img {
-    width: 41px;
-    height: 41px;
-    flex-basis: 41px;
+    width: 42px;
+    height: 42px;
+    flex-basis: 42px;
   }
 
   .now-playing {
-    gap: 8px;
+    gap: 10px;
   }
 
   .current-title {
-    font-size: 11px;
+    font-size: 13px;
   }
 
   .current-channel {
-    font-size: 9px;
+    font-size: 11px;
   }
 
   .control-button {
-    width: 31px;
+    width: 34px;
   }
 
   .full-player {
-    padding-left: 17px;
-    padding-right: 17px;
+    padding-left: 18px;
+    padding-right: 18px;
   }
 
   .full-player-content {
-    gap: 22px;
+    gap: 24px;
   }
 
   .full-player-controls {
-    gap: 27px;
+    gap: 28px;
   }
 
   .full-player-info h2 {
@@ -1490,7 +1495,7 @@
   }
 
   .full-player-art {
-    border-radius: 19px;
+    border-radius: 20px;
   }
 
   .full-player-controls {
@@ -1504,21 +1509,21 @@
 
 @media (orientation: landscape) and (max-height: 500px) {
   .full-player {
-    padding-top: calc(8px + var(--player-safe-top));
-    padding-bottom: calc(12px + var(--player-safe-bottom));
+    padding-top: calc(10px + var(--player-safe-top));
+    padding-bottom: calc(14px + var(--player-safe-bottom));
   }
 
   .full-player-header {
     min-height: 36px;
-    margin-bottom: 8px;
+    margin-bottom: 10px;
   }
 
   .full-player-content {
     display: grid;
     grid-template-columns: minmax(150px, .8fr) minmax(220px, 1fr);
     align-items: center;
-    column-gap: 25px;
-    row-gap: 12px;
+    column-gap: 28px;
+    row-gap: 14px;
 
     max-width: 750px;
   }
@@ -1551,7 +1556,7 @@
   }
 
   .full-player-controls {
-    gap: 25px;
+    gap: 26px;
   }
 }
 
