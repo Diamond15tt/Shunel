@@ -67,7 +67,7 @@ export class YouTubePlayer {
             playerVars: {
               autoplay: 0,
               controls: 1,
-              playsinline: 0,
+              playsinline: 1, // Optimizado para reproducción en línea en iOS
               fs: 1,
               rel: 0,
               modestbranding: 1,
@@ -81,6 +81,16 @@ export class YouTubePlayer {
                 this.initializing = false;
 
                 this.player = event.target;
+
+                // Forzar atributos de seguridad y PiP en el iframe generado por YouTube
+                const iframe = this.player.getIframe?.();
+                if (iframe) {
+                  iframe.setAttribute(
+                    "allow",
+                    "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  );
+                  iframe.setAttribute("allowfullscreen", "true");
+                }
 
                 this.setVolume(this.volume);
 

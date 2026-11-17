@@ -1,5 +1,119 @@
 <!DOCTYPE html>
-<html lang="es">
+
+<!--
+  =====================================================================
+  SHUNEL · 100 MEJORAS AÑADIDAS (no se quitó ni se cambió nada existente)
+  Todos los id, clases, data-* y textos originales siguen intactos.
+  Las mejoras son solo adiciones: metadatos, CSS, JS ligero y accesibilidad.
+  =====================================================================
+  HEAD / METADATOS
+  01 meta color-scheme (dark)
+  02 meta format-detection (evita enlaces automáticos de teléfono)
+  03 meta application-name
+  04 meta apple-mobile-web-app-title
+  05 meta msapplication-TileColor
+  06 meta robots
+  07 meta referrer (strict-origin-when-cross-origin)
+  08 meta keywords
+  09 Open Graph: og:type
+  10 Open Graph: og:site_name
+  11 Open Graph: og:title
+  12 Open Graph: og:description
+  13 Open Graph: og:locale
+  14 Open Graph: og:image
+  15 Twitter: twitter:card
+  16 Twitter: twitter:title
+  17 Twitter: twitter:description
+  18 Twitter: twitter:image
+  19 favicon
+  20 apple-touch-icon
+  21 preconnect a youtube.com
+  22 preconnect a i.ytimg.com (miniaturas)
+  23 dns-prefetch a googleapis.com
+  24 preload del logo
+  25 modulepreload de app.js
+  26 html dir="ltr"
+  27 html class="no-js" (se cambia a "js" al cargar)
+  28 meta msapplication-tap-highlight
+  CSS (bloque inline #shunel-enhancements)
+  29 :root color-scheme: dark
+  30 text-size-adjust (evita zoom de texto en iOS al rotar)
+  31 suavizado de fuentes (antialiased)
+  32 scroll suave + overscroll-behavior-y: contain
+  33 anillo de foco visible con :focus-visible
+  34 oculta el foco solo en clics de ratón/táctil
+  35 tap-highlight transparente en iOS/Android
+  36 touch-action: manipulation (sin retraso de doble toque)
+  37 sin selección/callout accidental en botones y controles
+  38 imágenes no arrastrables
+  39 color de ::selection
+  40 el atributo [hidden] siempre oculta
+  41 cursor not-allowed en elementos deshabilitados
+  42 estilos del enlace "saltar al contenido"
+  43 clase .sr-only (solo lectores de pantalla)
+  44 respeta prefers-reduced-motion
+  45 modo de alto contraste (forced-colors)
+  46 estilos de impresión limpios
+  47 banner de "Sin conexión"
+  48 estilo del aviso <noscript>
+  49 scrollbar-width: thin
+  JAVASCRIPT LIGERO
+  50 cambia no-js por js
+  51 variable CSS --app-height (altura real en móvil)
+  52 detecta modo instalado/standalone (clase is-standalone)
+  53 detecta online/offline (clase is-offline)
+  54 año automático en el pie de página
+  55 atajos "/" y Ctrl/Cmd+K para ir a buscar
+  ACCESIBILIDAD, SEMÁNTICA Y ATRIBUTOS
+  56 aviso <noscript> si JavaScript está desactivado
+  57 enlace "Saltar al contenido principal"
+  58 <main> con id="main-content" y tabindex="-1"
+  59 sprite SVG con focusable="false"
+  60 todos los iconos SVG con aria-hidden y focusable="false"
+  61 title en el enlace de la marca
+  62 logo con decoding async, fetchpriority y sin arrastre
+  63 translate="no" en el nombre de la marca
+  64 title en el botón de perfil
+  65 vista Inicio con aria-labelledby (h1 con id)
+  66 vista Buscar con aria-labelledby (h1 con id)
+  67 vista Biblioteca con aria-labelledby (h1 con id)
+  68 vista Historial con aria-labelledby (h1 con id)
+  69 title en los accesos rápidos (Favoritos, Biblioteca)
+  70 title en las tarjetas de descubrimiento
+  71 aria-label descriptivo en "Ver todo"
+  72 aria-live en la lista de recientes
+  73 formulario con role="search"
+  74 aria-label en el formulario de búsqueda
+  75 name="q" en el campo de búsqueda
+  76 minlength="2" (coincide con el mínimo del servidor)
+  77 inputmode="search" y enterkeyhint="search"
+  78 spellcheck, autocapitalize y autocorrect desactivados
+  79 aria-label y aria-describedby (estado) en el buscador
+  80 aria-keyshortcuts="/" en el buscador
+  81 title en el botón Buscar
+  82 aria-atomic en el mensaje de estado
+  83 aria-relevant en la lista de resultados
+  84 aria-live en el contador de resultados
+  85 filtros de biblioteca agrupados (role="group" + aria-label)
+  86 aria-live en las listas de biblioteca y favoritos
+  87 aria-live en la lista del historial
+  88 id en la sección del reproductor de YouTube
+  89 año dinámico en el footer (span nuevo)
+  90 id en el mini reproductor (player-dock)
+  91 aria-live en el título/canal actual
+  92 miniaturas con decoding async y sin arrastre
+  93 title en anterior/play/siguiente (mini y completo)
+  94 autocomplete="off" en todas las barras de rango
+  95 title en barras de progreso y volumen
+  96 aria-controls y title en los botones de cola
+  97 aria-hidden en el icono decorativo de volumen
+  98 reproductor completo como role="dialog" aria-modal tabindex=-1
+  99 title en cerrar, favorito y reproductor nativo + navegación inferior
+  100 panel de cola con tabindex, aria-live en la lista, titles y toast aria-atomic
+  =====================================================================
+-->
+
+<html lang="es" dir="ltr" class="no-js">
 
 <head>
   <meta charset="UTF-8">
@@ -20,9 +134,48 @@
 
   <meta name="mobile-web-app-capable" content="yes">
 
+  <!-- [01-08] Metadatos adicionales -->
+  <meta name="color-scheme" content="dark">
+  <meta name="format-detection" content="telephone=no">
+  <meta name="application-name" content="Shunel">
+  <meta name="apple-mobile-web-app-title" content="Shunel">
+  <meta name="msapplication-TileColor" content="#080808">
+  <meta name="robots" content="index, follow">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta name="keywords" content="música, reproductor, YouTube, canciones, playlist, Shunel">
+
+  <!-- [09-13] Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Shunel">
+  <meta property="og:title" content="Shunel">
+  <meta property="og:description" content="Shunel, tu espacio musical.">
+  <meta property="og:locale" content="es_LA">
+  <!-- [14] Cambia por una URL absoluta (https://tudominio.com/assets/logo.png) para mejores previews -->
+  <meta property="og:image" content="/assets/logo.png">
+
+  <!-- [15-18] Twitter / X -->
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Shunel">
+  <meta name="twitter:description" content="Shunel, tu espacio musical.">
+  <meta name="twitter:image" content="/assets/logo.png">
+
+  <!-- [28] Legado de Windows/IE -->
+  <meta name="msapplication-tap-highlight" content="no">
+
   <title>Shunel</title>
 
   <link rel="manifest" href="/manifest.json">
+
+  <!-- [19-20] Iconos -->
+  <link rel="icon" href="/assets/logo.png">
+  <link rel="apple-touch-icon" href="/assets/logo.png">
+
+  <!-- [21-25] Rendimiento: conexiones y precargas anticipadas -->
+  <link rel="preconnect" href="https://www.youtube.com">
+  <link rel="preconnect" href="https://i.ytimg.com">
+  <link rel="dns-prefetch" href="https://www.googleapis.com">
+  <link rel="preload" as="image" href="/assets/logo.png">
+  <link rel="modulepreload" href="/js/app.js">
 
   <!-- STYLES -->
   <link rel="stylesheet" href="/css/style.css">
@@ -30,9 +183,179 @@
   <link rel="stylesheet" href="/css/player.css">
   <link rel="stylesheet" href="/css/animations.css">
 
+  <!-- [27, 50] Marca que JavaScript está activo (lo antes posible) -->
+  <script>
+    document.documentElement.classList.replace("no-js", "js");
+  </script>
+
+  <!-- =====================================
+       MEJORAS INLINE (solo añaden estilos)
+  ====================================== -->
+  <style id="shunel-enhancements">
+    /* [29] */
+    :root { color-scheme: dark; }
+
+    /* [30-32] */
+    html {
+      -webkit-text-size-adjust: 100%;
+      text-size-adjust: 100%;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      scroll-behavior: smooth;
+      overscroll-behavior-y: contain;
+    }
+
+    /* [33] */
+    :focus-visible {
+      outline: 2px solid #ffffff;
+      outline-offset: 3px;
+      border-radius: 6px;
+    }
+
+    /* [34] */
+    :focus:not(:focus-visible) { outline: none; }
+
+    /* [35-37] */
+    a, button, input, select, textarea, [role="button"] {
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    button, [role="button"], input[type="range"], .bottom-nav-item {
+      touch-action: manipulation;
+    }
+
+    button, .bottom-nav-item, .play-button, .control-button {
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
+    }
+
+    /* [38] */
+    img {
+      -webkit-user-drag: none;
+      user-drag: none;
+    }
+
+    /* [39] */
+    ::selection {
+      background: rgba(255, 255, 255, 0.25);
+      color: #ffffff;
+    }
+
+    /* [40] */
+    [hidden] { display: none !important; }
+
+    /* [41] */
+    button:disabled, input:disabled, [aria-disabled="true"] {
+      cursor: not-allowed;
+    }
+
+    /* [42] Enlace para saltar al contenido */
+    .skip-link {
+      position: fixed;
+      top: -100px;
+      left: 12px;
+      z-index: 10000;
+      padding: 10px 16px;
+      background: #ffffff;
+      color: #080808;
+      font: 600 14px/1.2 system-ui, -apple-system, "Segoe UI", sans-serif;
+      border-radius: 8px;
+      text-decoration: none;
+      transition: top 0.15s ease;
+    }
+
+    .skip-link:focus {
+      top: calc(env(safe-area-inset-top, 0px) + 12px);
+    }
+
+    /* [43] Solo para lectores de pantalla */
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    /* [44] */
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
+
+    /* [45] */
+    @media (forced-colors: active) {
+      :focus-visible { outline: 3px solid Highlight; }
+      button, input { border: 1px solid ButtonText; }
+    }
+
+    /* [46] */
+    @media print {
+      .player-dock, .full-player, .queue-panel, .bottom-nav,
+      .topbar, .toast, .youtube-stage, .skip-link {
+        display: none !important;
+      }
+
+      body { background: #ffffff !important; color: #000000 !important; }
+    }
+
+    /* [47] Banner sin conexión */
+    html.is-offline body::before {
+      content: "Sin conexión. Algunas funciones pueden no estar disponibles.";
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 9999;
+      padding: calc(env(safe-area-inset-top, 0px) + 6px) 12px 6px;
+      background: #2a2a2a;
+      color: #ffffff;
+      font: 600 12px/1.3 system-ui, -apple-system, "Segoe UI", sans-serif;
+      text-align: center;
+      pointer-events: none;
+    }
+
+    /* [48] Aviso sin JavaScript */
+    .noscript-warning {
+      margin: 0;
+      padding: 14px 16px;
+      background: #2a2a2a;
+      color: #ffffff;
+      font: 600 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+      text-align: center;
+    }
+
+    /* [49] */
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+    }
+  </style>
+
 </head>
 
 <body>
+
+  <!-- [56] Aviso si JavaScript está desactivado -->
+  <noscript>
+    <p class="noscript-warning">
+      Shunel necesita JavaScript para funcionar. Actívalo en tu navegador para continuar.
+    </p>
+  </noscript>
+
+  <!-- [57] Saltar al contenido -->
+  <a class="skip-link" href="#main-content">Saltar al contenido principal</a>
 
   <div class="app-shell">
 
@@ -44,6 +367,7 @@
       xmlns="http://www.w3.org/2000/svg"
       style="position:absolute;width:0;height:0;overflow:hidden"
       aria-hidden="true"
+      focusable="false"
     >
 
       <symbol id="icon-home" viewBox="0 0 24 24">
@@ -163,6 +487,7 @@
         class="mobile-brand"
         href="#"
         aria-label="Shunel inicio"
+        title="Ir al inicio"
         data-view="home"
       >
 
@@ -170,9 +495,12 @@
           src="/assets/logo.png"
           alt="Shunel"
           class="brand-logo"
+          decoding="async"
+          fetchpriority="high"
+          draggable="false"
         >
 
-        <strong>Shunel</strong>
+        <strong translate="no">Shunel</strong>
 
       </a>
 
@@ -183,8 +511,9 @@
         id="profileButton"
         type="button"
         aria-label="Perfil"
+        title="Perfil"
       >
-        <svg viewBox="0 0 24 24">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
           <use href="#icon-user"/>
         </svg>
       </button>
@@ -196,7 +525,7 @@
          MAIN CONTENT
     ====================================== -->
 
-    <main class="main-content">
+    <main class="main-content" id="main-content" tabindex="-1">
 
 
       <!-- =====================================
@@ -207,13 +536,14 @@
         class="view active"
         id="view-home"
         aria-hidden="false"
+        aria-labelledby="homeTitle"
       >
 
         <div class="home-greeting">
 
           <p class="eyebrow"></p>
 
-          <h1>
+          <h1 id="homeTitle">
             Tu música.
             <span>Tu momento.</span>
           </h1>
@@ -232,12 +562,13 @@
           <button
             class="quick-card"
             type="button"
+            title="Ir a tus favoritos"
             data-view="library"
             data-library-filter="favorites"
           >
 
             <span class="quick-card-icon">
-              <svg viewBox="0 0 24 24">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <use href="#icon-heart"/>
               </svg>
             </span>
@@ -250,12 +581,13 @@
           <button
             class="quick-card"
             type="button"
+            title="Ir a toda tu biblioteca"
             data-view="library"
             data-library-filter="all"
           >
 
             <span class="quick-card-icon">
-              <svg viewBox="0 0 24 24">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <use href="#icon-library"/>
               </svg>
             </span>
@@ -279,6 +611,8 @@
           <button
             class="text-button"
             type="button"
+            aria-label="Ver todo el historial"
+            title="Ver todo el historial"
             data-view="history"
           >
             Ver todo
@@ -289,6 +623,7 @@
         <div
           class="track-list"
           id="homeRecentList"
+          aria-live="polite"
         ></div>
 
 
@@ -308,11 +643,12 @@
           <button
             class="discover-card"
             type="button"
+            title="Buscar: música popular"
             data-search="música popular"
           >
 
             <span>
-              <svg viewBox="0 0 24 24">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <use href="#icon-music"/>
               </svg>
             </span>
@@ -325,11 +661,12 @@
           <button
             class="discover-card"
             type="button"
+            title="Buscar: música nueva"
             data-search="música nueva"
           >
 
             <span>
-              <svg viewBox="0 0 24 24">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <use href="#icon-sparkles"/>
               </svg>
             </span>
@@ -351,13 +688,14 @@
         class="view"
         id="view-search"
         aria-hidden="true"
+        aria-labelledby="searchTitle"
       >
 
         <div class="page-heading">
 
           <p class="eyebrow">DESCUBRE ALGO NUEVO</p>
 
-          <h1>Buscar</h1>
+          <h1 id="searchTitle">Buscar</h1>
 
           <p class="hero-copy">
             Encuentra canciones, artistas y álbumes.
@@ -371,11 +709,13 @@
         <form
           class="search-form"
           id="searchForm"
+          role="search"
+          aria-label="Buscar música"
         >
 
           <span class="search-symbol" aria-hidden="true">
 
-            <svg viewBox="0 0 24 24">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <use href="#icon-search"/>
             </svg>
 
@@ -383,10 +723,20 @@
 
           <input
             id="searchInput"
+            name="q"
             type="search"
+            minlength="2"
             maxlength="150"
             placeholder="¿Qué quieres escuchar?"
             autocomplete="off"
+            autocapitalize="off"
+            autocorrect="off"
+            spellcheck="false"
+            inputmode="search"
+            enterkeyhint="search"
+            aria-label="Buscar canciones, artistas o álbumes"
+            aria-describedby="status"
+            aria-keyshortcuts="/"
             required
           >
 
@@ -394,6 +744,7 @@
             class="primary-button"
             id="searchButton"
             type="submit"
+            title="Buscar"
           >
             Buscar
           </button>
@@ -406,6 +757,7 @@
           id="status"
           role="status"
           aria-live="polite"
+          aria-atomic="true"
         >
           Busca una canción para comenzar.
         </p>
@@ -423,6 +775,7 @@
           <span
             class="muted tiny"
             id="resultCount"
+            aria-live="polite"
           ></span>
 
         </div>
@@ -431,6 +784,7 @@
           class="track-list"
           id="results"
           aria-live="polite"
+          aria-relevant="additions text"
         ></div>
 
       </section>
@@ -444,13 +798,14 @@
         class="view"
         id="view-library"
         aria-hidden="true"
+        aria-labelledby="libraryTitle"
       >
 
         <div class="page-heading">
 
           <p class="eyebrow">TU COLECCIÓN</p>
 
-          <h1>Biblioteca</h1>
+          <h1 id="libraryTitle">Biblioteca</h1>
 
           <p class="hero-copy">
             Todo lo que has guardado en Shunel.
@@ -460,11 +815,16 @@
 
         <!-- FILTROS DE BIBLIOTECA -->
 
-        <div class="library-filters">
+        <div
+          class="library-filters"
+          role="group"
+          aria-label="Filtros de biblioteca"
+        >
 
           <button
             class="filter-chip active"
             type="button"
+            title="Mostrar todo"
             data-library-filter="all"
             aria-pressed="true"
           >
@@ -474,10 +834,11 @@
           <button
             class="filter-chip"
             type="button"
+            title="Mostrar solo favoritos"
             data-library-filter="favorites"
             aria-pressed="false"
           >
-            <svg viewBox="0 0 24 24">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <use href="#icon-heart"/>
             </svg>
 
@@ -491,6 +852,7 @@
         <div
           class="track-list"
           id="libraryList"
+          aria-live="polite"
         ></div>
 
         <!-- FAVORITOS -->
@@ -498,6 +860,7 @@
         <div
           class="track-list"
           id="favoritesList"
+          aria-live="polite"
           hidden
         ></div>
 
@@ -512,13 +875,14 @@
         class="view"
         id="view-history"
         aria-hidden="true"
+        aria-labelledby="historyTitle"
       >
 
         <div class="page-heading">
 
           <p class="eyebrow">RECIENTEMENTE</p>
 
-          <h1>Historial</h1>
+          <h1 id="historyTitle">Historial</h1>
 
           <p class="hero-copy">
             Vuelve a escuchar lo que te gusta.
@@ -529,6 +893,7 @@
         <div
           class="track-list"
           id="historyList"
+          aria-live="polite"
         ></div>
 
       </section>
@@ -540,6 +905,7 @@
 
       <section
         class="youtube-stage"
+        id="youtubeStage"
         aria-label="Reproductor de YouTube"
       >
 
@@ -569,7 +935,7 @@
 
         <span>SHUNEL</span>
 
-      
+        <span id="footerYear"></span>
 
       </footer>
 
@@ -582,6 +948,7 @@
 
     <section
       class="player-dock"
+      id="playerDock"
       aria-label="Reproductor musical"
     >
 
@@ -592,9 +959,11 @@
           src="/assets/placeholder.svg"
           alt=""
           class="current-art"
+          decoding="async"
+          draggable="false"
         >
 
-        <div class="now-playing-text">
+        <div class="now-playing-text" aria-live="polite">
 
           <div
             class="current-title"
@@ -620,7 +989,7 @@
           title="Favorito"
         >
 
-          <svg viewBox="0 0 24 24">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
             <use href="#icon-heart"/>
           </svg>
 
@@ -638,9 +1007,10 @@
             id="previousButton"
             type="button"
             aria-label="Canción anterior"
+            title="Canción anterior"
           >
 
-            <svg viewBox="0 0 24 24">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <use href="#icon-previous"/>
             </svg>
 
@@ -652,9 +1022,10 @@
             id="playButton"
             type="button"
             aria-label="Reproducir"
+            title="Reproducir / Pausar"
           >
 
-            <svg viewBox="0 0 24 24">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <use href="#icon-play"/>
             </svg>
 
@@ -666,9 +1037,10 @@
             id="nextButton"
             type="button"
             aria-label="Siguiente canción"
+            title="Siguiente canción"
           >
 
-            <svg viewBox="0 0 24 24">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <use href="#icon-next"/>
             </svg>
 
@@ -688,6 +1060,8 @@
             max="100"
             value="0"
             step="0.1"
+            autocomplete="off"
+            title="Progreso"
             aria-label="Progreso de reproducción"
           >
 
@@ -705,9 +1079,11 @@
           id="queueToggle"
           type="button"
           aria-label="Mostrar cola"
+          aria-controls="queuePanel"
+          title="Mostrar cola"
         >
 
-          <svg viewBox="0 0 24 24">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
             <use href="#icon-queue"/>
           </svg>
 
@@ -715,9 +1091,9 @@
 
         </button>
 
-        <span class="volume-icon">
+        <span class="volume-icon" aria-hidden="true">
 
-          <svg viewBox="0 0 24 24">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
             <use href="#icon-volume"/>
           </svg>
 
@@ -729,6 +1105,8 @@
           min="0"
           max="100"
           value="75"
+          autocomplete="off"
+          title="Volumen"
           aria-label="Volumen"
         >
 
@@ -748,6 +1126,9 @@
     <section
       class="full-player"
       id="fullPlayer"
+      role="dialog"
+      aria-modal="true"
+      tabindex="-1"
       aria-label="Reproductor expandido"
       aria-hidden="true"
     >
@@ -759,9 +1140,10 @@
           id="closeFullPlayer"
           type="button"
           aria-label="Cerrar reproductor"
+          title="Cerrar reproductor"
         >
 
-          <svg viewBox="0 0 24 24">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
             <use href="#icon-chevron-down"/>
           </svg>
 
@@ -777,7 +1159,7 @@
           aria-label="Abrir vídeo en reproductor nativo"
           title="Abrir vídeo para PiP"
         >
-          <svg viewBox="0 0 24 24">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
             <use href="#icon-external"/>
           </svg>
         </button>
@@ -787,9 +1169,11 @@
           id="fullPlayerQueue"
           type="button"
           aria-label="Abrir cola"
+          aria-controls="queuePanel"
+          title="Abrir cola"
         >
 
-          <svg viewBox="0 0 24 24">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
             <use href="#icon-queue"/>
           </svg>
 
@@ -805,6 +1189,8 @@
           src="/assets/placeholder.svg"
           alt="Portada de la canción"
           class="full-player-art"
+          decoding="async"
+          draggable="false"
         >
 
 
@@ -827,9 +1213,10 @@
             id="fullPlayerFavorite"
             type="button"
             aria-label="Agregar a favoritos"
+            title="Favorito"
           >
 
-            <svg viewBox="0 0 24 24">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <use href="#icon-heart"/>
             </svg>
 
@@ -847,6 +1234,8 @@
             max="100"
             value="0"
             step="0.1"
+            autocomplete="off"
+            title="Progreso"
             aria-label="Progreso de reproducción"
           >
 
@@ -868,9 +1257,10 @@
             id="fullPreviousButton"
             type="button"
             aria-label="Canción anterior"
+            title="Canción anterior"
           >
 
-            <svg viewBox="0 0 24 24">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <use href="#icon-previous"/>
             </svg>
 
@@ -882,9 +1272,10 @@
             id="fullPlayButton"
             type="button"
             aria-label="Reproducir"
+            title="Reproducir / Pausar"
           >
 
-            <svg viewBox="0 0 24 24">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <use href="#icon-play"/>
             </svg>
 
@@ -896,9 +1287,10 @@
             id="fullNextButton"
             type="button"
             aria-label="Siguiente canción"
+            title="Siguiente canción"
           >
 
-            <svg viewBox="0 0 24 24">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <use href="#icon-next"/>
             </svg>
 
@@ -913,9 +1305,11 @@
             class="queue-toggle"
             id="fullQueueToggle"
             type="button"
+            aria-controls="queuePanel"
+            title="Mostrar cola"
           >
 
-            <svg viewBox="0 0 24 24">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <use href="#icon-queue"/>
             </svg>
 
@@ -942,6 +1336,7 @@
       <button
         class="bottom-nav-item active"
         type="button"
+        title="Inicio"
         data-view="home"
         aria-label="Inicio"
         aria-current="page"
@@ -949,7 +1344,7 @@
 
         <span class="bottom-nav-icon">
 
-          <svg viewBox="0 0 24 24">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
             <use href="#icon-home"/>
           </svg>
 
@@ -963,6 +1358,7 @@
       <button
         class="bottom-nav-item"
         type="button"
+        title="Buscar"
         data-view="search"
         aria-label="Buscar"
         aria-current="false"
@@ -970,7 +1366,7 @@
 
         <span class="bottom-nav-icon">
 
-          <svg viewBox="0 0 24 24">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
             <use href="#icon-search"/>
           </svg>
 
@@ -984,6 +1380,7 @@
       <button
         class="bottom-nav-item"
         type="button"
+        title="Biblioteca"
         data-view="library"
         aria-label="Biblioteca"
         aria-current="false"
@@ -991,7 +1388,7 @@
 
         <span class="bottom-nav-icon">
 
-          <svg viewBox="0 0 24 24">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
             <use href="#icon-library"/>
           </svg>
 
@@ -1005,6 +1402,7 @@
       <button
         class="bottom-nav-item"
         type="button"
+        title="Historial"
         data-view="history"
         aria-label="Historial"
         aria-current="false"
@@ -1012,7 +1410,7 @@
 
         <span class="bottom-nav-icon">
 
-          <svg viewBox="0 0 24 24">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
             <use href="#icon-history"/>
           </svg>
 
@@ -1032,6 +1430,7 @@
     <aside
       class="queue-panel"
       id="queuePanel"
+      tabindex="-1"
       aria-label="Cola de reproducción"
       aria-hidden="true"
     >
@@ -1051,9 +1450,10 @@
           id="closeQueue"
           type="button"
           aria-label="Cerrar cola"
+          title="Cerrar cola"
         >
 
-          <svg viewBox="0 0 24 24">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
             <use href="#icon-close"/>
           </svg>
 
@@ -1064,12 +1464,14 @@
       <div
         class="queue-list"
         id="queueList"
+        aria-live="polite"
       ></div>
 
       <button
         class="text-button"
         id="clearQueue"
         type="button"
+        title="Vaciar toda la cola"
       >
         Vaciar cola
       </button>
@@ -1086,9 +1488,74 @@
       id="toast"
       role="status"
       aria-live="polite"
+      aria-atomic="true"
     ></div>
 
   </div>
+
+
+  <!-- =====================================
+       MEJORAS INLINE (JS ligero, no toca app.js)
+  ====================================== -->
+  <script>
+    (function () {
+      var root = document.documentElement;
+
+      /* [51] Altura real del viewport en móviles (usable como var(--app-height)) */
+      function setAppHeight() {
+        root.style.setProperty("--app-height", window.innerHeight + "px");
+      }
+      setAppHeight();
+      window.addEventListener("resize", setAppHeight, { passive: true });
+      window.addEventListener("orientationchange", setAppHeight, { passive: true });
+
+      /* [52] Detecta si la app está instalada (PWA standalone) */
+      var standalone =
+        (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) ||
+        window.navigator.standalone === true;
+      if (standalone) root.classList.add("is-standalone");
+
+      /* [53] Estado de conexión */
+      function syncOnline() {
+        root.classList.toggle("is-offline", !navigator.onLine);
+      }
+      syncOnline();
+      window.addEventListener("online", syncOnline);
+      window.addEventListener("offline", syncOnline);
+
+      /* [54] Año automático en el pie de página */
+      var year = document.getElementById("footerYear");
+      if (year) year.textContent = "© " + new Date().getFullYear();
+
+      /* [55] Atajos: "/" o Ctrl/Cmd+K llevan al buscador */
+      document.addEventListener("keydown", function (event) {
+        var target = event.target;
+        var typing =
+          target &&
+          (target.tagName === "INPUT" ||
+            target.tagName === "TEXTAREA" ||
+            target.tagName === "SELECT" ||
+            target.isContentEditable);
+
+        var isSlash =
+          event.key === "/" && !typing && !event.ctrlKey && !event.metaKey && !event.altKey;
+        var isCtrlK =
+          (event.ctrlKey || event.metaKey) && String(event.key).toLowerCase() === "k";
+
+        if (!isSlash && !isCtrlK) return;
+
+        event.preventDefault();
+
+        var searchTab = document.querySelector('.bottom-nav-item[data-view="search"]');
+        if (searchTab) searchTab.click();
+
+        setTimeout(function () {
+          var input = document.getElementById("searchInput");
+          if (input) input.focus();
+        }, 60);
+      });
+    })();
+  </script>
 
 
   <!-- =====================================
