@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="es">
 
@@ -142,6 +141,13 @@
         <path d="M3 12a9 9 0 1 0 2.6-6.4L3 8"/>
         <path d="M3 3v5h5"/>
         <path d="M12 7v5l3 2"/>
+      </symbol>
+
+      <!-- NUEVO: Icono para abrir enlace externo / reproductor nativo -->
+      <symbol id="icon-external" viewBox="0 0 24 24">
+        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <polyline points="15 3 21 3 21 9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <line x1="10" y1="14" x2="21" y2="3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       </symbol>
 
     </svg>
@@ -772,6 +778,19 @@
         </button>
 
         <span>REPRODUCIENDO</span>
+
+        <!-- NUEVO: Botón para abrir el reproductor/vídeo nativo y activar PiP -->
+        <button
+          class="icon-button"
+          id="openNativePlayer"
+          type="button"
+          aria-label="Abrir vídeo en reproductor nativo"
+          title="Abrir vídeo para PiP"
+        >
+          <svg viewBox="0 0 24 24">
+            <use href="#icon-external"/>
+          </svg>
+        </button>
 
         <button
           class="icon-button"

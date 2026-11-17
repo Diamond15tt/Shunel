@@ -1,4 +1,3 @@
-
 import { searchTracks } from "./search.js";
 import { YouTubePlayer } from "./player.js";
 import { QueueManager } from "./queue.js";
@@ -533,6 +532,16 @@ function bindFullPlayerEvents() {
     "click",
     closeFullPlayer
   );
+
+  // NUEVO: Botón para abrir el vídeo en YouTube (ideal para activar PiP nativo en iPhone)
+  byId("openNativePlayer")?.addEventListener("click", () => {
+    if (currentTrack?.videoId) {
+      const youtubeUrl = `https://www.youtube.com/watch?v=${currentTrack.videoId}`;
+      window.open(youtubeUrl, '_blank');
+    } else {
+      ui.toastMessage("Primero reproduce una canción.");
+    }
+  });
 
   // Reproducir / pausar.
   byId("fullPlayButton")?.addEventListener(

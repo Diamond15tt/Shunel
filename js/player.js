@@ -1,4 +1,3 @@
-
 /* =========================================
    SHUNEL — YOUTUBE PLAYER
    YouTube IFrame Player API
@@ -62,13 +61,14 @@ export class YouTubePlayer {
       return new Promise((resolve, reject) => {
         try {
           this.player = new window.YT.Player(this.hostId, {
-            width: "1",
-            height: "1",
+            width: "100%",
+            height: "100%",
 
             playerVars: {
               autoplay: 0,
-              controls: 0,
-              playsinline: 1,
+              controls: 1,
+              playsinline: 0,
+              fs: 1,
               rel: 0,
               modestbranding: 1,
               enablejsapi: 1,
