@@ -1,6 +1,6 @@
 /* =========================================
    SHUNEL — YOUTUBE PLAYER
-   YouTube IFrame Player API (iOS & LockScreen Ready)
+   YouTube IFrame Player API (iOS & LockScreen Ready + Tracking)
 ========================================= */
 
 const IFRAME_API = "https://www.youtube.com/iframe_api";
@@ -20,12 +20,14 @@ export class YouTubePlayer {
 
     this.pendingVideoId = null;
     this.lastState = -1;
-
     this.volume = 70;
+
+    // Propiedades para seguimiento de progreso
+    this.progressInterval = null;
   }
 
   /* =========================================
-     INITIALIZATION
+     INICIALIZACIÓN
   ========================================= */
 
   async init() {
@@ -99,9 +101,7 @@ export class YouTubePlayer {
                 // Reproducir la última canción solicitada.
                 if (this.pendingVideoId) {
                   const videoId = this.pendingVideoId;
-
                   this.pendingVideoId = null;
-
                   this.play(videoId);
                 }
 
@@ -148,14 +148,11 @@ export class YouTubePlayer {
     }
 
     apiPromise = new Promise((resolve, reject) => {
-      const previousCallback =
-        window.onYouTubeIframeAPIReady;
-
+      const previousCallback = window.onYouTubeIframeAPIReady;
       let settled = false;
 
       const finish = () => {
         if (settled) return;
-
         settled = true;
 
         if (window.YT?.Player) {
@@ -183,13 +180,11 @@ export class YouTubePlayer {
 
       if (!script) {
         script = document.createElement("script");
-
         script.src = IFRAME_API;
         script.async = true;
 
         script.onerror = () => {
           apiPromise = null;
-
           reject(
             new Error(
               "No se pudo cargar el reproductor de YouTube."
@@ -247,19 +242,16 @@ export class YouTubePlayer {
 
   pause() {
     if (!this.ready || !this.player) return;
-
     this.player.pauseVideo();
   }
 
   resume() {
     if (!this.ready || !this.player) return;
-
     this.player.playVideo();
   }
 
   stop() {
     if (!this.ready || !this.player) return;
-
     this.player.stopVideo();
   }
 
@@ -272,10 +264,7 @@ export class YouTubePlayer {
 
     if (!Number.isFinite(volume)) return;
 
-    this.volume = Math.max(
-      0,
-      Math.min(100, volume)
-    );
+    this.volume = Math.max(0, Math.min(100, volume));
 
     if (this.ready && this.player) {
       this.player.setVolume(this.volume);
@@ -318,24 +307,21 @@ export class YouTubePlayer {
 
   getCurrentTime() {
     if (!this.ready || !this.player) return 0;
-
     return this.player.getCurrentTime() || 0;
   }
 
   getDuration() {
     if (!this.ready || !this.player) return 0;
-
     return this.player.getDuration() || 0;
   }
 
   getPlayerState() {
     if (!this.ready || !this.player) return -1;
-
     return this.player.getPlayerState();
   }
 
   /* =========================================
-     PLAYER STATE
+     PLAYER STATE & TRACKING
   ========================================= */
 
   handleState(event) {
@@ -343,10 +329,54 @@ export class YouTubePlayer {
 
     const states = window.YT.PlayerState;
 
+    // Notificar al exterior cualquier cambio de estado
     this.callbacks.onStateChange?.(event.data);
+
+    // Lógica de seguimiento basada en el estado del reproductor
+    if (event.data === states.PLAYING) {
+      this.startProgressTracking();
+      this.callbacks.onPlay?.({
+        currentTime: this.getCurrentTime(),
+        duration: this.getDuration()
+      });
+    } else {
+      this.stopProgressTracking();
+      
+      if (event.data === states.PAUSED) {
+        this.callbacks.onPause?.({
+          currentTime: this.getCurrentTime()
+        });
+      }
+    }
 
     if (event.data === states.ENDED) {
       this.callbacks.onEnded?.();
+    }
+  }
+
+  startProgressTracking() {
+    if (this.progressInterval) return;
+
+    // Reportar el progreso del video cada 1 segundo (ideal para analíticas)
+    this.progressInterval = setInterval(() => {
+      if (!this.ready || !this.player) return;
+
+      const currentTime = this.getCurrentTime();
+      const duration = this.getDuration();
+      const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
+
+      this.callbacks.onProgress?.({
+        currentTime,
+        duration,
+        progressPercent
+      });
+    }, 1000);
+  }
+
+  stopProgressTracking() {
+    if (this.progressInterval) {
+      clearInterval(this.progressInterval);
+      this.progressInterval = null;
     }
   }
 
@@ -360,6 +390,8 @@ export class YouTubePlayer {
     this.initializing = false;
 
     this.pendingVideoId = null;
+
+    this.stopProgressTracking();
 
     if (this.player) {
       this.player.destroy();

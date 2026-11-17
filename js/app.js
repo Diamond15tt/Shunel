@@ -5,7 +5,7 @@ import { MusicLibrary } from "./library.js";
 import { ShunelUI } from "./ui.js";
 
 /* =========================================
-   SHUNEL — APP CONTROLLER
+   SHUNEL — APP CONTROLLER (OPTIMIZADO)
 ========================================= */
 
 const ui = new ShunelUI();
@@ -18,9 +18,6 @@ let searchController = null;
 let isPlaying = false;
 let progressTimer = null;
 let queuePanelOpen = false;
-
-const $ = selector => document.querySelector(selector);
-const byId = id => document.getElementById(id);
 
 /* =========================================
    AUDIO FANTASMA PARA iOS (MEDIA SESSION BRIDGE)
@@ -44,6 +41,11 @@ function pauseIOSAudioContext() {
     silentAudio.pause();
   } catch (e) {}
 }
+
+// Desbloqueo global para iOS en la primera interacción del usuario
+document.addEventListener("pointerdown", () => {
+  triggerIOSAudioContext();
+}, { once: true });
 
 /* =========================================
    MEDIA SESSION
@@ -78,21 +80,9 @@ function updateMediaMetadata(track) {
         artist: track.channel || track.artist || "Shunel",
         album: "Shunel",
         artwork: [
-          {
-            src: artworkUrl,
-            sizes: "96x96",
-            type: "image/jpeg"
-          },
-          {
-            src: artworkUrl,
-            sizes: "256x256",
-            type: "image/jpeg"
-          },
-          {
-            src: artworkUrl,
-            sizes: "512x512",
-            type: "image/jpeg"
-          }
+          { src: artworkUrl, sizes: "96x96", type: "image/jpeg" },
+          { src: artworkUrl, sizes: "256x256", type: "image/jpeg" },
+          { src: artworkUrl, sizes: "512x512", type: "image/jpeg" }
         ]
       });
     }
@@ -112,19 +102,19 @@ function updateMediaPlaybackState(playing) {
 }
 
 function updateMediaPosition() {
-  if (!mediaSession || !player) return;
+  if (!mediaSession || !player || typeof player.getDuration !== "function") return;
   if (typeof mediaSession.setPositionState !== "function") return;
 
   try {
     const duration = Number(player.getDuration());
     const position = Number(player.getCurrentTime());
 
-    if (!Number.isFinite(duration) || duration <= 0) return;
+    if (!Number.isFinite(duration) || duration <= 0 || !Number.isFinite(position)) return;
 
     mediaSession.setPositionState({
       duration,
       playbackRate: 1,
-      position: Math.min(Math.max(position || 0, 0), duration)
+      position: Math.min(Math.max(position, 0), duration)
     });
   } catch {
     // Algunos navegadores no permiten actualizar la posición.
@@ -164,18 +154,19 @@ function setupMediaSession() {
     },
 
     seekbackward: details => {
-      const current = player?.getCurrentTime() || 0;
+      if (!player) return;
+      const current = player.getCurrentTime() || 0;
       const offset = details.seekOffset || 10;
-
-      player?.seekTo(Math.max(0, current - offset));
+      player.seekTo(Math.max(0, current - offset));
     },
 
     seekforward: details => {
-      const current = player?.getCurrentTime() || 0;
-      const duration = player?.getDuration() || 0;
+      if (!player) return;
+      const current = player.getCurrentTime() || 0;
+      const duration = player.getDuration() || 0;
       const offset = details.seekOffset || 10;
 
-      player?.seekTo(
+      player.seekTo(
         duration > 0
           ? Math.min(duration, current + offset)
           : current + offset
@@ -201,7 +192,7 @@ function setupMediaSession() {
 function navigateToView(viewName) {
   if (!viewName) return;
 
-  const target = byId(`view-${viewName}`);
+  const target = document.getElementById(`view-${viewName}`);
 
   if (!target) {
     console.warn(`[Shunel] Vista no encontrada: ${viewName}`);
@@ -212,7 +203,6 @@ function navigateToView(viewName) {
 
   document.querySelectorAll(".bottom-nav-item").forEach(button => {
     const active = button.dataset.view === viewName;
-
     button.classList.toggle("active", active);
     button.setAttribute("aria-current", active ? "page" : "false");
   });
@@ -233,41 +223,25 @@ function bindNavigation() {
 
 function bindLibraryFilters() {
   const filters = document.querySelectorAll("[data-library-filter]");
-  const libraryList = byId("libraryList");
-  const favoritesList = byId("favoritesList");
+  const libraryList = document.getElementById("libraryList");
+  const favoritesList = document.getElementById("favoritesList");
 
   if (!libraryList || !favoritesList) return;
 
   filters.forEach(button => {
     button.addEventListener("click", () => {
-      const showFavorites =
-        button.dataset.libraryFilter === "favorites";
+      const showFavorites = button.dataset.libraryFilter === "favorites";
 
       libraryList.hidden = showFavorites;
       favoritesList.hidden = !showFavorites;
 
       filters.forEach(item => {
         const active = item === button;
-
         item.classList.toggle("active", active);
         item.setAttribute("aria-pressed", String(active));
       });
     });
   });
-}
-
-/* =========================================
-   TRACK ACTIONS
-========================================= */
-
-function trackActions(track) {
-  return {
-    play: playTrack,
-    favorite: toggleFavorite,
-    isFavorite: library.isFavorite(track.videoId),
-    save: saveTrack,
-    add: addToQueue
-  };
 }
 
 /* =========================================
@@ -279,16 +253,14 @@ function refreshCollections() {
     "library",
     library.getLibrary(),
     track => ({
-      play: playTrack,
+      play: selectAndPlayTrack,
       favorite: toggleFavorite,
       isFavorite: library.isFavorite(track.videoId),
-
       remove: item => {
         library.remove(item.videoId);
         refreshCollections();
         ui.toastMessage("Canción eliminada de tu biblioteca.");
       },
-
       add: addToQueue
     })
   );
@@ -297,7 +269,7 @@ function refreshCollections() {
     "favorites",
     library.getFavorites(),
     track => ({
-      play: playTrack,
+      play: selectAndPlayTrack,
       favorite: toggleFavorite,
       isFavorite: true,
       add: addToQueue
@@ -308,7 +280,7 @@ function refreshCollections() {
     "history",
     library.getHistory(),
     track => ({
-      play: playTrack,
+      play: selectAndPlayTrack,
       favorite: toggleFavorite,
       isFavorite: library.isFavorite(track.videoId),
       add: addToQueue
@@ -324,7 +296,7 @@ function refreshQueue() {
   ui.renderQueue(
     queue.getItems(),
     currentTrack?.videoId,
-    playTrack,
+    selectAndPlayTrack,
     index => {
       queue.remove(index);
       refreshQueue();
@@ -335,6 +307,11 @@ function refreshQueue() {
 function toggleQueuePanel(open) {
   queuePanelOpen = Boolean(open);
   ui.toggleQueue(queuePanelOpen);
+
+  // Actualizar accesibilidad en botones de alternancia
+  document.querySelectorAll("#queueToggle, #fullPlayerQueue, #fullQueueToggle").forEach(btn => {
+    if (btn) btn.setAttribute("aria-expanded", String(queuePanelOpen));
+  });
 }
 
 /* =========================================
@@ -342,63 +319,52 @@ function toggleQueuePanel(open) {
 ========================================= */
 
 function saveTrack(track) {
+  if (!track?.videoId) return;
   const saved = library.save(track);
 
   ui.toastMessage(
-    saved
-      ? "Agregada a tu biblioteca."
-      : "Ya está en tu biblioteca."
+    saved ? "Agregada a tu biblioteca." : "Ya está en tu biblioteca."
   );
 
   refreshCollections();
 }
 
 function toggleFavorite(track) {
+  if (!track?.videoId) return;
   const added = library.toggleFavorite(track);
 
   ui.toastMessage(
-    added
-      ? "Agregada a favoritos."
-      : "Eliminada de favoritos."
+    added ? "Agregada a favoritos." : "Eliminada de favoritos."
   );
 
   refreshCollections();
 
   if (currentTrack?.videoId === track.videoId) {
-    ui.setCurrentTrack(
-      currentTrack,
-      library.isFavorite(track.videoId)
-    );
+    ui.setCurrentTrack(currentTrack, library.isFavorite(track.videoId));
   }
 }
 
 function addToQueue(track) {
+  if (!track?.videoId) return;
   queue.add(track);
   refreshQueue();
   ui.toastMessage("Agregada a la cola.");
 }
 
 /* =========================================
-   PLAYBACK
+   PLAYBACK (RESETEO Y REPRODUCCIÓN)
 ========================================= */
 
-function playTrack(track) {
+function selectAndPlayTrack(track) {
   if (!track?.videoId) return;
 
   currentTrack = track;
-
   queue.setCurrent(track);
   library.addHistory(track);
 
-  ui.setCurrentTrack(
-    track,
-    library.isFavorite(track.videoId)
-  );
-
-  // Activar el contexto de audio en iOS al iniciar reproducción por toque del usuario
+  ui.setCurrentTrack(track, library.isFavorite(track.videoId));
   triggerIOSAudioContext();
 
-  // Esperar la confirmación real de YouTube.
   isPlaying = false;
   ui.setPlaying(false);
   ui.setProgress(0, 0);
@@ -424,18 +390,19 @@ function playTrack(track) {
 
 function playNext() {
   const next = queue.takeNext();
-
   refreshQueue();
 
   if (next) {
-    playTrack(next);
+    selectAndPlayTrack(next);
   } else {
     isPlaying = false;
+    currentTrack = null;
     pauseIOSAudioContext();
     player?.pause?.();
 
     ui.setPlaying(false);
     updateMediaPlaybackState(false);
+    ui.setCurrentTrack(null, false);
 
     ui.toastMessage("La cola terminó.");
   }
@@ -444,19 +411,22 @@ function playNext() {
 function playPrevious() {
   if (!player || !currentTrack) return;
 
-  if (player.getCurrentTime() > 3) {
-    player.seekTo(0);
-    return;
+  try {
+    if (player.getCurrentTime() > 3) {
+      player.seekTo(0);
+      return;
+    }
+  } catch (e) {
+    // Fallback si getCurrentTime falla
   }
 
   const history = library.getHistory();
-
   const previous = history.find(
     track => track.videoId !== currentTrack.videoId
   );
 
   if (previous) {
-    playTrack(previous);
+    selectAndPlayTrack(previous);
   } else {
     triggerIOSAudioContext();
     player.play(currentTrack.videoId);
@@ -502,12 +472,14 @@ async function handleSearch(event) {
   ui.renderSearchResults([], () => ({}));
 
   try {
-    const tracks = await searchTracks(
-      query,
-      controller.signal
-    );
-
-    ui.renderSearchResults(tracks, trackActions);
+    const tracks = await searchTracks(query, controller.signal);
+    ui.renderSearchResults(tracks, track => ({
+      play: selectAndPlayTrack,
+      favorite: toggleFavorite,
+      isFavorite: library.isFavorite(track.videoId),
+      save: saveTrack,
+      add: addToQueue
+    }));
 
     ui.setStatus(
       tracks.length
@@ -519,10 +491,7 @@ async function handleSearch(event) {
     if (error.name === "AbortError") return;
 
     console.error("[Shunel] Search error:", error);
-
-    ui.setStatus(
-      error.message || "No se pudo completar la búsqueda."
-    );
+    ui.setStatus(error.message || "No se pudo completar la búsqueda.");
 
   } finally {
     if (searchController === controller) {
@@ -537,26 +506,25 @@ async function handleSearch(event) {
 ========================================= */
 
 function bindQueueEvents() {
-  byId("queueToggle")?.addEventListener("click", () => {
+  document.getElementById("queueToggle")?.addEventListener("click", () => {
     toggleQueuePanel(!queuePanelOpen);
   });
 
-  byId("closeQueue")?.addEventListener("click", () => {
+  document.getElementById("closeQueue")?.addEventListener("click", () => {
     toggleQueuePanel(false);
   });
 
-  byId("clearQueue")?.addEventListener("click", () => {
+  document.getElementById("clearQueue")?.addEventListener("click", () => {
     queue.clear();
     refreshQueue();
     ui.toastMessage("Cola vaciada.");
   });
 
-  // Botones de cola del reproductor grande.
-  byId("fullPlayerQueue")?.addEventListener("click", () => {
+  document.getElementById("fullPlayerQueue")?.addEventListener("click", () => {
     toggleQueuePanel(!queuePanelOpen);
   });
 
-  byId("fullQueueToggle")?.addEventListener("click", () => {
+  document.getElementById("fullQueueToggle")?.addEventListener("click", () => {
     toggleQueuePanel(!queuePanelOpen);
   });
 }
@@ -570,7 +538,6 @@ function openFullPlayer() {
     ui.toastMessage("Primero elige una canción.");
     return;
   }
-
   ui.toggleFullPlayer(true);
 }
 
@@ -579,50 +546,36 @@ function closeFullPlayer() {
 }
 
 function bindFullPlayerEvents() {
-  // Cerrar.
-  byId("closeFullPlayer")?.addEventListener(
-    "click",
-    closeFullPlayer
-  );
+  document.getElementById("closeFullPlayer")?.addEventListener("click", closeFullPlayer);
 
-  // Botón para abrir el vídeo en YouTube (PiP nativo en iPhone)
-  byId("openNativePlayer")?.addEventListener("click", () => {
+  document.getElementById("openNativePlayer")?.addEventListener("click", () => {
     if (currentTrack?.videoId) {
       const youtubeUrl = `https://www.youtube.com/watch?v=${currentTrack.videoId}`;
-      window.open(youtubeUrl, '_blank');
+      try {
+        window.open(youtubeUrl, '_blank');
+      } catch (e) {
+        ui.toastMessage("No se pudo abrir el reproductor externo.");
+      }
     } else {
       ui.toastMessage("Primero reproduce una canción.");
     }
   });
 
-  // Reproducir / pausar.
-  byId("fullPlayButton")?.addEventListener(
-    "click",
-    togglePlayback
-  );
+  document.getElementById("fullPlayButton")?.addEventListener("click", togglePlayback);
+  document.getElementById("fullPreviousButton")?.addEventListener("click", playPrevious);
+  document.getElementById("fullNextButton")?.addEventListener("click", playNext);
 
-  // Canción anterior.
-  byId("fullPreviousButton")?.addEventListener(
-    "click",
-    playPrevious
-  );
-
-  // Canción siguiente.
-  byId("fullNextButton")?.addEventListener(
-    "click",
-    playNext
-  );
-
-  // Favoritos.
-  byId("fullPlayerFavorite")?.addEventListener("click", () => {
+  document.getElementById("fullPlayerFavorite")?.addEventListener("click", () => {
     if (currentTrack) {
       toggleFavorite(currentTrack);
     }
   });
 
-  // Progreso.
-  byId("fullProgressBar")?.addEventListener("change", event => {
-    player?.seekTo(Number(event.target.value));
+  document.getElementById("fullProgressBar")?.addEventListener("change", event => {
+    if (!player) return;
+    const duration = player.getDuration() || 0;
+    const targetTime = Math.max(0, Math.min(Number(event.target.value), duration));
+    player.seekTo(targetTime);
   });
 }
 
@@ -631,34 +584,27 @@ function bindFullPlayerEvents() {
 ========================================= */
 
 function bindPlayerEvents() {
-  // Mini player: reproducir / pausar.
-  ui.elements.playButton?.addEventListener(
-    "click",
-    togglePlayback
-  );
-
-  // Canciones.
+  ui.elements.playButton?.addEventListener("click", togglePlayback);
   ui.elements.nextButton?.addEventListener("click", playNext);
   ui.elements.previousButton?.addEventListener("click", playPrevious);
 
-  // Favoritos.
   ui.elements.favoriteCurrent?.addEventListener("click", () => {
     if (currentTrack) {
       toggleFavorite(currentTrack);
     }
   });
 
-  // Volumen.
   ui.elements.volumeBar?.addEventListener("input", event => {
     player?.setVolume(Number(event.target.value));
   });
 
-  // Progreso.
   ui.elements.progressBar?.addEventListener("change", event => {
-    player?.seekTo(Number(event.target.value));
+    if (!player) return;
+    const duration = player.getDuration() || 0;
+    const targetTime = Math.max(0, Math.min(Number(event.target.value), duration));
+    player.seekTo(targetTime);
   });
 
-  // Tocar cualquier parte del mini reproductor abre el reproductor grande (Estilo Apple Music).
   document.querySelector(".player-dock")?.addEventListener("click", event => {
     if (event.target.closest("button") || event.target.closest("input")) return;
     openFullPlayer();
@@ -672,10 +618,7 @@ function bindPlayerEvents() {
 ========================================= */
 
 function bindEvents() {
-  ui.elements.form?.addEventListener(
-    "submit",
-    handleSearch
-  );
+  ui.elements.form?.addEventListener("submit", handleSearch);
 
   bindNavigation();
   bindLibraryFilters();
@@ -690,17 +633,20 @@ function bindEvents() {
 ========================================= */
 
 function startProgressUpdates() {
-  window.clearInterval(progressTimer);
+  clearInterval(progressTimer);
 
-  progressTimer = window.setInterval(() => {
+  progressTimer = setInterval(() => {
     if (!player || !isPlaying) return;
 
-    const current = player.getCurrentTime();
-    const duration = player.getDuration();
+    try {
+      const current = player.getCurrentTime();
+      const duration = player.getDuration();
 
-    ui.setProgress(current, duration);
-    updateMediaPosition();
-
+      ui.setProgress(current, duration);
+      updateMediaPosition();
+    } catch (e) {
+      // Ignorar errores transitorios de lectura del reproductor
+    }
   }, 1000);
 }
 
@@ -715,14 +661,13 @@ function initializePlayer() {
       player.setVolume(
         Number(ui.elements.volumeBar?.value ?? 75)
       );
-
       console.info("[Shunel] YouTube Player listo.");
     },
 
     onStateChange: state => {
-      const playing =
-        state === window.YT.PlayerState.PLAYING;
+      if (!window.YT?.PlayerState) return;
 
+      const playing = state === window.YT.PlayerState.PLAYING;
       isPlaying = playing;
 
       ui.setPlaying(playing);
@@ -733,7 +678,7 @@ function initializePlayer() {
         startProgressUpdates();
         updateMediaPosition();
       } else {
-        window.clearInterval(progressTimer);
+        clearInterval(progressTimer);
       }
     },
 
@@ -744,41 +689,28 @@ function initializePlayer() {
     onError: code => {
       isPlaying = false;
       pauseIOSAudioContext();
-      window.clearInterval(progressTimer);
+      clearInterval(progressTimer);
 
       ui.setPlaying(false);
       updateMediaPlaybackState(false);
 
-      console.warn(
-        "[Shunel] YouTube player error:",
-        code
-      );
-
-      ui.toastMessage(
-        "YouTube no pudo reproducir este video."
-      );
+      console.warn("[Shunel] YouTube player error:", code);
+      ui.toastMessage("YouTube no pudo reproducir este video.");
     }
   });
 
   player.init().catch(error => {
-    console.error(
-      "[Shunel] Player initialization:",
-      error
-    );
-
-    ui.toastMessage(
-      "No se pudo cargar el reproductor de YouTube."
-    );
+    console.error("[Shunel] Player initialization:", error);
+    ui.toastMessage("No se pudo cargar el reproductor de YouTube.");
   });
 }
 
 /* =========================================
-   INITIALIZATION
+   INITIALIZATION SEGURA (DOM READY)
 ========================================= */
 
 function initialize() {
   bindEvents();
-  bindNavigation(); // ¡Restablecido y activo para la barra inferior!
   setupMediaSession();
 
   refreshCollections();
@@ -786,14 +718,17 @@ function initialize() {
 
   ui.setCurrentTrack(null, false);
   ui.setPlaying(false);
-
   updateMediaPlaybackState(false);
 
   navigateToView("home");
-
   initializePlayer();
 
-  console.info("[Shunel] Aplicación iniciada.");
+  console.info("[Shunel] Aplicación iniciada correctamente.");
 }
 
-initialize();
+// Inicializar cuando el DOM esté completamente cargado
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initialize);
+} else {
+  initialize();
+}
