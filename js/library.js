@@ -56,7 +56,7 @@ export class MusicLibrary {
   }
 
   isFavorite(videoId) {
-    return this.favorites.some(item => item.videoId === track => track.videoId === videoId || item.videoId === videoId);
+    return this.favorites.some(item => item.videoId === videoId);
   }
 
   addHistory(track) {

@@ -778,6 +778,7 @@ function initializePlayer() {
 
 function initialize() {
   bindEvents();
+  bindNavigation(); // ¡Restablecido y activo para la barra inferior!
   setupMediaSession();
 
   refreshCollections();
