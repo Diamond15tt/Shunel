@@ -1,5 +1,9 @@
 import { Storage } from "./storage.js";
 
+/* =========================================
+   SHUNEL — MUSIC LIBRARY MANAGER
+========================================= */
+
 export class MusicLibrary {
   constructor() {
     this.library = Storage.getLibrary();
@@ -10,7 +14,17 @@ export class MusicLibrary {
   save(track) {
     if (!track?.videoId) return false;
     if (this.library.some(item => item.videoId === track.videoId)) return false;
-    this.library.unshift({ ...track });
+
+    // Normalizar la estructura del track asegurando compatibilidad de carátula y metadatos
+    const normalizedTrack = {
+      videoId: track.videoId,
+      title: track.title || track.name || "Desconocido",
+      channel: track.channel || track.artist || "Shunel",
+      thumbnail: track.thumbnail || track.thumbnailUrl || track.image || "/assets/placeholder.svg",
+      savedAt: Date.now()
+    };
+
+    this.library.unshift(normalizedTrack);
     Storage.saveLibrary(this.library);
     return true;
   }
@@ -23,23 +37,44 @@ export class MusicLibrary {
   toggleFavorite(track) {
     if (!track?.videoId) return false;
     const exists = this.favorites.some(item => item.videoId === track.videoId);
-    this.favorites = exists
-      ? this.favorites.filter(item => item.videoId !== track.videoId)
-      : [{ ...track }, ...this.favorites];
+
+    if (exists) {
+      this.favorites = this.favorites.filter(item => item.videoId !== track.videoId);
+    } else {
+      const normalizedTrack = {
+        videoId: track.videoId,
+        title: track.title || track.name || "Desconocido",
+        channel: track.channel || track.artist || "Shunel",
+        thumbnail: track.thumbnail || track.thumbnailUrl || track.image || "/assets/placeholder.svg",
+        favoritedAt: Date.now()
+      };
+      this.favorites = [normalizedTrack, ...this.favorites];
+    }
+
     Storage.saveFavorites(this.favorites);
     return !exists;
   }
 
   isFavorite(videoId) {
-    return this.favorites.some(item => item.videoId === videoId);
+    return this.favorites.some(item => item.videoId === track => track.videoId === videoId || item.videoId === videoId);
   }
 
   addHistory(track) {
     if (!track?.videoId) return;
+
+    const normalizedTrack = {
+      videoId: track.videoId,
+      title: track.title || track.name || "Desconocido",
+      channel: track.channel || track.artist || "Shunel",
+      thumbnail: track.thumbnail || track.thumbnailUrl || track.image || "/assets/placeholder.svg",
+      playedAt: Date.now()
+    };
+
     this.history = [
-      { ...track, playedAt: Date.now() },
+      normalizedTrack,
       ...this.history.filter(item => item.videoId !== track.videoId)
     ].slice(0, 100);
+
     Storage.saveHistory(this.history);
   }
 

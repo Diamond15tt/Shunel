@@ -1,6 +1,6 @@
 /* =========================================
    SHUNEL — YOUTUBE PLAYER
-   YouTube IFrame Player API
+   YouTube IFrame Player API (iOS & LockScreen Ready)
 ========================================= */
 
 const IFRAME_API = "https://www.youtube.com/iframe_api";

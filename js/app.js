@@ -23,6 +23,29 @@ const $ = selector => document.querySelector(selector);
 const byId = id => document.getElementById(id);
 
 /* =========================================
+   AUDIO FANTASMA PARA iOS (MEDIA SESSION BRIDGE)
+========================================= */
+
+const silentAudio = document.createElement("audio");
+silentAudio.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
+silentAudio.loop = true;
+silentAudio.setAttribute("playsinline", "");
+
+function triggerIOSAudioContext() {
+  try {
+    silentAudio.play().catch(() => {});
+  } catch (e) {
+    // Silenciar errores de política de autoplay si ocurren antes de la interacción
+  }
+}
+
+function pauseIOSAudioContext() {
+  try {
+    silentAudio.pause();
+  } catch (e) {}
+}
+
+/* =========================================
    MEDIA SESSION
    CONTROLES DEL SISTEMA / PANTALLA BLOQUEADA
 ========================================= */
@@ -30,12 +53,17 @@ const byId = id => document.getElementById(id);
 const mediaSession = navigator.mediaSession || null;
 
 function getTrackArtwork(track) {
-  return (
+  let artworkUrl =
     track?.thumbnail ||
     track?.thumbnailUrl ||
     track?.image ||
-    "/assets/placeholder.svg"
-  );
+    "/assets/placeholder.svg";
+
+  if (artworkUrl.startsWith("//")) {
+    artworkUrl = "https:" + artworkUrl;
+  }
+
+  return artworkUrl;
 }
 
 function updateMediaMetadata(track) {
@@ -43,13 +71,25 @@ function updateMediaMetadata(track) {
 
   try {
     if ("MediaMetadata" in window) {
+      const artworkUrl = getTrackArtwork(track);
+
       mediaSession.metadata = new MediaMetadata({
         title: track.title || track.name || "Reproduciendo",
         artist: track.channel || track.artist || "Shunel",
         album: "Shunel",
         artwork: [
           {
-            src: getTrackArtwork(track),
+            src: artworkUrl,
+            sizes: "96x96",
+            type: "image/jpeg"
+          },
+          {
+            src: artworkUrl,
+            sizes: "256x256",
+            type: "image/jpeg"
+          },
+          {
+            src: artworkUrl,
             sizes: "512x512",
             type: "image/jpeg"
           }
@@ -100,10 +140,12 @@ function setupMediaSession() {
   const actions = {
     play: () => {
       if (!currentTrack) return;
+      triggerIOSAudioContext();
       player?.resume?.();
     },
 
     pause: () => {
+      pauseIOSAudioContext();
       player?.pause?.();
     },
 
@@ -353,13 +395,16 @@ function playTrack(track) {
     library.isFavorite(track.videoId)
   );
 
+  // Activar el contexto de audio en iOS al iniciar reproducción por toque del usuario
+  triggerIOSAudioContext();
+
   // Esperar la confirmación real de YouTube.
   isPlaying = false;
   ui.setPlaying(false);
   ui.setProgress(0, 0);
 
   updateMediaMetadata(track);
-  updateMediaPlaybackState(false);
+  updateMediaPlaybackState(true);
 
   refreshCollections();
   refreshQueue();
@@ -386,7 +431,7 @@ function playNext() {
     playTrack(next);
   } else {
     isPlaying = false;
-
+    pauseIOSAudioContext();
     player?.pause?.();
 
     ui.setPlaying(false);
@@ -413,6 +458,7 @@ function playPrevious() {
   if (previous) {
     playTrack(previous);
   } else {
+    triggerIOSAudioContext();
     player.play(currentTrack.videoId);
   }
 }
@@ -421,6 +467,12 @@ function togglePlayback() {
   if (!currentTrack) {
     ui.toastMessage("Primero elige una canción.");
     return;
+  }
+
+  if (isPlaying) {
+    pauseIOSAudioContext();
+  } else {
+    triggerIOSAudioContext();
   }
 
   player?.toggle();
@@ -533,7 +585,7 @@ function bindFullPlayerEvents() {
     closeFullPlayer
   );
 
-  // NUEVO: Botón para abrir el vídeo en YouTube (ideal para activar PiP nativo en iPhone)
+  // Botón para abrir el vídeo en YouTube (PiP nativo en iPhone)
   byId("openNativePlayer")?.addEventListener("click", () => {
     if (currentTrack?.videoId) {
       const youtubeUrl = `https://www.youtube.com/watch?v=${currentTrack.videoId}`;
@@ -606,17 +658,11 @@ function bindPlayerEvents() {
     player?.seekTo(Number(event.target.value));
   });
 
-  // Tocar la portada, título o artista abre el reproductor grande.
-  $(".now-playing")?.addEventListener("click", event => {
-    if (event.target.closest("button")) return;
+  // Tocar cualquier parte del mini reproductor abre el reproductor grande (Estilo Apple Music).
+  document.querySelector(".player-dock")?.addEventListener("click", event => {
+    if (event.target.closest("button") || event.target.closest("input")) return;
     openFullPlayer();
   });
-
-  // Flecha de expansión.
-  byId("expandPlayer")?.addEventListener(
-    "click",
-    openFullPlayer
-  );
 
   bindFullPlayerEvents();
 }
@@ -683,6 +729,7 @@ function initializePlayer() {
       updateMediaPlaybackState(playing);
 
       if (playing) {
+        triggerIOSAudioContext();
         startProgressUpdates();
         updateMediaPosition();
       } else {
@@ -696,7 +743,7 @@ function initializePlayer() {
 
     onError: code => {
       isPlaying = false;
-
+      pauseIOSAudioContext();
       window.clearInterval(progressTimer);
 
       ui.setPlaying(false);
