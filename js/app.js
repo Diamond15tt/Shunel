@@ -217,12 +217,17 @@ function bindNavigation() {
       navigateToView(button.dataset.view);
     });
   });
-
-  // Vincular botón de letras en el reproductor completo
-  document.getElementById("openLyricsButton")?.addEventListener("click", () => {
-    navigateToView("lyrics");
-  });
 }
+
+// 🛠️ ESCUCHA GLOBAL DE CLICS (Atrapa el botón de letras sin importar cuándo se renderice)
+document.addEventListener("click", event => {
+  const lyricsBtn = event.target.closest("#openLyricsButton");
+  if (lyricsBtn) {
+    event.preventDefault();
+    navigateToView("lyrics");
+    closeFullPlayer(); // Cierra el reproductor completo para ver la letra de fondo
+  }
+});
 
 /* =========================================
    LIBRARY FILTERS
