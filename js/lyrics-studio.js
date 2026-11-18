@@ -1,8 +1,7 @@
 
 /* =========================================
    SHUNEL — LYRICS STUDIO
-   Version 1.0
-   Preferences + Interface Controller
+   Version 3.0
 ========================================= */
 
 (() => {
@@ -10,677 +9,492 @@
 
   const STORAGE_KEY = "shunel_lyrics_studio";
 
-  const DEFAULT_SETTINGS = Object.freeze({
-    style: "minimal",
+  const DEFAULTS = {
+    style: "pure",
     size: 25,
-    motion: "smooth"
-  });
+    motion: "smooth",
+    alignment: "center",
+    activeColor: "white",
+    autoScroll: true
+  };
 
-  const VALID_STYLES = [
-    "minimal",
-    "cinematic",
-    "silver",
-    "neon",
-    "focus"
-  ];
+  const OPTIONS = {
+    style: [
+      ["Pure", "pure"],
+      ["Cinema", "cinema"],
+      ["Karaoke", "karaoke"],
+      ["Editorial", "editorial"],
+      ["Midnight", "midnight"],
+      ["Focus", "focus"]
+    ],
+    motion: [
+      ["Suave", "smooth"],
+      ["Cinemático", "cinematic"],
+      ["Instantáneo", "none"]
+    ],
+    alignment: [
+      ["Centro", "center"],
+      ["Izquierda", "left"]
+    ],
+    activeColor: [
+      ["Blanco", "white"],
+      ["Azul", "blue"],
+      ["Plateado", "silver"]
+    ]
+  };
 
-  const VALID_MOTIONS = [
-    "smooth",
-    "cinematic",
-    "none"
-  ];
-
-  let settings = { ...DEFAULT_SETTINGS };
-
+  let settings = { ...DEFAULTS };
   let container = null;
   let panel = null;
   let trigger = null;
-
-  /* =========================================
-     STORAGE
-  ========================================= */
+  let statusElement = null;
+  let observer = null;
+  let initialized = false;
 
   function loadSettings() {
     try {
       const saved = JSON.parse(
-        localStorage.getItem(STORAGE_KEY)
+        localStorage.getItem(STORAGE_KEY) || "{}"
       );
 
-      if (!saved || typeof saved !== "object") return;
+      Object.keys(OPTIONS).forEach(key => {
+        const allowed = OPTIONS[key].map(option => option[1]);
 
-      if (VALID_STYLES.includes(saved.style)) {
-        settings.style = saved.style;
+        if (allowed.includes(saved[key])) {
+          settings[key] = saved[key];
+        }
+      });
+
+      if (Number.isFinite(saved.size)) {
+        settings.size = Math.min(38, Math.max(16, saved.size));
       }
 
-      if (
-        Number.isFinite(saved.size) &&
-        saved.size >= 16 &&
-        saved.size <= 38
-      ) {
-        settings.size = saved.size;
+      if (typeof saved.autoScroll === "boolean") {
+        settings.autoScroll = saved.autoScroll;
       }
-
-      if (VALID_MOTIONS.includes(saved.motion)) {
-        settings.motion = saved.motion;
-      }
-
     } catch (error) {
-      console.warn(
-        "[Lyrics Studio] Error al cargar preferencias:",
-        error
-      );
+      console.warn("[Lyrics Studio] Error cargando preferencias.", error);
     }
   }
 
   function saveSettings() {
     try {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify(settings)
-      );
-
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
     } catch (error) {
-      console.warn(
-        "[Lyrics Studio] Error al guardar preferencias:",
-        error
-      );
+      console.warn("[Lyrics Studio] Error guardando preferencias.", error);
     }
   }
 
-  /* =========================================
-     DOM HELPERS
-  ========================================= */
+  function createElement(tag, className, text) {
+    const node = document.createElement(tag);
 
-  function createElement(tag, className = "", text = "") {
-    const element = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
 
-    if (className) {
-      element.className = className;
-    }
-
-    if (text) {
-      element.textContent = text;
-    }
-
-    return element;
+    return node;
   }
 
   function createSection(title) {
-    const section = createElement(
-      "section",
-      "studio-section"
-    );
-
+    const section = createElement("section", "studio-section");
     section.appendChild(
-      createElement(
-        "span",
-        "studio-label",
-        title
-      )
+      createElement("span", "studio-label", title)
     );
-
     return section;
   }
 
-  function createOption(
-    label,
-    value,
-    group,
-    callback
-  ) {
-    const button = createElement(
-      "button",
-      "studio-option",
-      label
-    );
+  function createOptionGroup(title, settingName, options) {
+    const section = createSection(title);
+    const grid = createElement("div", "studio-options");
 
-    button.type = "button";
-    button.dataset.value = value;
-    button.dataset.group = group;
+    options.forEach(([label, value]) => {
+      const button = createElement("button", "studio-option", label);
 
-    button.addEventListener("click", callback);
+      button.type = "button";
+      button.dataset.setting = settingName;
+      button.dataset.value = value;
 
-    return button;
+      button.addEventListener("click", () => {
+        updateSetting(settingName, value);
+      });
+
+      grid.appendChild(button);
+    });
+
+    section.appendChild(grid);
+    return section;
   }
 
-  /* =========================================
-     APPLY SETTINGS
-  ========================================= */
+  function createInterface() {
+    trigger = document.getElementById("lyricsStudioTrigger");
 
-  function applySettings() {
-    container = document.getElementById(
-      "lyricsContainer"
+    if (!trigger) {
+      trigger = createElement(
+        "button",
+        "",
+        "Aa  Lyrics Studio"
+      );
+
+      trigger.id = "lyricsStudioTrigger";
+      trigger.type = "button";
+      document.body.appendChild(trigger);
+    }
+
+    trigger.setAttribute("aria-expanded", "false");
+    trigger.setAttribute("aria-controls", "lyricsStudio");
+
+    panel = document.getElementById("lyricsStudio");
+
+    if (!panel) {
+      panel = createElement("aside");
+      panel.id = "lyricsStudio";
+      document.body.appendChild(panel);
+    }
+
+    panel.dataset.studioVersion = "3";
+    panel.setAttribute("aria-label", "Configuración de letras");
+    panel.replaceChildren();
+
+    const header = createElement("div", "studio-header");
+    header.appendChild(
+      createElement("span", "studio-heading", "Lyrics Studio")
     );
 
+    const closeButton = createElement("button", "studio-close", "×");
+    closeButton.type = "button";
+    closeButton.setAttribute("aria-label", "Cerrar Lyrics Studio");
+    closeButton.addEventListener("click", close);
+
+    header.appendChild(closeButton);
+    panel.appendChild(header);
+
+    statusElement = createElement(
+      "div",
+      "studio-status",
+      "Esperando letras..."
+    );
+
+    statusElement.setAttribute("role", "status");
+    panel.appendChild(statusElement);
+
+    panel.appendChild(
+      createOptionGroup("ESTILO", "style", OPTIONS.style)
+    );
+
+    const sizeSection = createSection("TAMAÑO");
+
+    const rangeInfo = createElement("div", "studio-range-info");
+    rangeInfo.appendChild(createElement("span", "", "Tamaño de letra"));
+
+    const sizeValue = createElement("strong", "", `${settings.size}px`);
+    sizeValue.id = "lyricsStudioSizeValue";
+    rangeInfo.appendChild(sizeValue);
+
+    sizeSection.appendChild(rangeInfo);
+
+    const range = createElement("input");
+    range.type = "range";
+    range.min = "16";
+    range.max = "38";
+    range.step = "1";
+    range.value = String(settings.size);
+    range.id = "lyricsStudioSize";
+
+    range.addEventListener("input", () => {
+      settings.size = Number(range.value);
+      applySettings();
+      saveSettings();
+    });
+
+    sizeSection.appendChild(range);
+    panel.appendChild(sizeSection);
+
+    panel.appendChild(
+      createOptionGroup("MOVIMIENTO", "motion", OPTIONS.motion)
+    );
+
+    panel.appendChild(
+      createOptionGroup("ALINEACIÓN", "alignment", OPTIONS.alignment)
+    );
+
+    panel.appendChild(
+      createOptionGroup("COLOR ACTIVO", "activeColor", OPTIONS.activeColor)
+    );
+
+    const scrollSection = createSection("REPRODUCCIÓN");
+
+    const scrollToggle = createElement(
+      "button",
+      "studio-toggle"
+    );
+
+    scrollToggle.type = "button";
+    scrollToggle.id = "lyricsStudioAutoScroll";
+    scrollToggle.appendChild(
+      createElement("span", "", "Desplazamiento automático")
+    );
+    scrollToggle.appendChild(
+      createElement("span", "studio-switch")
+    );
+
+    scrollToggle.addEventListener("click", () => {
+      settings.autoScroll = !settings.autoScroll;
+      applySettings();
+      saveSettings();
+    });
+
+    scrollSection.appendChild(scrollToggle);
+    panel.appendChild(scrollSection);
+
+    const resetButton = createElement(
+      "button",
+      "studio-reset",
+      "Restablecer ajustes"
+    );
+
+    resetButton.type = "button";
+    resetButton.addEventListener("click", reset);
+
+    panel.appendChild(resetButton);
+  }
+
+  function updateSetting(key, value) {
+    if (!OPTIONS[key]) return;
+
+    const allowed = OPTIONS[key].map(option => option[1]);
+    if (!allowed.includes(value)) return;
+
+    settings[key] = value;
+    applySettings();
+    saveSettings();
+  }
+
+  function detectLyricsState() {
+    if (!container) return "empty";
+
+    const title = (
+      document.getElementById("lyricsTitle")?.textContent || ""
+    ).toLowerCase();
+
+    if (
+      title.includes("buscando") ||
+      title.includes("cargando")
+    ) {
+      return "loading";
+    }
+
+    const lines = container.querySelectorAll(".lyric-line");
+
+    if (!lines.length) {
+      return "empty";
+    }
+
+    const synced = Array.from(lines).some(line => {
+      return line.hasAttribute("data-time");
+    });
+
+    return synced ? "synced" : "plain";
+  }
+
+  function refreshStatus() {
+    if (!statusElement) return;
+
+    const state = detectLyricsState();
+
+    const labels = {
+      loading: "Buscando letras...",
+      empty: "No hay letras disponibles",
+      synced: "Letras sincronizadas",
+      plain: "Letras sin sincronización"
+    };
+
+    statusElement.textContent = labels[state];
+    statusElement.classList.toggle("is-synced", state === "synced");
+    statusElement.classList.toggle("is-plain", state === "plain");
+    statusElement.dataset.state = state;
+
+    if (container) {
+      container.dataset.lyricsType =
+        state === "synced" || state === "plain" ? state : state;
+    }
+  }
+
+  function applySettings() {
     if (!container) return;
 
     container.dataset.lyricsStyle = settings.style;
-
     container.dataset.lyricsMotion = settings.motion;
+    container.dataset.lyricsAlignment = settings.alignment;
+    container.dataset.lyricsColor = settings.activeColor;
 
     container.style.setProperty(
       "--lyrics-size",
       `${settings.size}px`
     );
 
-    let duration = "350ms";
+    const sizeValue = document.getElementById("lyricsStudioSizeValue");
+    const range = document.getElementById("lyricsStudioSize");
 
-    if (settings.motion === "cinematic") {
-      duration = "550ms";
-    }
+    if (sizeValue) sizeValue.textContent = `${settings.size}px`;
+    if (range) range.value = String(settings.size);
 
-    if (settings.motion === "none") {
-      duration = "0ms";
-    }
+    panel?.querySelectorAll("[data-setting]").forEach(button => {
+      const selected =
+        settings[button.dataset.setting] === button.dataset.value;
 
-    container.style.setProperty(
-      "--lyrics-motion",
-      duration
-    );
-
-    updateControls();
-  }
-
-  /* =========================================
-     INTERFACE
-  ========================================= */
-
-  function createInterface() {
-    if (document.getElementById("lyricsStudio")) {
-      panel = document.getElementById("lyricsStudio");
-      trigger = document.getElementById(
-        "lyricsStudioTrigger"
-      );
-
-      return;
-    }
-
-    /* TRIGGER */
-
-    trigger = createElement(
-      "button",
-      "",
-      "Lyrics Studio"
-    );
-
-    trigger.id = "lyricsStudioTrigger";
-    trigger.type = "button";
-
-    trigger.setAttribute(
-      "aria-expanded",
-      "false"
-    );
-
-    trigger.setAttribute(
-      "aria-controls",
-      "lyricsStudio"
-    );
-
-    const icon = createElement(
-      "span",
-      "",
-      "Aa"
-    );
-
-    icon.setAttribute("aria-hidden", "true");
-
-    trigger.prepend(icon);
-
-    /* PANEL */
-
-    panel = createElement("div");
-
-    panel.id = "lyricsStudio";
-
-    panel.setAttribute(
-      "aria-label",
-      "Personalizar letras"
-    );
-
-    panel.setAttribute(
-      "aria-hidden",
-      "true"
-    );
-
-    /* HEADER */
-
-    const header = createElement(
-      "div",
-      "studio-header"
-    );
-
-    header.appendChild(
-      createElement(
-        "span",
-        "studio-heading",
-        "Lyrics Studio"
-      )
-    );
-
-    const closeButton = createElement(
-      "button",
-      "studio-close",
-      "×"
-    );
-
-    closeButton.type = "button";
-
-    closeButton.setAttribute(
-      "aria-label",
-      "Cerrar Lyrics Studio"
-    );
-
-    closeButton.addEventListener(
-      "click",
-      closeStudio
-    );
-
-    header.appendChild(closeButton);
-
-    panel.appendChild(header);
-
-    /* =====================================
-       STYLE SELECTOR
-    ===================================== */
-
-    const styleSection = createSection("ESTILO");
-
-    const styleOptions = createElement(
-      "div",
-      "studio-options"
-    );
-
-    const styles = [
-      ["Minimal", "minimal"],
-      ["Cinematic", "cinematic"],
-      ["Silver Flow", "silver"],
-      ["Neon Blue", "neon"],
-      ["Focus", "focus"]
-    ];
-
-    styles.forEach(([label, value]) => {
-      const button = createOption(
-        label,
-        value,
-        "style",
-        () => {
-          settings.style = value;
-
-          saveSettings();
-          applySettings();
-        }
-      );
-
-      styleOptions.appendChild(button);
+      button.classList.toggle("is-selected", selected);
+      button.setAttribute("aria-pressed", String(selected));
     });
 
-    styleSection.appendChild(styleOptions);
+    const toggle = document.getElementById("lyricsStudioAutoScroll");
 
-    panel.appendChild(styleSection);
-
-    /* =====================================
-       SIZE CONTROL
-    ===================================== */
-
-    const sizeSection = createSection(
-      "TAMAÑO DE LETRA"
-    );
-
-    const sizeInfo = createElement(
-      "div",
-      "studio-range-info"
-    );
-
-    sizeInfo.appendChild(
-      createElement("span", "", "Pequeño")
-    );
-
-    const sizeValue = createElement(
-      "strong",
-      "",
-      `${settings.size}px`
-    );
-
-    sizeValue.id = "lyricsStudioSizeValue";
-
-    sizeInfo.appendChild(sizeValue);
-
-    sizeInfo.appendChild(
-      createElement("span", "", "Grande")
-    );
-
-    const sizeInput = createElement("input");
-
-    sizeInput.type = "range";
-    sizeInput.min = "16";
-    sizeInput.max = "38";
-    sizeInput.step = "1";
-    sizeInput.value = String(settings.size);
-
-    sizeInput.setAttribute(
-      "aria-label",
-      "Tamaño de letra"
-    );
-
-    sizeInput.addEventListener("input", () => {
-      settings.size = Number(sizeInput.value);
-
-      sizeValue.textContent =
-        `${settings.size}px`;
-
-      applySettings();
-      saveSettings();
-    });
-
-    sizeSection.appendChild(sizeInfo);
-    sizeSection.appendChild(sizeInput);
-
-    panel.appendChild(sizeSection);
-
-    /* =====================================
-       MOTION SELECTOR
-    ===================================== */
-
-    const motionSection = createSection(
-      "MOVIMIENTO"
-    );
-
-    const motionOptions = createElement(
-      "div",
-      "studio-options"
-    );
-
-    const motions = [
-      ["Smooth", "smooth"],
-      ["Cinematic", "cinematic"],
-      ["Sin movimiento", "none"]
-    ];
-
-    motions.forEach(([label, value]) => {
-      const button = createOption(
-        label,
-        value,
-        "motion",
-        () => {
-          settings.motion = value;
-
-          saveSettings();
-          applySettings();
-        }
-      );
-
-      motionOptions.appendChild(button);
-    });
-
-    motionSection.appendChild(motionOptions);
-
-    panel.appendChild(motionSection);
-
-    /* =====================================
-       RESET
-    ===================================== */
-
-    const resetButton = createElement(
-      "button",
-      "studio-reset",
-      "Restablecer configuración"
-    );
-
-    resetButton.type = "button";
-
-    resetButton.addEventListener("click", () => {
-      settings = { ...DEFAULT_SETTINGS };
-
-      saveSettings();
-      applySettings();
-    });
-
-    panel.appendChild(resetButton);
-
-    /* =====================================
-       APPEND ELEMENTS
-    ===================================== */
-
-    document.body.appendChild(trigger);
-    document.body.appendChild(panel);
-
-    trigger.addEventListener(
-      "click",
-      toggleStudio
-    );
-
-    updateControls();
-  }
-
-  /* =========================================
-     UPDATE CONTROLS
-  ========================================= */
-
-  function updateControls() {
-    if (!panel) return;
-
-    const options = panel.querySelectorAll(
-      ".studio-option"
-    );
-
-    options.forEach(button => {
-      const value = button.dataset.value;
-      const group = button.dataset.group;
-
-      let selected = false;
-
-      if (group === "style") {
-        selected = settings.style === value;
-      }
-
-      if (group === "motion") {
-        selected = settings.motion === value;
-      }
-
-      button.classList.toggle(
-        "is-selected",
-        selected
-      );
-
-      button.setAttribute(
+    if (toggle) {
+      toggle.setAttribute(
         "aria-pressed",
-        String(selected)
+        String(settings.autoScroll)
       );
-    });
-
-    const sizeInput = panel.querySelector(
-      'input[type="range"]'
-    );
-
-    const sizeValue = document.getElementById(
-      "lyricsStudioSizeValue"
-    );
-
-    if (sizeInput) {
-      sizeInput.value = String(settings.size);
     }
 
-    if (sizeValue) {
-      sizeValue.textContent =
-        `${settings.size}px`;
-    }
+    refreshStatus();
   }
 
-  /* =========================================
-     PANEL CONTROLS
-  ========================================= */
-
-  function openStudio() {
+  function open() {
     if (!panel || !trigger) return;
 
     panel.classList.add("is-open");
+    trigger.setAttribute("aria-expanded", "true");
 
-    panel.setAttribute(
-      "aria-hidden",
-      "false"
-    );
-
-    trigger.setAttribute(
-      "aria-expanded",
-      "true"
-    );
+    panel.querySelector(".studio-close")?.focus();
   }
 
-  function closeStudio() {
+  function close() {
     if (!panel || !trigger) return;
 
     panel.classList.remove("is-open");
-
-    panel.setAttribute(
-      "aria-hidden",
-      "true"
-    );
-
-    trigger.setAttribute(
-      "aria-expanded",
-      "false"
-    );
+    trigger.setAttribute("aria-expanded", "false");
+    trigger.focus();
   }
 
-  function toggleStudio() {
-    if (!panel) return;
-
-    if (panel.classList.contains("is-open")) {
-      closeStudio();
+  function toggle() {
+    if (panel?.classList.contains("is-open")) {
+      close();
     } else {
-      openStudio();
+      open();
     }
   }
 
-  /* =========================================
-     EVENT LISTENERS
-  ========================================= */
+  function reset() {
+    settings = { ...DEFAULTS };
+    saveSettings();
+    applySettings();
+  }
 
   function setupEvents() {
+    if (trigger.dataset.studioReady === "true") return;
+
+    trigger.addEventListener("click", toggle);
+    trigger.dataset.studioReady = "true";
+
     document.addEventListener("keydown", event => {
-      if (event.key === "Escape") {
-        closeStudio();
+      if (event.key === "Escape" && panel?.classList.contains("is-open")) {
+        close();
       }
     });
 
-    document.addEventListener("click", event => {
+    document.addEventListener("pointerdown", event => {
+      if (!panel?.classList.contains("is-open")) return;
+
       if (
-        !panel ||
-        !trigger ||
-        !panel.classList.contains("is-open")
+        panel.contains(event.target) ||
+        trigger.contains(event.target)
       ) {
         return;
       }
 
-      if (
-        !panel.contains(event.target) &&
-        !trigger.contains(event.target)
-      ) {
-        closeStudio();
-      }
+      panel.classList.remove("is-open");
+      trigger.setAttribute("aria-expanded", "false");
     });
   }
 
-  /* =========================================
-     INITIALIZATION
-  ========================================= */
+  function watchLyrics() {
+    if (observer) observer.disconnect();
 
-  function initialize() {
-    container = document.getElementById(
-      "lyricsContainer"
-    );
+    observer = new MutationObserver(() => {
+      refreshStatus();
+    });
 
-    if (!container) {
-      console.warn(
-        "[Lyrics Studio] No se encontró #lyricsContainer."
-      );
-
-      return;
+    if (container) {
+      observer.observe(container, {
+        childList: true,
+        subtree: true,
+        characterData: true
+      });
     }
 
-    loadSettings();
+    const title = document.getElementById("lyricsTitle");
 
-    createInterface();
-
-    applySettings();
-
-    setupEvents();
-
-    console.info(
-      "[Lyrics Studio] Inicializado correctamente."
-    );
+    if (title) {
+      observer.observe(title, {
+        childList: true,
+        subtree: true,
+        characterData: true
+      });
+    }
   }
 
+  function initialize() {
+    if (initialized) return;
+
+    container = document.getElementById("lyricsContainer");
+
+    if (!container) return;
+
+    initialized = true;
+
+    loadSettings();
+    createInterface();
+    setupEvents();
+    watchLyrics();
+    applySettings();
+  }
+
+  function getSettings() {
+    return { ...settings };
+  }
+
+  function getLyricsState() {
+    return detectLyricsState();
+  }
+
+  function destroyObserver() {
+    observer?.disconnect();
+    observer = null;
+  }
+
+  window.ShunelLyricsStudio = {
+    getSettings,
+    getLyricsState,
+    open,
+    close,
+    toggle,
+    setStyle: value => updateSetting("style", value),
+    setSize: value => updateSetting("size", Math.min(38, Math.max(16, Number(value)))),
+    setMotion: value => updateSetting("motion", value),
+    setAlignment: value => updateSetting("alignment", value),
+    setActiveColor: value => updateSetting("activeColor", value),
+    setAutoScroll: value => {
+      settings.autoScroll = Boolean(value);
+      applySettings();
+      saveSettings();
+    },
+    reset,
+    refresh: refreshStatus,
+    refreshLyrics: refreshStatus,
+    destroyObserver
+  };
+
   if (document.readyState === "loading") {
-    document.addEventListener(
-      "DOMContentLoaded",
-      initialize,
-      { once: true }
-    );
+    document.addEventListener("DOMContentLoaded", initialize, { once: true });
   } else {
     initialize();
   }
-
-  /* =========================================
-     PUBLIC API
-  ========================================= */
-
-  window.ShunelLyricsStudio = Object.freeze({
-
-    getSettings() {
-      return { ...settings };
-    },
-
-    open: openStudio,
-
-    close: closeStudio,
-
-    setStyle(style) {
-      if (!VALID_STYLES.includes(style)) return;
-
-      settings.style = style;
-
-      saveSettings();
-      applySettings();
-    },
-
-    setSize(size) {
-      const value = Number(size);
-
-      if (
-        !Number.isFinite(value) ||
-        value < 16 ||
-        value > 38
-      ) {
-        return;
-      }
-
-      settings.size = value;
-
-      saveSettings();
-      applySettings();
-    },
-
-    setMotion(motion) {
-      if (!VALID_MOTIONS.includes(motion)) return;
-
-      settings.motion = motion;
-
-      saveSettings();
-      applySettings();
-    },
-
-    reset() {
-      settings = { ...DEFAULT_SETTINGS };
-
-      saveSettings();
-      applySettings();
-    },
-
-    refresh() {
-      applySettings();
-    }
-
-  });
-
 })();

@@ -1615,6 +1615,66 @@
   }
 }
 
+/* =========================================
+   SHUNEL — PLAYER / LYRICS INTEGRATION
+========================================= */
+
+/* Mantener las capas del reproductor organizadas */
+
+.player-dock {
+  z-index: 50;
+}
+
+.full-player {
+  z-index: 200;
+}
+
+.queue-panel {
+  z-index: 300;
+}
+
+/* El panel de letras debe permanecer dentro
+   de su contexto visual correspondiente */
+
+.full-player #lyricsContainer,
+.full-player .player-lyrics {
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+}
+
+/* Integración visual con el reproductor */
+
+.full-player #lyricsContainer {
+  color: #f7f7f7;
+  background: transparent;
+}
+
+/* Evitar que las letras hereden estilos
+   destinados a los párrafos del reproductor */
+
+.full-player #lyricsContainer .lyric-line {
+  font-family: inherit;
+}
+
+/* Mantener el estilo de las letras normales */
+
+.full-player #lyricsContainer[data-lyrics-type="plain"] .lyric-line {
+  color: #E8EDF7;
+  opacity: 1;
+  filter: none;
+  transform: none;
+}
+
+/* Evitar desplazamientos animados innecesarios */
+
+@media (prefers-reduced-motion: reduce) {
+  .full-player #lyricsContainer {
+    scroll-behavior: auto;
+  }
+}
+
+
 /* =========================================================
    END — SHUNEL PLAYER LIQUID GLASS
 ========================================================= */

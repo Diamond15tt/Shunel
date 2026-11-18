@@ -1,17 +1,21 @@
+
 /* =========================================
-   SHUNEL — LYRICS ENGINE (LRCLIB + YT Fallback + Sync)
-   Versión corregida y robusta
+   SHUNEL — LYRICS ENGINE 2.0
+   Multi-source API + Sync + Cache
 ========================================= */
 
-let parsedLines = []; // [{ time: number, text: string }]
+let parsedLines = [];
 let activeLineIndex = -1;
 let currentAbortController = null;
 
-/**
- * Escapa caracteres HTML para evitar problemas de seguridad / renderizado
- */
-function escapeHTML(str) {
-  return str
+const lyricsCache = new Map();
+
+/* =========================================
+   UTILIDADES
+========================================= */
+
+function escapeHTML(value) {
+  return String(value || "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
@@ -19,49 +23,8 @@ function escapeHTML(str) {
     .replace(/'/g, "&#039;");
 }
 
-/**
- * Parser de LRC robusto.
- * Soporta:
- * - [01:23.45]
- * - [1:23.45]
- * - [01:23.4]
- * - [01:23]
- */
-function parseLRC(lrcText) {
-  if (!lrcText || typeof lrcText !== "string") return [];
-  
-  const lines = lrcText.split(/\r?\n/);
-  const result = [];
-  // Minutos 1-3 dígitos, segundos 2 dígitos, ms opcionales 1-3 dígitos
-  const timeRegex = /^\[(\d{1,3}):(\d{2})(?:\.(\d{1,3}))?\](.*)/;
-  
-  for (const line of lines) {
-    const match = line.match(timeRegex);
-    if (match) {
-      const minutes = parseInt(match[1], 10);
-      const seconds = parseInt(match[2], 10);
-      const msStr = match[3] || "0";
-      const ms = parseInt(msStr.padEnd(3, "0"), 10);
-      const timeInSeconds = minutes * 60 + seconds + ms / 1000;
-      const text = match[4].trim();
-      
-      if (text) {
-        result.push({ time: timeInSeconds, text });
-      }
-    }
-  }
-  
-  // Asegurar orden por tiempo (por si acaso)
-  return result.sort((a, b) => a.time - b.time);
-}
-
-/**
- * Limpia el título de YouTube de forma menos agresiva
- */
 function cleanTrackTitle(title) {
-  if (!title) return "";
-  
-  return title
+  return String(title || "")
     .replace(/\([^)]*official[^)]*\)/gi, "")
     .replace(/\[[^\]]*official[^\]]*\]/gi, "")
     .replace(/\([^)]*video[^)]*\)/gi, "")
@@ -74,186 +37,352 @@ function cleanTrackTitle(title) {
     .trim();
 }
 
-/**
- * Elige la mejor coincidencia de LRCLIB
- * Prioridad: syncedLyrics > plainLyrics
- */
-function selectBestMatch(results) {
-  if (!Array.isArray(results) || results.length === 0) return null;
-  
-  // 1. Preferir con letra sincronizada
-  const withSynced = results.filter(item => item.syncedLyrics && item.syncedLyrics.trim());
-  if (withSynced.length > 0) {
-    return withSynced[0]; // Podrías mejorar el ranking aquí si quieres
+/* =========================================
+   PARSER LRC
+   Soporta múltiples marcas por línea.
+========================================= */
+
+function parseLRC(text) {
+  if (!text || typeof text !== "string") return [];
+
+  const result = [];
+  const lines = text.split(/\r?\n/);
+
+  const timeRegex = /\[(\d{1,3}):(\d{2})(?:[.:](\d{1,3}))?\]/g;
+
+  for (const rawLine of lines) {
+    const matches = [...rawLine.matchAll(timeRegex)];
+
+    if (!matches.length) continue;
+
+    const lyricText = rawLine
+      .replace(timeRegex, "")
+      .trim();
+
+    if (!lyricText) continue;
+
+    for (const match of matches) {
+      const minutes = Number(match[1]);
+      const seconds = Number(match[2]);
+      const fraction = Number(
+        String(match[3] || "0").padEnd(3, "0")
+      );
+
+      result.push({
+        time: minutes * 60 + seconds + fraction / 1000,
+        text: lyricText
+      });
+    }
   }
-  
-  // 2. Si no hay synced, usar plain
-  const withPlain = results.filter(item => item.plainLyrics && item.plainLyrics.trim());
-  if (withPlain.length > 0) {
-    return withPlain[0];
-  }
-  
-  return null;
+
+  return result.sort((a, b) => a.time - b.time);
 }
 
-/**
- * Busca y renderiza la letra (1. LRCLIB → 2. Fallback /api/lyrics de YouTube)
- */
-export async function loadLyricsForTrack(track) {
-  const container = document.getElementById("lyricsContainer");
-  const subtitle = document.getElementById("lyricsSubtitle");
-  const titleEl = document.getElementById("lyricsTitle");
-  
-  if (!container || !track) return;
-  
-  // Cancelar petición anterior si existe
-  if (currentAbortController) {
-    currentAbortController.abort();
-  }
-  currentAbortController = new AbortController();
-  const signal = currentAbortController.signal;
-  
-  // Reset estado
+/* =========================================
+   ESTADO
+========================================= */
+
+function resetLyrics() {
   parsedLines = [];
   activeLineIndex = -1;
-  
-  const trackTitle = track.title || "";
-  const artistName = track.channelTitle || track.artist || "";
-  const videoId = track.id || track.videoId;
-  
-  if (subtitle) subtitle.textContent = `${artistName} — ${trackTitle}`;
-  if (titleEl) titleEl.textContent = "Buscando letra...";
-  container.innerHTML = `<p class="muted">Cargando letra...</p>`;
-  
-  try {
-    const cleanTitle = cleanTrackTitle(trackTitle);
-    
-    // Intentar separar "Artista - Canción" si viene así en el título
-    let searchArtist = artistName;
-    let searchTrack = cleanTitle;
-    
-    if (cleanTitle.includes(" - ")) {
-      const parts = cleanTitle.split(" - ");
-      searchArtist = parts[0].trim();
-      searchTrack = parts.slice(1).join(" - ").trim();
-    }
-    
-    // ======================
-    // 1. Intentar con LRCLIB
-    // ======================
-    const lrcUrl = `https://lrclib.net/api/search?track_name=${encodeURIComponent(searchTrack)}&artist_name=${encodeURIComponent(searchArtist)}`;
-    
-    const lrcRes = await fetch(lrcUrl, {
-      signal,
-      headers: {
-        "Lrclib-Client": "Shunel/1.0 (https://shunel.app)"
-      }
-    });
-    
-    if (lrcRes.ok) {
-      const lrcData = await lrcRes.json();
-      const bestMatch = selectBestMatch(lrcData);
-      
-      if (bestMatch?.syncedLyrics) {
-        parsedLines = parseLRC(bestMatch.syncedLyrics);
-        
-        if (parsedLines.length > 0) {
-          if (titleEl) titleEl.textContent = "Letra sincronizada";
-          renderSyncedLines(container);
-          return;
-        }
-      }
-      
-      if (bestMatch?.plainLyrics) {
-        if (titleEl) titleEl.textContent = "Letra";
-        renderPlainText(container, bestMatch.plainLyrics);
-        return;
-      }
-    }
-    
-    // ======================
-    // 2. Fallback: Subtítulos de YouTube
-    // ======================
-    if (videoId) {
-      const ytRes = await fetch(`/api/lyrics?videoId=${encodeURIComponent(videoId)}`, {
-        signal
-      });
-      
-      if (ytRes.ok) {
-        const ytData = await ytRes.json();
-        if (ytData?.text) {
-          if (titleEl) titleEl.textContent = "Subtítulos de YouTube";
-          renderPlainText(container, ytData.text);
-          return;
-        }
-      }
-    }
-    
-    // No se encontró nada
-    if (titleEl) titleEl.textContent = "Sin letra";
-    container.innerHTML = `<p class="muted">No encontramos letra disponible para esta canción.</p>`;
-    
-  } catch (error) {
-    if (error.name === "AbortError") {
-      // Petición cancelada voluntariamente (cambio de canción)
-      return;
-    }
-    
-    console.error("[Shunel Lyrics] Error:", error);
-    if (titleEl) titleEl.textContent = "Error";
-    container.innerHTML = `<p class="muted">No se pudo cargar la letra en este momento.</p>`;
-  }
 }
 
-/**
- * Renderiza líneas sincronizadas
- */
+function getCacheKey(track) {
+  return [
+    cleanTrackTitle(track.title).toLowerCase(),
+    String(track.artist || track.channelTitle || "").toLowerCase(),
+    track.id || track.videoId || ""
+  ].join("|");
+}
+
+/* =========================================
+   RENDERIZADO
+========================================= */
+
 function renderSyncedLines(container) {
   container.innerHTML = parsedLines
-    .map(
-      (line, index) =>
-      `<div class="lyric-line" data-index="${index}" data-time="${line.time}">${escapeHTML(line.text)}</div>`
+    .map((line, index) => `
+      <div
+        class="lyric-line"
+        data-index="${index}"
+        data-time="${line.time}"
+      >${escapeHTML(line.text)}</div>
+    `)
+    .join("");
+}
+
+function renderPlainText(container, text) {
+  const lines = String(text || "")
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(Boolean);
+
+  container.innerHTML = lines
+    .map(line =>
+      `<div class="lyric-line">${escapeHTML(line)}</div>`
     )
     .join("");
 }
 
-/**
- * Renderiza letra sin sincronizar
- */
-function renderPlainText(container, text) {
-  container.innerHTML = text
-    .split("\n")
-    .filter(l => l.trim() !== "")
-    .map(line => `<div class="lyric-line">${escapeHTML(line)}</div>`)
-    .join("");
+/* =========================================
+   MOSTRAR RESULTADO
+========================================= */
+
+function displayLyrics(data, container, titleEl) {
+  if (!data || !data.text) return false;
+
+  resetLyrics();
+
+  const syncedText =
+    data.syncedLyrics ||
+    (data.synced ? data.text : "");
+
+  const lines = syncedText
+    ? parseLRC(syncedText)
+    : [];
+
+  if (lines.length > 0) {
+    parsedLines = lines;
+
+    if (titleEl) {
+      titleEl.textContent = "Letra sincronizada";
+    }
+
+    renderSyncedLines(container);
+  } else {
+    if (titleEl) {
+      titleEl.textContent = "Letra";
+    }
+
+    renderPlainText(
+      container,
+      data.plainLyrics || data.text
+    );
+  }
+
+  if (data.source) {
+    container.dataset.lyricsSource = data.source;
+  }
+
+  return true;
 }
 
-/**
- * Sincroniza el verso activo según el tiempo actual del reproductor.
- * Llama a esta función desde el callback onProgress del YouTube Player.
- */
-export function syncLyricsProgress(currentTime) {
-  if (parsedLines.length === 0) return;
-  
-  // Buscar la última línea cuyo tiempo ya haya pasado
-  const newIndex = parsedLines.findLastIndex(line => currentTime >= line.time);
-  
-  if (newIndex === -1 || newIndex === activeLineIndex) return;
-  
-  activeLineIndex = newIndex;
-  
+/* =========================================
+   BÚSQUEDA PRINCIPAL
+========================================= */
+
+export async function loadLyricsForTrack(track) {
   const container = document.getElementById("lyricsContainer");
-  if (!container) return;
-  
-  const lines = container.querySelectorAll(".lyric-line");
-  if (!lines.length) return;
-  
-  lines.forEach((el, idx) => {
-    el.classList.toggle("active", idx === activeLineIndex);
+  const subtitle = document.getElementById("lyricsSubtitle");
+  const titleEl = document.getElementById("lyricsTitle");
+
+  if (!container || !track) return;
+
+  if (currentAbortController) {
+    currentAbortController.abort();
+  }
+
+  currentAbortController = new AbortController();
+
+  const signal = currentAbortController.signal;
+
+  resetLyrics();
+
+  const title = cleanTrackTitle(track.title);
+  const artist =
+    track.artist ||
+    track.channelTitle ||
+    track.channel ||
+    "";
+
+  const videoId = track.videoId || track.id || "";
+
+  const duration = Number(
+    track.duration ||
+    track.durationSeconds ||
+    0
+  );
+
+  if (subtitle) {
+    subtitle.textContent = `${artist} — ${title}`;
+  }
+
+  if (titleEl) {
+    titleEl.textContent = "Buscando letra...";
+  }
+
+  container.dataset.lyricsSource = "";
+  container.innerHTML =
+    `<p class="muted">Buscando en varias fuentes...</p>`;
+
+  const cacheKey = getCacheKey({
+    ...track,
+    title,
+    artist
   });
-  
-  const activeEl = lines[activeLineIndex];
-  if (activeEl) {
-    activeEl.scrollIntoView({ behavior: "smooth", block: "center" });
+
+  // Caché de esta sesión.
+  if (lyricsCache.has(cacheKey)) {
+    const cached = lyricsCache.get(cacheKey);
+
+    if (displayLyrics(cached, container, titleEl)) {
+      return;
+    }
+  }
+
+  try {
+    const params = new URLSearchParams();
+
+    params.set("title", title);
+
+    if (artist) {
+      params.set("artist", artist);
+    }
+
+    if (videoId) {
+      params.set("videoId", videoId);
+    }
+
+    if (duration > 0) {
+      params.set("duration", String(duration));
+    }
+
+    const response = await fetch(
+      `/api/lyrics?${params.toString()}`,
+      {
+        method: "GET",
+        signal,
+        headers: {
+          Accept: "application/json"
+        }
+      }
+    );
+
+    if (signal.aborted) return;
+
+    if (response.status === 404) {
+      if (titleEl) {
+        titleEl.textContent = "Sin letra";
+      }
+
+      container.innerHTML =
+        `<p class="muted">No encontramos una letra disponible para esta canción.</p>`;
+
+      return;
+    }
+
+    if (!response.ok) {
+      throw new Error(`Lyrics API: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    if (signal.aborted) return;
+
+    if (!data || !data.text) {
+      throw new Error("Respuesta de letras vacía");
+    }
+
+    lyricsCache.set(cacheKey, data);
+
+    displayLyrics(data, container, titleEl);
+
+    // Actualizar Lyrics Studio si está instalado.
+    window.ShunelLyricsStudio?.refreshLyrics?.();
+
+  } catch (error) {
+    if (error.name === "AbortError") return;
+
+    console.error("[Shunel Lyrics]", error);
+
+    if (titleEl) {
+      titleEl.textContent = "Error";
+    }
+
+    container.innerHTML =
+      `<p class="muted">No se pudo cargar la letra. Intentá nuevamente.</p>`;
+  }
+}
+
+/* =========================================
+   SINCRONIZACIÓN
+========================================= */
+
+export function syncLyricsProgress(currentTime) {
+  if (!parsedLines.length) return;
+
+  const time = Number(currentTime);
+
+  if (!Number.isFinite(time)) return;
+
+  // Compatible con Safari sin findLastIndex.
+  let newIndex = -1;
+
+  for (let i = 0; i < parsedLines.length; i++) {
+    if (time >= parsedLines[i].time) {
+      newIndex = i;
+    } else {
+      break;
+    }
+  }
+
+  if (newIndex === activeLineIndex) return;
+
+  activeLineIndex = newIndex;
+
+  const container = document.getElementById("lyricsContainer");
+
+  if (!container) return;
+
+  const lines = container.querySelectorAll(".lyric-line");
+
+  lines.forEach((element, index) => {
+    element.classList.toggle(
+      "active",
+      index === activeLineIndex
+    );
+  });
+
+  if (activeLineIndex < 0) return;
+
+  const activeElement = lines[activeLineIndex];
+
+  if (!activeElement) return;
+
+  const autoScroll =
+    window.ShunelLyricsStudio?.getSettings?.().autoScroll ?? true;
+
+  if (!autoScroll) return;
+
+  const reducedMotion =
+    window.matchMedia &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  activeElement.scrollIntoView({
+    behavior: reducedMotion ? "auto" : "smooth",
+    block: "center"
+  });
+}
+
+/* =========================================
+   API PÚBLICA
+========================================= */
+
+export function clearLyrics() {
+  if (currentAbortController) {
+    currentAbortController.abort();
+  }
+
+  resetLyrics();
+
+  const container = document.getElementById("lyricsContainer");
+  const titleEl = document.getElementById("lyricsTitle");
+
+  if (container) {
+    container.innerHTML = "";
+  }
+
+  if (titleEl) {
+    titleEl.textContent = "Sincronizada";
   }
 }
