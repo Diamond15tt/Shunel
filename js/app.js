@@ -3,9 +3,11 @@ import { YouTubePlayer } from "./player.js";
 import { QueueManager } from "./queue.js";
 import { MusicLibrary } from "./library.js";
 import { ShunelUI } from "./ui.js";
+import { loadLyricsForTrack, syncLyricsProgress } from './lyrics.js';
+
 
 /* =========================================
-   SHUNEL — APP CONTROLLER (OPTIMIZADO)
+   SHUNEL — APP CONTROLLER (OPTIMIZADO + LETRAS & SMART AUTOPLAY)
 ========================================= */
 
 const ui = new ShunelUI();
@@ -215,6 +217,11 @@ function bindNavigation() {
       navigateToView(button.dataset.view);
     });
   });
+
+  // Vincular botón de letras en el reproductor completo
+  document.getElementById("openLyricsButton")?.addEventListener("click", () => {
+    navigateToView("lyrics");
+  });
 }
 
 /* =========================================
@@ -365,6 +372,9 @@ function selectAndPlayTrack(track) {
   ui.setCurrentTrack(track, library.isFavorite(track.videoId));
   triggerIOSAudioContext();
 
+  // Cargar letras para la canción actual
+  loadLyricsForTrack(track);
+
   isPlaying = false;
   ui.setPlaying(false);
   ui.setProgress(0, 0);
@@ -388,13 +398,13 @@ function selectAndPlayTrack(track) {
   }
 }
 
-function playNext() {
-  const next = queue.takeNext();
-  refreshQueue();
+/**
+ * 🧠 SMART AUTOPLAY: Reproduce una canción similar por artista o estilo si la cola termina
+ */
+function triggerSmartAutoplay() {
+  const allTracks = [...library.getLibrary(), ...library.getHistory()];
 
-  if (next) {
-    selectAndPlayTrack(next);
-  } else {
+  if (!allTracks.length || !currentTrack) {
     isPlaying = false;
     currentTrack = null;
     pauseIOSAudioContext();
@@ -405,6 +415,45 @@ function playNext() {
     ui.setCurrentTrack(null, false);
 
     ui.toastMessage("La cola terminó.");
+    return;
+  }
+
+  // Filtrar canciones del mismo artista o estilo (excluyendo la actual)
+  let candidates = allTracks.filter(track =>
+    track.videoId !== currentTrack.videoId &&
+    (
+      (track.channel && currentTrack.channel && track.channel === currentTrack.channel) ||
+      (track.artist && currentTrack.artist && track.artist === currentTrack.artist) ||
+      (track.style && currentTrack.style && track.style === currentTrack.style)
+    )
+  );
+
+  // Si no hay coincidencias exactas, usar toda la biblioteca como respaldo
+  if (candidates.length === 0) {
+    candidates = allTracks.filter(track => track.videoId !== currentTrack.videoId);
+  }
+
+  if (candidates.length === 0) {
+    ui.toastMessage("La cola terminó.");
+    return;
+  }
+
+  // Seleccionar una al azar
+  const randomIndex = Math.floor(Math.random() * candidates.length);
+  const nextSong = candidates[randomIndex];
+
+  ui.toastMessage("Reproduciendo recomendación inteligente...");
+  selectAndPlayTrack(nextSong);
+}
+
+function playNext() {
+  const next = queue.takeNext();
+  refreshQueue();
+
+  if (next) {
+    selectAndPlayTrack(next);
+  } else {
+    triggerSmartAutoplay();
   }
 }
 
@@ -629,7 +678,7 @@ function bindEvents() {
 }
 
 /* =========================================
-   PLAYER PROGRESS
+   PLAYER PROGRESS & LYRICS SYNC
 ========================================= */
 
 function startProgressUpdates() {
@@ -644,6 +693,9 @@ function startProgressUpdates() {
 
       ui.setProgress(current, duration);
       updateMediaPosition();
+
+      // Sincronizar las letras de la canción segundo a segundo
+      syncLyricsProgress(current);
     } catch (e) {
       // Ignorar errores transitorios de lectura del reproductor
     }

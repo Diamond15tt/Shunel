@@ -2927,6 +2927,44 @@
     }
   }
 }
+/* =========================================
+   SHUNEL — ESTILOS DEL PANEL DE LETRAS
+========================================= */
+
+.lyrics-container {
+  max-width: 700px;
+  margin: 20px auto 40px;
+  padding: 24px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
+  max-height: 55vh;
+  overflow-y: auto;
+  scroll-behavior: smooth;
+  font-size: 1.1rem;
+  line-height: 1.8;
+  text-align: center;
+}
+
+.lyric-line {
+  padding: 8px 12px;
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.4);
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.lyric-line:hover {
+  color: rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.lyric-line.active {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.1);
+  font-weight: 700;
+  transform: scale(1.02);
+}
 
 /* =========================================================
    END — SHUNEL 2.0

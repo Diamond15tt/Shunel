@@ -2,114 +2,8 @@
 
 <!--
   =====================================================================
-  SHUNEL · 100 MEJORAS AÑADIDAS (no se quitó ni se cambió nada existente)
+  SHUNEL · CÓDIGO COMPLETO CON SOPORTE DE LETRAS (NUEVO)
   Todos los id, clases, data-* y textos originales siguen intactos.
-  Las mejoras son solo adiciones: metadatos, CSS, JS ligero y accesibilidad.
-  =====================================================================
-  HEAD / METADATOS
-  01 meta color-scheme (dark)
-  02 meta format-detection (evita enlaces automáticos de teléfono)
-  03 meta application-name
-  04 meta apple-mobile-web-app-title
-  05 meta msapplication-TileColor
-  06 meta robots
-  07 meta referrer (strict-origin-when-cross-origin)
-  08 meta keywords
-  09 Open Graph: og:type
-  10 Open Graph: og:site_name
-  11 Open Graph: og:title
-  12 Open Graph: og:description
-  13 Open Graph: og:locale
-  14 Open Graph: og:image
-  15 Twitter: twitter:card
-  16 Twitter: twitter:title
-  17 Twitter: twitter:description
-  18 Twitter: twitter:image
-  19 favicon
-  20 apple-touch-icon
-  21 preconnect a youtube.com
-  22 preconnect a i.ytimg.com (miniaturas)
-  23 dns-prefetch a googleapis.com
-  24 preload del logo
-  25 modulepreload de app.js
-  26 html dir="ltr"
-  27 html class="no-js" (se cambia a "js" al cargar)
-  28 meta msapplication-tap-highlight
-  CSS (bloque inline #shunel-enhancements)
-  29 :root color-scheme: dark
-  30 text-size-adjust (evita zoom de texto en iOS al rotar)
-  31 suavizado de fuentes (antialiased)
-  32 scroll suave + overscroll-behavior-y: contain
-  33 anillo de foco visible con :focus-visible
-  34 oculta el foco solo en clics de ratón/táctil
-  35 tap-highlight transparente en iOS/Android
-  36 touch-action: manipulation (sin retraso de doble toque)
-  37 sin selección/callout accidental en botones y controles
-  38 imágenes no arrastrables
-  39 color de ::selection
-  40 el atributo [hidden] siempre oculta
-  41 cursor not-allowed en elementos deshabilitados
-  42 estilos del enlace "saltar al contenido"
-  43 clase .sr-only (solo lectores de pantalla)
-  44 respeta prefers-reduced-motion
-  45 modo de alto contraste (forced-colors)
-  46 estilos de impresión limpios
-  47 banner de "Sin conexión"
-  48 estilo del aviso <noscript>
-  49 scrollbar-width: thin
-  JAVASCRIPT LIGERO
-  50 cambia no-js por js
-  51 variable CSS --app-height (altura real en móvil)
-  52 detecta modo instalado/standalone (clase is-standalone)
-  53 detecta online/offline (clase is-offline)
-  54 año automático en el pie de página
-  55 atajos "/" y Ctrl/Cmd+K para ir a buscar
-  ACCESIBILIDAD, SEMÁNTICA Y ATRIBUTOS
-  56 aviso <noscript> si JavaScript está desactivado
-  57 enlace "Saltar al contenido principal"
-  58 <main> con id="main-content" y tabindex="-1"
-  59 sprite SVG con focusable="false"
-  60 todos los iconos SVG con aria-hidden y focusable="false"
-  61 title en el enlace de la marca
-  62 logo con decoding async, fetchpriority y sin arrastre
-  63 translate="no" en el nombre de la marca
-  64 title en el botón de perfil
-  65 vista Inicio con aria-labelledby (h1 con id)
-  66 vista Buscar con aria-labelledby (h1 con id)
-  67 vista Biblioteca con aria-labelledby (h1 con id)
-  68 vista Historial con aria-labelledby (h1 con id)
-  69 title en los accesos rápidos (Favoritos, Biblioteca)
-  70 title en las tarjetas de descubrimiento
-  71 aria-label descriptivo en "Ver todo"
-  72 aria-live en la lista de recientes
-  73 formulario con role="search"
-  74 aria-label en el formulario de búsqueda
-  75 name="q" en el campo de búsqueda
-  76 minlength="2" (coincide con el mínimo del servidor)
-  77 inputmode="search" y enterkeyhint="search"
-  78 spellcheck, autocapitalize y autocorrect desactivados
-  79 aria-label y aria-describedby (estado) en el buscador
-  80 aria-keyshortcuts="/" en el buscador
-  81 title en el botón Buscar
-  82 aria-atomic en el mensaje de estado
-  83 aria-relevant en la lista de resultados
-  84 aria-live en el contador de resultados
-  85 filtros de biblioteca agrupados (role="group" + aria-label)
-  86 aria-live en las listas de biblioteca y favoritos
-  87 aria-live en la lista del historial
-  88 id en la sección del reproductor de YouTube
-  89 año dinámico en el footer (span nuevo)
-  90 id en el mini reproductor (player-dock)
-  91 aria-live en el título/canal actual
-  92 miniaturas con decoding async y sin arrastre
-  93 title en anterior/play/siguiente (mini y completo)
-  94 autocomplete="off" en todas las barras de rango
-  95 title en barras de progreso y volumen
-  96 aria-controls y title en los botones de cola
-  97 aria-hidden en el icono decorativo de volumen
-  98 reproductor completo como role="dialog" aria-modal tabindex=-1
-  99 title en cerrar, favorito y reproductor nativo + navegación inferior
-  100 panel de cola con tabindex, aria-live en la lista, titles y toast aria-atomic
   =====================================================================
 -->
 
@@ -150,7 +44,6 @@
   <meta property="og:title" content="Shunel">
   <meta property="og:description" content="Shunel, tu espacio musical.">
   <meta property="og:locale" content="es_LA">
-  <!-- [14] Cambia por una URL absoluta (https://tudominio.com/assets/logo.png) para mejores previews -->
   <meta property="og:image" content="/assets/logo.png">
 
   <!-- [15-18] Twitter / X -->
@@ -189,7 +82,7 @@
   </script>
 
   <!-- =====================================
-       MEJORAS INLINE (solo añaden estilos)
+       MEJORAS INLINE (Estilos + Letras)
   ====================================== -->
   <style id="shunel-enhancements">
     /* [29] */
@@ -341,6 +234,42 @@
       scrollbar-width: thin;
       scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
     }
+
+    /* NUEVO: Estilos para el contenedor de letras */
+    .lyrics-container {
+      max-width: 700px;
+      margin: 20px auto 40px;
+      padding: 24px;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 16px;
+      max-height: 55vh;
+      overflow-y: auto;
+      scroll-behavior: smooth;
+      font-size: 1.1rem;
+      line-height: 1.8;
+      text-align: center;
+    }
+
+    .lyric-line {
+      padding: 8px 12px;
+      border-radius: 8px;
+      color: rgba(255, 255, 255, 0.4);
+      transition: all 0.2s ease;
+      cursor: pointer;
+    }
+
+    .lyric-line:hover {
+      color: rgba(255, 255, 255, 0.8);
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .lyric-line.active {
+      color: #ffffff;
+      background: rgba(255, 255, 255, 0.1);
+      font-weight: 700;
+      transform: scale(1.02);
+    }
   </style>
 
 </head>
@@ -467,11 +396,15 @@
         <path d="M12 7v5l3 2"/>
       </symbol>
 
-      <!-- NUEVO: Icono para abrir enlace externo / reproductor nativo -->
       <symbol id="icon-external" viewBox="0 0 24 24">
         <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         <polyline points="15 3 21 3 21 9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         <line x1="10" y1="14" x2="21" y2="3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </symbol>
+
+      <!-- NUEVO: Icono para Letras -->
+      <symbol id="icon-lyrics" viewBox="0 0 24 24">
+        <path d="M4 6h16M4 10h16M4 14h10M4 18h6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
       </symbol>
 
     </svg>
@@ -900,6 +833,40 @@
 
 
       <!-- =====================================
+           LETRAS (NUEVO)
+      ====================================== -->
+
+      <section
+        class="view"
+        id="view-lyrics"
+        aria-hidden="true"
+        aria-labelledby="lyricsTitle"
+      >
+
+        <div class="page-heading">
+
+          <p class="eyebrow">LETRA DE LA CANCIÓN</p>
+
+          <h1 id="lyricsTitle">Sincronizada</h1>
+
+          <p class="hero-copy" id="lyricsSubtitle">
+            Cargando letra...
+          </p>
+
+        </div>
+
+        <div
+          class="lyrics-container"
+          id="lyricsContainer"
+          aria-live="polite"
+        >
+          <p class="muted">Reproduce una canción para ver su letra aquí.</p>
+        </div>
+
+      </section>
+
+
+      <!-- =====================================
            YOUTUBE PLAYER
     ====================================== -->
 
@@ -1112,10 +1079,6 @@
 
       </div>
 
-
-
-
-
     </section>
 
 
@@ -1151,7 +1114,20 @@
 
         <span>REPRODUCIENDO....</span>
 
-        <!-- NUEVO: Botón para abrir el reproductor/vídeo nativo y activar PiP -->
+        <!-- Botón para ver Letras -->
+        <button
+          class="icon-button"
+          id="openLyricsButton"
+          type="button"
+          aria-label="Ver letra de la canción"
+          title="Ver letra"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <use href="#icon-lyrics"/>
+          </svg>
+        </button>
+
+        <!-- Botón para abrir el reproductor/vídeo nativo y activar PiP -->
         <button
           class="icon-button"
           id="openNativePlayer"
@@ -1495,13 +1471,13 @@
 
 
   <!-- =====================================
-       MEJORAS INLINE (JS ligero, no toca app.js)
+       MEJORAS INLINE (JS ligero)
   ====================================== -->
   <script>
     (function () {
       var root = document.documentElement;
 
-      /* [51] Altura real del viewport en móviles (usable como var(--app-height)) */
+      /* [51] Altura real del viewport en móviles */
       function setAppHeight() {
         root.style.setProperty("--app-height", window.innerHeight + "px");
       }
