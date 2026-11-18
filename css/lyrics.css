@@ -1,19 +1,19 @@
 
 /* =========================================
-   SHUNEL — LYRICS DESIGN
-   Independent Lyrics Styling
+   SHUNEL — LYRICS STUDIO
+   Independent Lyrics Design System
 ========================================= */
 
 :root {
-  --lyrics-text: #E8EDF7;
+  --lyrics-size: 25px;
+  --lyrics-active: #E8EDF7;
   --lyrics-muted: #536783;
-  --lyrics-soft: #8298B9;
   --lyrics-accent: #6699E8;
-  --lyrics-bg: #080D18;
-  --lyrics-transition: 350ms cubic-bezier(.22, 1, .36, 1);
+  --lyrics-motion: 350ms;
+  --lyrics-easing: cubic-bezier(.22, 1, .36, 1);
 }
 
-/* CONTENEDOR PRINCIPAL */
+/* CONTENEDOR */
 
 #lyricsContainer {
   position: relative;
@@ -31,119 +31,333 @@
   display: none;
 }
 
-/* TÍTULO Y SUBTÍTULO */
+/* TÍTULOS */
 
 #lyricsTitle {
-  color: var(--lyrics-text);
+  color: var(--lyrics-active);
   font-size: 19px;
   font-weight: 650;
   letter-spacing: -0.4px;
-  margin-bottom: 8px;
 }
 
 #lyricsSubtitle {
-  color: var(--lyrics-soft);
+  color: #8298B9;
   font-size: 13px;
   line-height: 1.6;
-  font-weight: 400;
 }
 
-/* LÍNEAS DE LETRA */
+/* ESTILO MINIMAL */
 
 #lyricsContainer .lyric-line {
   color: var(--lyrics-muted);
-  font-size: clamp(19px, 4.5vw, 25px);
+  font-size: var(--lyrics-size);
   font-weight: 650;
   line-height: 1.65;
-  letter-spacing: -0.6px;
+  letter-spacing: -0.7px;
 
   padding: 9px 4px;
-  margin: 5px 0;
+  margin: 7px 0;
 
-  opacity: 0.55;
-  transform: scale(0.97);
+  opacity: .48;
+  transform: scale(.97);
 
   transition:
-    color var(--lyrics-transition),
-    opacity var(--lyrics-transition),
-    transform var(--lyrics-transition),
-    filter var(--lyrics-transition);
+    color var(--lyrics-motion) var(--lyrics-easing),
+    opacity var(--lyrics-motion) var(--lyrics-easing),
+    transform var(--lyrics-motion) var(--lyrics-easing),
+    filter var(--lyrics-motion) var(--lyrics-easing);
 
   overflow-wrap: break-word;
   user-select: none;
 }
 
-/* VERSO ACTIVO */
-
 #lyricsContainer .lyric-line.active {
-  color: var(--lyrics-text);
+  color: var(--lyrics-active);
   opacity: 1;
   transform: scale(1);
   filter: none;
 }
 
-/* ESTADOS DE CARGA Y SIN LETRA */
+/* ESTADOS DE CARGA */
 
 #lyricsContainer .muted {
-  color: var(--lyrics-soft);
+  color: #8298B9;
   font-size: 14px;
   line-height: 1.7;
   text-align: center;
-  padding: 50px 20px;
-  opacity: 0.75;
+  padding: 45px 20px;
 }
 
-/* ANIMACIÓN DE ENTRADA */
+/* =========================================
+   ESTILOS ALTERNATIVOS
+========================================= */
 
-@keyframes lyricsAppear {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
+/* CINEMATIC */
 
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+#lyricsContainer[data-lyrics-style="cinematic"] .lyric-line {
+  font-size: calc(var(--lyrics-size) * 1.12);
+  font-weight: 600;
+  letter-spacing: -1px;
+  opacity: .25;
+  filter: blur(1px);
 }
 
-#lyricsContainer .lyric-line.active {
-  animation: lyricsAppear 350ms ease both;
+#lyricsContainer[data-lyrics-style="cinematic"] .lyric-line.active {
+  opacity: 1;
+  filter: none;
+  text-shadow: 0 0 28px rgba(102, 153, 232, .16);
 }
 
-/* MODO LETRA SINCRONIZADA */
+/* SILVER FLOW */
 
-#lyricsContainer:has(.lyric-line[data-time]) {
-  padding-top: 45px;
-  padding-bottom: 45px;
+#lyricsContainer[data-lyrics-style="silver"] .lyric-line.active {
+  color: #D9E0EC;
+  text-shadow: 0 0 18px rgba(210, 220, 240, .2);
+}
+
+/* NEON BLUE */
+
+#lyricsContainer[data-lyrics-style="neon"] .lyric-line.active {
+  color: #91BCFF;
+  text-shadow:
+    0 0 10px rgba(102, 153, 232, .35),
+    0 0 25px rgba(102, 153, 232, .18);
+}
+
+/* FOCUS */
+
+#lyricsContainer[data-lyrics-style="focus"] .lyric-line {
+  opacity: .18;
+  filter: blur(1.5px);
+}
+
+#lyricsContainer[data-lyrics-style="focus"] .lyric-line.active {
+  opacity: 1;
+  filter: none;
+}
+
+/* =========================================
+   LYRICS STUDIO CONTROLS
+========================================= */
+
+#lyricsStudioTrigger {
+  position: fixed;
+  right: 18px;
+  bottom: calc(95px + env(safe-area-inset-bottom));
+  z-index: 900;
+
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  padding: 11px 15px;
+  border: 1px solid rgba(160, 180, 210, .15);
+  border-radius: 30px;
+
+  background: rgba(13, 20, 35, .94);
+  color: #E8EDF7;
+
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+
+  transition:
+    background 200ms ease,
+    border-color 200ms ease,
+    transform 200ms ease;
+}
+
+#lyricsStudioTrigger:active {
+  transform: scale(.96);
+}
+
+#lyricsStudioTrigger:hover {
+  border-color: rgba(102, 153, 232, .45);
+}
+
+/* PANEL */
+
+#lyricsStudio {
+  position: fixed;
+  right: 16px;
+  bottom: calc(145px + env(safe-area-inset-bottom));
+  z-index: 901;
+
+  width: min(340px, calc(100vw - 32px));
+  max-height: min(540px, 70dvh);
+  overflow-y: auto;
+
+  padding: 21px;
+  border: 1px solid rgba(160, 180, 210, .13);
+  border-radius: 20px;
+
+  background: #0D1423;
+  color: #E8EDF7;
+
+  box-shadow: 0 18px 55px rgba(0, 0, 0, .38);
+
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(12px) scale(.98);
+
+  transition:
+    opacity 220ms ease,
+    visibility 220ms ease,
+    transform 220ms var(--lyrics-easing);
+}
+
+#lyricsStudio.is-open {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateY(0) scale(1);
+}
+
+#lyricsStudio .studio-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 22px;
+}
+
+#lyricsStudio .studio-heading {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -.4px;
+}
+
+#lyricsStudio .studio-close {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 50%;
+  background: #19253A;
+  color: #B8C6DB;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+#lyricsStudio .studio-section {
+  margin-top: 20px;
+}
+
+#lyricsStudio .studio-label {
+  display: block;
+  margin-bottom: 11px;
+  color: #A9B8D0;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+#lyricsStudio .studio-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+#lyricsStudio .studio-option {
+  min-height: 40px;
+  padding: 9px;
+  border: 1px solid #25334A;
+  border-radius: 9px;
+  background: transparent;
+  color: #A9B8D0;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: 180ms ease;
+}
+
+#lyricsStudio .studio-option.is-selected {
+  border-color: #6699E8;
+  background: rgba(102, 153, 232, .12);
+  color: #E8EDF7;
+}
+
+#lyricsStudio input[type="range"] {
+  width: 100%;
+  accent-color: #6699E8;
+  cursor: pointer;
+}
+
+#lyricsStudio .studio-range-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #8298B9;
+  font-size: 12px;
+}
+
+#lyricsStudio .studio-reset {
+  width: 100%;
+  margin-top: 23px;
+  padding: 12px;
+  border: 1px solid #25334A;
+  border-radius: 10px;
+  background: transparent;
+  color: #A9B8D0;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+#lyricsStudio button:focus-visible,
+#lyricsStudioTrigger:focus-visible {
+  outline: 2px solid #6699E8;
+  outline-offset: 3px;
 }
 
 /* MÓVILES */
 
 @media (max-width: 600px) {
   #lyricsContainer {
-    padding: 30px 16px;
+    padding: 28px 15px;
     min-height: 240px;
   }
 
   #lyricsContainer .lyric-line {
-    font-size: 21px;
-    line-height: 1.7;
     padding: 8px 2px;
+    line-height: 1.7;
   }
 
-  #lyricsTitle {
-    font-size: 18px;
+  #lyricsStudio {
+    right: 12px;
+    bottom: calc(135px + env(safe-area-inset-bottom));
+    width: calc(100vw - 24px);
+  }
+
+  #lyricsStudioTrigger {
+    right: 14px;
   }
 }
 
-/* ACCESIBILIDAD */
+/* MOVIMIENTO DESACTIVADO */
+
+#lyricsContainer[data-lyrics-motion="none"] .lyric-line {
+  transition: none !important;
+}
+
+#lyricsContainer[data-lyrics-motion="none"] .lyric-line.active {
+  animation: none !important;
+}
+
+/* REDUCIR MOVIMIENTO */
 
 @media (prefers-reduced-motion: reduce) {
-  #lyricsContainer,
-  #lyricsContainer .lyric-line {
+  #lyricsContainer {
     scroll-behavior: auto;
-    animation: none;
-    transition: none;
+  }
+
+  #lyricsContainer .lyric-line,
+  #lyricsStudio,
+  #lyricsStudioTrigger {
+    transition: none !important;
+    animation: none !important;
   }
 }
