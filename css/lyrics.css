@@ -1,0 +1,149 @@
+
+/* =========================================
+   SHUNEL — LYRICS DESIGN
+   Independent Lyrics Styling
+========================================= */
+
+:root {
+  --lyrics-text: #E8EDF7;
+  --lyrics-muted: #536783;
+  --lyrics-soft: #8298B9;
+  --lyrics-accent: #6699E8;
+  --lyrics-bg: #080D18;
+  --lyrics-transition: 350ms cubic-bezier(.22, 1, .36, 1);
+}
+
+/* CONTENEDOR PRINCIPAL */
+
+#lyricsContainer {
+  position: relative;
+  width: 100%;
+  min-height: 260px;
+  padding: 36px 20px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  text-align: center;
+  scroll-behavior: smooth;
+}
+
+#lyricsContainer::-webkit-scrollbar {
+  display: none;
+}
+
+/* TÍTULO Y SUBTÍTULO */
+
+#lyricsTitle {
+  color: var(--lyrics-text);
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: -0.4px;
+  margin-bottom: 8px;
+}
+
+#lyricsSubtitle {
+  color: var(--lyrics-soft);
+  font-size: 13px;
+  line-height: 1.6;
+  font-weight: 400;
+}
+
+/* LÍNEAS DE LETRA */
+
+#lyricsContainer .lyric-line {
+  color: var(--lyrics-muted);
+  font-size: clamp(19px, 4.5vw, 25px);
+  font-weight: 650;
+  line-height: 1.65;
+  letter-spacing: -0.6px;
+
+  padding: 9px 4px;
+  margin: 5px 0;
+
+  opacity: 0.55;
+  transform: scale(0.97);
+
+  transition:
+    color var(--lyrics-transition),
+    opacity var(--lyrics-transition),
+    transform var(--lyrics-transition),
+    filter var(--lyrics-transition);
+
+  overflow-wrap: break-word;
+  user-select: none;
+}
+
+/* VERSO ACTIVO */
+
+#lyricsContainer .lyric-line.active {
+  color: var(--lyrics-text);
+  opacity: 1;
+  transform: scale(1);
+  filter: none;
+}
+
+/* ESTADOS DE CARGA Y SIN LETRA */
+
+#lyricsContainer .muted {
+  color: var(--lyrics-soft);
+  font-size: 14px;
+  line-height: 1.7;
+  text-align: center;
+  padding: 50px 20px;
+  opacity: 0.75;
+}
+
+/* ANIMACIÓN DE ENTRADA */
+
+@keyframes lyricsAppear {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+#lyricsContainer .lyric-line.active {
+  animation: lyricsAppear 350ms ease both;
+}
+
+/* MODO LETRA SINCRONIZADA */
+
+#lyricsContainer:has(.lyric-line[data-time]) {
+  padding-top: 45px;
+  padding-bottom: 45px;
+}
+
+/* MÓVILES */
+
+@media (max-width: 600px) {
+  #lyricsContainer {
+    padding: 30px 16px;
+    min-height: 240px;
+  }
+
+  #lyricsContainer .lyric-line {
+    font-size: 21px;
+    line-height: 1.7;
+    padding: 8px 2px;
+  }
+
+  #lyricsTitle {
+    font-size: 18px;
+  }
+}
+
+/* ACCESIBILIDAD */
+
+@media (prefers-reduced-motion: reduce) {
+  #lyricsContainer,
+  #lyricsContainer .lyric-line {
+    scroll-behavior: auto;
+    animation: none;
+    transition: none;
+  }
+}
