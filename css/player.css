@@ -713,19 +713,28 @@
 .full-player-info > div {
   min-width: 0;
 }
-
-.full-player-info h2 {
-  margin: 0 0 8px;
-
+.full-player-info > h2{
+  .full-player-info h2 {
+  margin: 0 0 5px;
+  
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  
   overflow: hidden;
   text-overflow: ellipsis;
-
+  overflow-wrap: anywhere;
+  
   color: #fff;
-
-  font: 800 22px 'Manrope', sans-serif;
-  letter-spacing: -.75px;
+  
+  font-family: 'Manrope', sans-serif;
+  font-size: clamp(16px, 4.5vw, 19px);
+  font-weight: 750;
+  line-height: 1.25;
+  letter-spacing: -.45px;
 }
-
+}
+  
 .full-player-info p {
   margin: 0;
 
@@ -1673,7 +1682,39 @@
     scroll-behavior: auto;
   }
 }
+/* SHUNEL — FULL PLAYER SPACING */
 
+.full-player {
+  padding-top: calc(10px + var(--player-safe-top));
+  padding-bottom: calc(18px + var(--player-safe-bottom));
+}
+
+.full-player-header {
+  margin-bottom: 14px;
+}
+
+.full-player-content {
+  gap: 22px;
+  max-width: 430px;
+}
+
+.full-player-art {
+  width: 100%;
+  max-height: min(48vh, 430px);
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: 16px;
+}
+
+@media (max-height: 750px) and (orientation: portrait) {
+  .full-player-content {
+    gap: 16px;
+  }
+  
+  .full-player-art {
+    max-height: 39vh;
+  }
+}
 
 /* =========================================================
    END — SHUNEL PLAYER LIQUID GLASS
