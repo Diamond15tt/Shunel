@@ -1,9 +1,15 @@
 
-import { searchTracks } from "./search.js";
+import {
+  searchTracks,
+  searchPopularTracks,
+  searchNewTracks
+} from "./search.js";
+
 import { YouTubePlayer } from "./player.js";
 import { QueueManager } from "./queue.js";
 import { MusicLibrary } from "./library.js";
 import { ShunelUI } from "./ui.js";
+
 import {
   loadLyricsForTrack,
   syncLyricsProgress
@@ -13,6 +19,7 @@ import {
    SHUNEL — APP CONTROLLER
    Playback + Lyrics + Smart Autoplay
    + Dynamic Player Background
+   + Popular Music + New Music
 ========================================= */
 
 const ui = new ShunelUI();
@@ -28,7 +35,6 @@ let queuePanelOpen = false;
 
 /* =========================================
    AUDIO FANTASMA PARA iOS
-   MEDIA SESSION BRIDGE
 ========================================= */
 
 const silentAudio = document.createElement("audio");
@@ -42,9 +48,7 @@ silentAudio.setAttribute("playsinline", "");
 function triggerIOSAudioContext() {
   try {
     silentAudio.play().catch(() => {});
-  } catch (error) {
-    // Puede ocurrir antes de una interacción del usuario.
-  }
+  } catch (error) {}
 }
 
 function pauseIOSAudioContext() {
@@ -53,7 +57,6 @@ function pauseIOSAudioContext() {
   } catch (error) {}
 }
 
-// Desbloqueo global para iOS en la primera interacción.
 document.addEventListener(
   "pointerdown",
   () => {
@@ -64,7 +67,6 @@ document.addEventListener(
 
 /* =========================================
    MEDIA SESSION
-   CONTROLES DEL SISTEMA / PANTALLA BLOQUEADA
 ========================================= */
 
 const mediaSession = navigator.mediaSession || null;
@@ -88,8 +90,7 @@ function getTrackArtwork(track) {
 }
 
 /* =========================================
-   SHUNEL — DYNAMIC PLAYER BACKGROUND
-   Extrae el color de la portada
+   DYNAMIC PLAYER BACKGROUND
 ========================================= */
 
 let artworkColorRequest = 0;
@@ -105,7 +106,6 @@ function setFullPlayerBackground(track) {
   image.crossOrigin = "anonymous";
 
   image.onload = () => {
-    // Evitar que una portada anterior sobrescriba la actual.
     if (requestId !== artworkColorRequest) return;
 
     try {
@@ -156,7 +156,6 @@ function setFullPlayerBackground(track) {
       green = Math.round(green / count);
       blue = Math.round(blue / count);
 
-      // Reducir la intensidad para mantener la interfaz oscura.
       const brightness = (red + green + blue) / 3;
       const scale = brightness > 150 ? 0.65 : 0.85;
 
@@ -164,15 +163,12 @@ function setFullPlayerBackground(track) {
       green = Math.round(green * scale);
       blue = Math.round(blue * scale);
 
-      const color = `rgb(${red}, ${green}, ${blue})`;
-
       fullPlayer.style.setProperty(
         "--song-color",
-        color
+        `rgb(${red}, ${green}, ${blue})`
       );
 
     } catch (error) {
-      // Fallback si el navegador bloquea el acceso a la imagen.
       fullPlayer.style.setProperty(
         "--song-color",
         "#242424"
@@ -282,9 +278,7 @@ function updateMediaPosition() {
         duration
       )
     });
-  } catch {
-    // Algunos navegadores no permiten actualizar la posición.
-  }
+  } catch (error) {}
 }
 
 /* =========================================
@@ -330,9 +324,7 @@ function setupMediaSession() {
       const current = player.getCurrentTime() || 0;
       const offset = details.seekOffset || 10;
 
-      player.seekTo(
-        Math.max(0, current - offset)
-      );
+      player.seekTo(Math.max(0, current - offset));
     },
 
     seekforward: details => {
@@ -353,9 +345,7 @@ function setupMediaSession() {
   Object.entries(actions).forEach(([action, handler]) => {
     try {
       mediaSession.setActionHandler(action, handler);
-    } catch {
-      // Acción no compatible con este navegador.
-    }
+    } catch (error) {}
   });
 
   console.info("[Shunel] Media Session configurada.");
@@ -397,13 +387,11 @@ function bindNavigation() {
   document.querySelectorAll("[data-view]").forEach(button => {
     button.addEventListener("click", event => {
       event.preventDefault();
-
       navigateToView(button.dataset.view);
     });
   });
 }
 
-// Control global del botón de letras.
 document.addEventListener("click", event => {
   const target = event.target;
 
@@ -589,7 +577,6 @@ function addToQueue(track) {
 
 /* =========================================
    PLAYBACK
-   RESETEO Y REPRODUCCIÓN
 ========================================= */
 
 function selectAndPlayTrack(track) {
@@ -605,12 +592,10 @@ function selectAndPlayTrack(track) {
     library.isFavorite(track.videoId)
   );
 
-  // Actualizar el fondo según la portada.
   setFullPlayerBackground(track);
 
   triggerIOSAudioContext();
 
-  // Cargar letras de la canción actual.
   loadLyricsForTrack(track);
 
   isPlaying = false;
@@ -674,7 +659,6 @@ function triggerSmartAutoplay() {
     return;
   }
 
-  // Buscar canciones del mismo artista o estilo.
   let candidates = allTracks.filter(track =>
     track.videoId !== currentTrack.videoId &&
     (
@@ -696,7 +680,6 @@ function triggerSmartAutoplay() {
     )
   );
 
-  // Si no hay coincidencias, usar el resto de la biblioteca.
   if (candidates.length === 0) {
     candidates = allTracks.filter(
       track => track.videoId !== currentTrack.videoId
@@ -745,9 +728,7 @@ function playPrevious() {
       player.seekTo(0);
       return;
     }
-  } catch (error) {
-    // Fallback si getCurrentTime falla.
-  }
+  } catch (error) {}
 
   const history = library.getHistory();
 
@@ -783,18 +764,24 @@ function togglePlayback() {
 }
 
 /* =========================================
-   SEARCH
+   SEARCH ENGINE
+   BÚSQUEDA NORMAL Y ESPECIALIZADA
 ========================================= */
 
-async function handleSearch(event) {
-  event.preventDefault();
+/**
+ * Ejecuta una búsqueda y representa sus resultados.
+ *
+ * searchFunction puede ser:
+ * - searchTracks
+ * - searchPopularTracks
+ * - searchNewTracks
+ */
 
-  const query = ui.elements.input?.value.trim();
+async function executeSearch(query, searchFunction = searchTracks) {
+  const cleanQuery = String(query || "").trim();
 
-  if (!query) {
-    ui.setStatus(
-      "Escribe el nombre de una canción."
-    );
+  if (!cleanQuery) {
+    ui.setStatus("Escribe el nombre de una canción.");
     return;
   }
 
@@ -805,18 +792,19 @@ async function handleSearch(event) {
   searchController = controller;
 
   ui.setSearching(true);
-
-  ui.setStatus(
-    "Buscando música en YouTube..."
-  );
-
+  ui.setStatus("Buscando música en YouTube...");
   ui.renderSearchResults([], () => ({}));
 
   try {
-    const tracks = await searchTracks(
-      query,
-      controller.signal
+    const tracks = await searchFunction(
+      cleanQuery,
+      controller.signal,
+      {
+        maxResults: 20
+      }
     );
+
+    if (controller.signal.aborted) return;
 
     ui.renderSearchResults(
       tracks,
@@ -831,12 +819,17 @@ async function handleSearch(event) {
 
     ui.setStatus(
       tracks.length
-        ? `Encontramos ${tracks.length} resultados para "${query}".`
+        ? `Encontramos ${tracks.length} resultados para "${cleanQuery}".`
         : "No encontramos resultados. Prueba con otra búsqueda."
     );
 
   } catch (error) {
-    if (error.name === "AbortError") return;
+    if (
+      error.name === "AbortError" ||
+      controller.signal.aborted
+    ) {
+      return;
+    }
 
     console.error(
       "[Shunel] Search error:",
@@ -854,6 +847,92 @@ async function handleSearch(event) {
       searchController = null;
     }
   }
+}
+
+/* =========================================
+   SEARCH FORM
+========================================= */
+
+async function handleSearch(event) {
+  event.preventDefault();
+
+  const query = ui.elements.input?.value.trim();
+
+  await executeSearch(query, searchTracks);
+}
+
+/* =========================================
+   DISCOVER BUTTONS
+   MÚSICA POPULAR / MÚSICA NUEVA
+========================================= */
+
+function normalizeDiscoverQuery(value) {
+  return String(value || "")
+    .trim()
+    .toLocaleLowerCase("es")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function bindDiscoverSearches() {
+  document.addEventListener("click", event => {
+    const target = event.target;
+
+    if (!(target instanceof Element)) return;
+
+    const button = target.closest("[data-search]");
+
+    if (!button) return;
+
+    event.preventDefault();
+
+    const query = button.dataset.search?.trim();
+
+    if (!query) return;
+
+    const normalized = normalizeDiscoverQuery(query);
+
+    if (
+      normalized.includes("popular") ||
+      normalized.includes("mas escuchado") ||
+      normalized.includes("mas escuchados")
+    ) {
+      navigateToView("search");
+
+      ui.toastMessage("Buscando la música más popular...");
+
+      executeSearch(
+        query,
+        searchPopularTracks
+      );
+
+      return;
+    }
+
+    if (
+      normalized.includes("nueva") ||
+      normalized.includes("nuevo") ||
+      normalized.includes("reciente")
+    ) {
+      navigateToView("search");
+
+      ui.toastMessage("Buscando los lanzamientos más recientes...");
+
+      executeSearch(
+        query,
+        searchNewTracks
+      );
+
+      return;
+    }
+
+    navigateToView("search");
+
+    executeSearch(
+      query,
+      searchTracks
+    );
+  });
 }
 
 /* =========================================
@@ -1067,6 +1146,7 @@ function bindEvents() {
 
   bindNavigation();
   bindLibraryFilters();
+  bindDiscoverSearches();
   bindPlayerEvents();
   bindQueueEvents();
 
@@ -1091,12 +1171,9 @@ function startProgressUpdates() {
 
       updateMediaPosition();
 
-      // Sincronizar las letras segundo a segundo.
       syncLyricsProgress(current);
 
-    } catch (error) {
-      // Ignorar errores transitorios del reproductor.
-    }
+    } catch (error) {}
   }, 1000);
 }
 
@@ -1183,7 +1260,6 @@ function initializePlayer() {
 
 /* =========================================
    INITIALIZATION
-   DOM READY
 ========================================= */
 
 function initialize() {
@@ -1209,7 +1285,6 @@ function initialize() {
   );
 }
 
-// Inicializar cuando el DOM esté completamente cargado.
 if (document.readyState === "loading") {
   document.addEventListener(
     "DOMContentLoaded",
