@@ -1,39 +1,26 @@
 
 /* =========================================================
-   SHUNEL — SEARCH ENGINE 4.0
+   SHUNEL — SEARCH ENGINE 4.1
    Búsqueda, validación, caché y gestión de peticiones
 
    COMPATIBILIDAD:
    - Mantiene searchTracks(query, signal).
+   - Añade searchTracks(query, signal, options).
    - Mantiene el endpoint /api/search.
-   - Mantiene el formato de canciones recibido del servidor.
-   - No requiere cambios en app.js para la búsqueda básica.
+   - Mantiene el formato de canciones del servidor.
+   - Mantiene las funciones públicas originales.
 
-   FUNCIONES:
-   01. Normalización de consultas.
-   02. Validación de entradas.
-   03. Timeout de peticiones.
-   04. Cancelación individual.
-   05. Caché con expiración.
-   06. Límite de memoria de caché.
-   07. Peticiones simultáneas compartidas.
-   08. Validación de respuestas.
-   09. Eliminación de duplicados.
-   10. Validación de canciones.
-   11. Validación de URL.
-   12. Historial de búsquedas.
-   13. Estadísticas.
-   14. Clasificación configurable.
-   15. Filtros locales opcionales.
-   16. Gestión de errores.
-   17. Limpieza de recursos.
+   NUEVO:
+   - Orden por relevancia.
+   - Orden por popularidad (viewCount).
+   - Orden por fecha (date).
+   - Caché independiente por orden y cantidad.
+   - Peticiones compartidas según sus opciones.
+   - Paginación con orden configurable.
 
    IMPORTANTE:
-   Las funciones que dependen de información adicional
-   del servidor se activan únicamente cuando los campos
-   correspondientes existen en la respuesta.
-
-   No se inventan resultados, metadatos ni endpoints.
+   El endpoint /api/search también debe aceptar
+   el parámetro "order" y enviarlo a YouTube.
 ========================================================= */
 
 const SEARCH_ENDPOINT = "/api/search";
@@ -54,31 +41,37 @@ const CONFIG = Object.freeze({
   maxResponseBytes: 2 * 1024 * 1024,
 
   maxRecentSearches: 20,
-
   recentStorageKey: "shunel_recent_searches",
 
   maxResults: 100,
+  defaultSort: "relevance",
 
-  defaultSort: "relevance"
+  defaultOrder: "relevance",
+  defaultRequestResults: 15,
+  maxRequestResults: 25
 });
 
 const VIDEO_ID_REGEX = /^[a-zA-Z0-9_-]{11}$/;
 
-const ALLOWED_SORTS = [
+const ALLOWED_SORTS = Object.freeze([
   "relevance",
   "title",
   "artist",
   "duration"
-];
+]);
+
+const ALLOWED_ORDERS = Object.freeze([
+  "relevance",
+  "viewCount",
+  "date"
+]);
 
 /* =========================================================
    02. ESTADO INTERNO
 ========================================================= */
 
 const searchCache = new Map();
-
 const inFlightRequests = new Map();
-
 const recentSearches = [];
 
 const statistics = {
@@ -143,7 +136,10 @@ function safeString(value) {
     return value;
   }
 
-  if (typeof value === "number" && Number.isFinite(value)) {
+  if (
+    typeof value === "number" &&
+    Number.isFinite(value)
+  ) {
     return String(value);
   }
 
@@ -156,17 +152,26 @@ function normalizeWhitespace(value) {
     .trim();
 }
 
+function isAbortSignal(value) {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    typeof value.aborted === "boolean" &&
+    typeof value.addEventListener === "function" &&
+    typeof value.removeEventListener === "function"
+  );
+}
+
+function getCurrentTime() {
+  return typeof performance !== "undefined" &&
+    typeof performance.now === "function"
+      ? performance.now()
+      : Date.now();
+}
+
 /* =========================================================
    05. NORMALIZACIÓN DE CONSULTAS
 ========================================================= */
-
-/**
- * Normaliza una consulta sin destruir acentos,
- * nombres propios ni signos musicales.
- *
- * @param {string} query
- * @returns {string}
- */
 
 export function normalizeSearchQuery(query) {
   if (query === null || query === undefined) {
@@ -177,45 +182,20 @@ export function normalizeSearchQuery(query) {
 
   value = value.normalize("NFC");
 
-  /*
-   * Elimina caracteres de control.
-   * Conserva letras, acentos y puntuación.
-   */
-
   value = value.replace(
     /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g,
     ""
   );
-
-  /*
-   * Elimina caracteres de formato invisibles
-   * que pueden alterar una búsqueda.
-   */
 
   value = value.replace(
     /[\u200B-\u200F\u202A-\u202E\u2060\uFEFF]/g,
     ""
   );
 
-  /*
-   * Normaliza variantes tipográficas de apóstrofos.
-   */
-
   value = value.replace(/[‘’ʼ]/g, "'");
 
-  /*
-   * Normaliza espacios.
-   */
-
-  value = normalizeWhitespace(value);
-
-  return value;
+  return normalizeWhitespace(value);
 }
-
-/**
- * Genera una clave para caché.
- * No modifica la consulta enviada al servidor.
- */
 
 function getNormalizedKey(query) {
   return normalizeSearchQuery(query)
@@ -226,13 +206,6 @@ function getNormalizedKey(query) {
 /* =========================================================
    06. VALIDACIÓN DE CONSULTAS
 ========================================================= */
-
-/**
- * Comprueba que una consulta pueda enviarse.
- *
- * @param {string} query
- * @returns {string}
- */
 
 function validateQuery(query) {
   const cleanQuery = normalizeSearchQuery(query);
@@ -262,12 +235,67 @@ function validateQuery(query) {
 }
 
 /* =========================================================
-   07. VALIDACIÓN DE VIDEO ID
+   07. OPCIONES DE BÚSQUEDA
 ========================================================= */
 
 /**
- * Comprueba el identificador de un video de YouTube.
+ * Normaliza las opciones enviadas al servidor.
+ *
+ * order:
+ * - relevance
+ * - viewCount
+ * - date
+ *
+ * maxResults:
+ * - Entre 1 y 25.
  */
+
+function normalizeSearchOptions(options = {}) {
+  const source = isObject(options) ? options : {};
+
+  const requestedOrder = source.order;
+
+  const order = ALLOWED_ORDERS.includes(requestedOrder)
+    ? requestedOrder
+    : CONFIG.defaultOrder;
+
+  const requestedResults = Number(source.maxResults);
+
+  const maxResults = Number.isFinite(requestedResults)
+    ? clamp(
+        Math.floor(requestedResults),
+        1,
+        CONFIG.maxRequestResults
+      )
+    : CONFIG.defaultRequestResults;
+
+  return {
+    order,
+    maxResults
+  };
+}
+
+/**
+ * Crea una clave única para cada combinación.
+ *
+ * Evita que una búsqueda popular se confunda
+ * con una búsqueda reciente o normal.
+ */
+
+function createRequestKey(query, options = {}) {
+  const normalizedQuery = getNormalizedKey(query);
+  const normalizedOptions = normalizeSearchOptions(options);
+
+  return [
+    normalizedQuery,
+    normalizedOptions.order,
+    normalizedOptions.maxResults
+  ].join("|");
+}
+
+/* =========================================================
+   08. VALIDACIÓN DE VIDEO ID
+========================================================= */
 
 export function isValidVideoId(videoId) {
   return (
@@ -277,17 +305,14 @@ export function isValidVideoId(videoId) {
 }
 
 /* =========================================================
-   08. VALIDACIÓN DE URL
+   09. VALIDACIÓN DE URL
 ========================================================= */
 
-/**
- * Comprueba URL HTTP o HTTPS.
- *
- * Evita esquemas peligrosos como javascript: o data:.
- */
-
 export function isSafeHttpUrl(value) {
-  if (typeof value !== "string" || !value.trim()) {
+  if (
+    typeof value !== "string" ||
+    !value.trim()
+  ) {
     return false;
   }
 
@@ -303,10 +328,6 @@ export function isSafeHttpUrl(value) {
   }
 }
 
-/**
- * Valida miniaturas.
- */
-
 function normalizeThumbnail(value) {
   if (!isSafeHttpUrl(value)) {
     return undefined;
@@ -316,19 +337,8 @@ function normalizeThumbnail(value) {
 }
 
 /* =========================================================
-   09. VALIDACIÓN DE DURACIÓN
+   10. VALIDACIÓN DE DURACIÓN
 ========================================================= */
-
-/**
- * Normaliza duraciones sin asumir una unidad
- * cuando no existe información suficiente.
- *
- * Admite:
- * - Segundos numéricos.
- * - Cadenas numéricas.
- * - Formato MM:SS.
- * - Formato HH:MM:SS.
- */
 
 export function normalizeDuration(value) {
   if (
@@ -367,11 +377,15 @@ export function normalizeDuration(value) {
 
   const numbers = parts.map(Number);
 
-  if (numbers.some(number => !Number.isFinite(number))) {
+  if (
+    numbers.some(number => !Number.isFinite(number))
+  ) {
     return undefined;
   }
 
-  if (numbers.slice(1).some(number => number >= 60)) {
+  if (
+    numbers.slice(1).some(number => number >= 60)
+  ) {
     return undefined;
   }
 
@@ -387,15 +401,8 @@ export function normalizeDuration(value) {
 }
 
 /* =========================================================
-   10. VALIDACIÓN DE CANCIONES
+   11. VALIDACIÓN DE CANCIONES
 ========================================================= */
-
-/**
- * Comprueba si un resultado tiene los campos mínimos
- * necesarios para que Shunel pueda reproducirlo.
- *
- * No exige campos que el servidor podría no proporcionar.
- */
 
 export function isValidTrack(track) {
   if (!isObject(track)) {
@@ -415,10 +422,6 @@ export function isValidTrack(track) {
 
   return true;
 }
-
-/**
- * Normaliza campos opcionales sin inventar metadatos.
- */
 
 function normalizeTrack(track) {
   if (!isValidTrack(track)) {
@@ -452,6 +455,8 @@ function normalizeTrack(track) {
 
     if (duration !== undefined) {
       normalized.duration = duration;
+    } else {
+      delete normalized.duration;
     }
   }
 
@@ -462,12 +467,10 @@ function normalizeTrack(track) {
 
     if (duration !== undefined) {
       normalized.durationSeconds = duration;
+    } else {
+      delete normalized.durationSeconds;
     }
   }
-
-  /*
-   * Valida miniaturas únicamente cuando existen.
-   */
 
   if (typeof track.thumbnail === "string") {
     const thumbnail = normalizeThumbnail(track.thumbnail);
@@ -489,23 +492,12 @@ function normalizeTrack(track) {
     }
   }
 
-  /*
-   * Conserva los demás campos originales porque
-   * app.js u otros módulos podrían utilizarlos.
-   */
-
   return normalized;
 }
 
 /* =========================================================
-   11. ELIMINACIÓN DE DUPLICADOS
+   12. ELIMINACIÓN DE DUPLICADOS
 ========================================================= */
-
-/**
- * Elimina videos repetidos usando videoId.
- *
- * Mantiene el primer resultado encontrado.
- */
 
 export function deduplicateTracks(items) {
   if (!Array.isArray(items)) {
@@ -537,17 +529,13 @@ export function deduplicateTracks(items) {
 }
 
 /* =========================================================
-   12. ORDENAMIENTO LOCAL
+   13. ORDENAMIENTO LOCAL
 ========================================================= */
 
-/**
- * Ordena resultados según información disponible.
- *
- * relevance conserva el orden del servidor.
- * No inventa puntuaciones de relevancia.
- */
-
-export function sortTracks(items, mode = CONFIG.defaultSort) {
+export function sortTracks(
+  items,
+  mode = CONFIG.defaultSort
+) {
   if (!Array.isArray(items)) {
     return [];
   }
@@ -599,16 +587,8 @@ export function sortTracks(items, mode = CONFIG.defaultSort) {
 }
 
 /* =========================================================
-   13. FILTROS LOCALES
+   14. FILTROS LOCALES
 ========================================================= */
-
-/**
- * Filtra canciones utilizando únicamente campos
- * que existan en los resultados.
- *
- * @param {Array} items
- * @param {Object} filters
- */
 
 export function filterTracks(items, filters = {}) {
   if (!Array.isArray(items)) {
@@ -665,7 +645,9 @@ export function filterTracks(items, filters = {}) {
     ).toLocaleLowerCase();
 
     results = results.filter(track => {
-      const title = safeString(track.title).toLocaleLowerCase();
+      const title = safeString(
+        track.title
+      ).toLocaleLowerCase();
 
       const artist = safeString(
         track.artist || track.channelTitle
@@ -682,7 +664,7 @@ export function filterTracks(items, filters = {}) {
 }
 
 /* =========================================================
-   14. CACHÉ
+   15. CACHÉ
 ========================================================= */
 
 function getCachedResults(key) {
@@ -694,11 +676,6 @@ function getCachedResults(key) {
     searchCache.delete(key);
     return null;
   }
-
-  /*
-   * Actualiza el orden de uso para facilitar
-   * una política LRU sencilla.
-   */
 
   searchCache.delete(key);
   searchCache.set(key, entry);
@@ -727,17 +704,9 @@ function setCachedResults(key, items) {
   });
 }
 
-/**
- * Elimina toda la caché.
- */
-
 export function clearSearchCache() {
   searchCache.clear();
 }
-
-/**
- * Elimina las entradas expiradas.
- */
 
 export function cleanSearchCache() {
   const now = Date.now();
@@ -750,7 +719,7 @@ export function cleanSearchCache() {
 }
 
 /* =========================================================
-   15. HISTORIAL DE BÚSQUEDAS
+   16. HISTORIAL DE BÚSQUEDAS
 ========================================================= */
 
 function loadRecentSearches() {
@@ -811,17 +780,9 @@ function rememberSearch(query) {
   saveRecentSearches();
 }
 
-/**
- * Recupera las búsquedas recientes.
- */
-
 export function getRecentSearches() {
   return [...recentSearches];
 }
-
-/**
- * Elimina el historial.
- */
 
 export function clearRecentSearches() {
   recentSearches.length = 0;
@@ -834,7 +795,7 @@ export function clearRecentSearches() {
 }
 
 /* =========================================================
-   16. ESTADÍSTICAS
+   17. ESTADÍSTICAS
 ========================================================= */
 
 export function getSearchStats() {
@@ -862,7 +823,7 @@ export function resetSearchStats() {
 }
 
 /* =========================================================
-   17. LECTURA SEGURA DE RESPUESTAS
+   18. LECTURA SEGURA DE RESPUESTAS
 ========================================================= */
 
 async function readResponseJSON(response, signal) {
@@ -900,7 +861,10 @@ async function readResponseJSON(response, signal) {
   try {
     text = await response.text();
   } catch (error) {
-    if (signal?.aborted || error.name === "AbortError") {
+    if (
+      signal?.aborted ||
+      error.name === "AbortError"
+    ) {
       throw createAbortError();
     }
 
@@ -913,11 +877,6 @@ async function readResponseJSON(response, signal) {
   if (signal?.aborted) {
     throw createAbortError();
   }
-
-  /*
-   * Verificación adicional cuando Content-Length
-   * no está disponible.
-   */
 
   if (text.length > CONFIG.maxResponseBytes) {
     throw new SearchError(
@@ -937,36 +896,34 @@ async function readResponseJSON(response, signal) {
 }
 
 /* =========================================================
-   18. PETICIÓN HTTP
+   19. PETICIÓN HTTP
 ========================================================= */
 
-async function performRequest(query, signal) {
+/**
+ * Envía la consulta y sus opciones al endpoint.
+ *
+ * La señal de cada consumidor no controla la petición
+ * compartida. Cada consumidor cancela solamente su espera.
+ */
+
+async function performRequest(query, options = {}) {
+  const normalizedOptions = normalizeSearchOptions(options);
+
   const url = new URL(
     SEARCH_ENDPOINT,
     window.location.origin
   );
 
   url.searchParams.set("q", query);
+  url.searchParams.set("order", normalizedOptions.order);
+  url.searchParams.set(
+    "maxResults",
+    String(normalizedOptions.maxResults)
+  );
 
   const controller = new AbortController();
 
   let timedOut = false;
-
-  const abortFromCaller = () => {
-    controller.abort();
-  };
-
-  if (signal) {
-    if (signal.aborted) {
-      throw createAbortError();
-    }
-
-    signal.addEventListener(
-      "abort",
-      abortFromCaller,
-      { once: true }
-    );
-  }
 
   const timeoutId = setTimeout(() => {
     timedOut = true;
@@ -984,10 +941,6 @@ async function performRequest(query, signal) {
       signal: controller.signal
     });
 
-    if (signal?.aborted) {
-      throw createAbortError();
-    }
-
     if (!response.ok) {
       let message = "No se pudo buscar en YouTube.";
 
@@ -1001,7 +954,7 @@ async function performRequest(query, signal) {
           message = data.error;
         }
       } catch {
-        // Se mantiene el mensaje general.
+        // Se conserva el mensaje general.
       }
 
       throw new SearchError(
@@ -1013,7 +966,7 @@ async function performRequest(query, signal) {
 
     const data = await readResponseJSON(
       response,
-      signal
+      controller.signal
     );
 
     if (!isObject(data)) {
@@ -1033,11 +986,6 @@ async function performRequest(query, signal) {
     return {
       items: deduplicateTracks(data.items),
 
-      /*
-       * Se conservan los metadatos de paginación
-       * únicamente si el servidor los proporciona.
-       */
-
       nextPageToken:
         typeof data.nextPageToken === "string"
           ? data.nextPageToken
@@ -1055,12 +1003,15 @@ async function performRequest(query, signal) {
     };
 
   } catch (error) {
-    if (signal?.aborted || error.name === "AbortError") {
-      throw createAbortError();
-    }
+    if (
+      timedOut ||
+      error.name === "AbortError"
+    ) {
+      if (timedOut) {
+        throw createTimeoutError();
+      }
 
-    if (timedOut) {
-      throw createTimeoutError();
+      throw createAbortError();
     }
 
     if (error instanceof SearchError) {
@@ -1074,31 +1025,12 @@ async function performRequest(query, signal) {
 
   } finally {
     clearTimeout(timeoutId);
-
-    signal?.removeEventListener(
-      "abort",
-      abortFromCaller
-    );
   }
 }
 
 /* =========================================================
-   19. PETICIONES COMPARTIDAS
+   20. PETICIONES COMPARTIDAS
 ========================================================= */
-
-/**
- * Comparte una petición idéntica.
- *
- * Cada consumidor puede cancelar su propia espera.
- * Cancelar uno no cancela a los demás.
- *
- * La petición compartida termina por:
- * - Respuesta del servidor.
- * - Timeout.
- *
- * No se cancela la petición interna cuando un consumidor
- * individual deja de necesitar sus resultados.
- */
 
 function waitForSharedRequest(promise, signal) {
   if (!signal) return promise;
@@ -1144,19 +1076,15 @@ function waitForSharedRequest(promise, signal) {
   });
 }
 
-function getSharedRequest(query, key) {
+function getSharedRequest(query, key, options = {}) {
   const existing = inFlightRequests.get(key);
 
   if (existing) {
     statistics.sharedRequests++;
-
     return existing;
   }
 
-  const request = performRequest(query)
-    .then(data => {
-      return data;
-    })
+  const request = performRequest(query, options)
     .finally(() => {
       if (inFlightRequests.get(key) === request) {
         inFlightRequests.delete(key);
@@ -1169,25 +1097,88 @@ function getSharedRequest(query, key) {
 }
 
 /* =========================================================
-   20. BÚSQUEDA PRINCIPAL
+   21. RESOLUCIÓN DE ARGUMENTOS
+========================================================= */
+
+/**
+ * Mantiene la firma antigua:
+ *
+ * searchTracks(query, signal)
+ *
+ * También permite:
+ *
+ * searchTracks(query, signal, options)
+ *
+ * Y la forma alternativa:
+ *
+ * searchTracks(query, {
+ *   signal,
+ *   order: "date"
+ * })
+ */
+
+function resolveSearchArguments(signalOrOptions, options) {
+  if (isAbortSignal(signalOrOptions)) {
+    return {
+      signal: signalOrOptions,
+      options: isObject(options) ? options : {}
+    };
+  }
+
+  if (isObject(signalOrOptions)) {
+    return {
+      signal: isAbortSignal(signalOrOptions.signal)
+        ? signalOrOptions.signal
+        : undefined,
+
+      options: signalOrOptions
+    };
+  }
+
+  return {
+    signal: undefined,
+    options: isObject(options) ? options : {}
+  };
+}
+
+/* =========================================================
+   22. BÚSQUEDA PRINCIPAL
 ========================================================= */
 
 /**
  * Busca canciones en el servidor.
  *
- * @param {string} query
- * @param {AbortSignal} signal
- * @returns {Promise<Array>}
+ * Uso antiguo:
+ * searchTracks(query, signal)
  *
- * Esta función mantiene la compatibilidad con app.js.
+ * Uso con opciones:
+ * searchTracks(query, signal, {
+ *   order: "viewCount"
+ * })
+ *
+ * Uso alternativo:
+ * searchTracks(query, {
+ *   order: "date"
+ * })
  */
 
-export async function searchTracks(query, signal) {
-  const startedAt = performance.now();
+export async function searchTracks(
+  query,
+  signalOrOptions,
+  additionalOptions = {}
+) {
+  const startedAt = getCurrentTime();
 
   statistics.totalSearches++;
 
   let completed = false;
+
+  const resolved = resolveSearchArguments(
+    signalOrOptions,
+    additionalOptions
+  );
+
+  const signal = resolved.signal;
 
   try {
     if (signal?.aborted) {
@@ -1196,11 +1187,14 @@ export async function searchTracks(query, signal) {
 
     const cleanQuery = validateQuery(query);
 
-    const cacheKey = getNormalizedKey(cleanQuery);
+    const options = normalizeSearchOptions(
+      resolved.options
+    );
 
-    /*
-     * Primero consulta la caché.
-     */
+    const cacheKey = createRequestKey(
+      cleanQuery,
+      options
+    );
 
     const cached = getCachedResults(cacheKey);
 
@@ -1211,16 +1205,15 @@ export async function searchTracks(query, signal) {
 
       statistics.successfulSearches++;
 
+      completed = true;
+
       return cached;
     }
 
-    /*
-     * Después consulta peticiones compartidas.
-     */
-
     const sharedPromise = getSharedRequest(
       cleanQuery,
-      cacheKey
+      cacheKey,
+      options
     );
 
     const data = await waitForSharedRequest(
@@ -1250,7 +1243,6 @@ export async function searchTracks(query, signal) {
       error.code === "SEARCH_ABORTED"
     ) {
       statistics.cancelledSearches++;
-
       throw error;
     }
 
@@ -1267,7 +1259,7 @@ export async function searchTracks(query, signal) {
 
   } finally {
     const duration = Math.round(
-      performance.now() - startedAt
+      getCurrentTime() - startedAt
     );
 
     statistics.lastSearchDuration = duration;
@@ -1279,21 +1271,23 @@ export async function searchTracks(query, signal) {
 }
 
 /* =========================================================
-   21. BÚSQUEDA CON OPCIONES
+   23. BÚSQUEDA CON OPCIONES
 ========================================================= */
 
 /**
- * Variante avanzada de búsqueda.
+ * Búsqueda avanzada con:
  *
- * No cambia el comportamiento de searchTracks().
+ * - sort: ordenamiento local.
+ * - filters: filtros locales.
+ * - order: orden del servidor.
+ * - maxResults: cantidad solicitada al servidor.
  *
- * Opciones:
- * - sort
- * - filters
+ * Ejemplo:
  *
- * @param {string} query
- * @param {Object} options
- * @param {AbortSignal} signal
+ * searchTracksAdvanced("música nueva", {
+ *   order: "date",
+ *   sort: "relevance"
+ * });
  */
 
 export async function searchTracksAdvanced(
@@ -1301,7 +1295,14 @@ export async function searchTracksAdvanced(
   options = {},
   signal
 ) {
-  const tracks = await searchTracks(query, signal);
+  const tracks = await searchTracks(
+    query,
+    signal,
+    {
+      order: options.order,
+      maxResults: options.maxResults
+    }
+  );
 
   let results = tracks;
 
@@ -1323,26 +1324,93 @@ export async function searchTracksAdvanced(
 }
 
 /* =========================================================
-   22. PAGINACIÓN
+   24. BÚSQUEDAS ESPECIALIZADAS
 ========================================================= */
 
 /**
- * Busca una página adicional cuando el servidor
- * proporciona nextPageToken.
+ * Música popular.
  *
- * IMPORTANTE:
- * El endpoint actual debe aceptar pageToken.
- * Esta función no se utiliza en la búsqueda normal.
+ * Usa el orden viewCount de YouTube.
+ */
+
+export function searchPopularTracks(
+  query = "música popular",
+  signal,
+  options = {}
+) {
+  return searchTracks(
+    query,
+    signal,
+    {
+      ...options,
+      order: "viewCount"
+    }
+  );
+}
+
+/**
+ * Música nueva.
  *
- * @param {string} query
- * @param {string} pageToken
- * @param {AbortSignal} signal
+ * Usa el orden date de YouTube.
+ */
+
+export function searchNewTracks(
+  query = "música nueva",
+  signal,
+  options = {}
+) {
+  return searchTracks(
+    query,
+    signal,
+    {
+      ...options,
+      order: "date"
+    }
+  );
+}
+
+/**
+ * Búsqueda normal por relevancia.
+ */
+
+export function searchRelevantTracks(
+  query,
+  signal,
+  options = {}
+) {
+  return searchTracks(
+    query,
+    signal,
+    {
+      ...options,
+      order: "relevance"
+    }
+  );
+}
+
+/* =========================================================
+   25. PAGINACIÓN
+========================================================= */
+
+/**
+ * Busca una página adicional.
+ *
+ * Uso:
+ *
+ * searchTracksPage(query, pageToken, signal)
+ *
+ * Con orden:
+ *
+ * searchTracksPage(query, pageToken, signal, {
+ *   order: "date"
+ * })
  */
 
 export async function searchTracksPage(
   query,
   pageToken,
-  signal
+  signal,
+  options = {}
 ) {
   const cleanQuery = validateQuery(query);
 
@@ -1360,6 +1428,8 @@ export async function searchTracksPage(
     throw createAbortError();
   }
 
+  const normalizedOptions = normalizeSearchOptions(options);
+
   const url = new URL(
     SEARCH_ENDPOINT,
     window.location.origin
@@ -1367,8 +1437,15 @@ export async function searchTracksPage(
 
   url.searchParams.set("q", cleanQuery);
   url.searchParams.set("pageToken", pageToken);
+  url.searchParams.set("order", normalizedOptions.order);
+  url.searchParams.set(
+    "maxResults",
+    String(normalizedOptions.maxResults)
+  );
 
   const controller = new AbortController();
+
+  let timedOut = false;
 
   const abort = () => controller.abort();
 
@@ -1376,17 +1453,19 @@ export async function searchTracksPage(
     once: true
   });
 
-  const timeoutId = setTimeout(
-    () => controller.abort(),
-    CONFIG.timeout
-  );
+  const timeoutId = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, CONFIG.timeout);
 
   try {
     const response = await fetch(url, {
       method: "GET",
+
       headers: {
         Accept: "application/json"
       },
+
       signal: controller.signal
     });
 
@@ -1404,7 +1483,7 @@ export async function searchTracksPage(
 
     const data = await readResponseJSON(
       response,
-      signal
+      controller.signal
     );
 
     if (!Array.isArray(data?.items)) {
@@ -1434,8 +1513,15 @@ export async function searchTracksPage(
     };
 
   } catch (error) {
-    if (signal?.aborted || error.name === "AbortError") {
+    if (
+      signal?.aborted ||
+      error.name === "AbortError"
+    ) {
       throw createAbortError();
+    }
+
+    if (timedOut) {
+      throw createTimeoutError();
     }
 
     if (error instanceof SearchError) {
@@ -1458,35 +1544,22 @@ export async function searchTracksPage(
 }
 
 /* =========================================================
-   23. CANCELACIÓN DE PETICIONES
+   26. CANCELACIÓN DE PETICIONES
 ========================================================= */
 
 /**
- * Cancela las peticiones pendientes compartidas.
+ * Limpia las referencias a peticiones compartidas.
  *
- * No cancela las peticiones de los demás consumidores
- * mediante sus AbortSignal individuales.
- *
- * Esta función se reserva para la limpieza general
- * del módulo.
+ * Las peticiones activas terminan por respuesta
+ * o timeout.
  */
 
 export function clearPendingSearches() {
-  /*
-   * Las peticiones compartidas no exponen su controlador
-   * interno para evitar que un consumidor individual
-   * cancele el trabajo de otros.
-   *
-   * Se eliminan las referencias del registro.
-   * Las peticiones activas finalizarán por respuesta
-   * o timeout.
-   */
-
   inFlightRequests.clear();
 }
 
 /* =========================================================
-   24. LIMPIEZA GENERAL
+   27. LIMPIEZA GENERAL
 ========================================================= */
 
 export function clearSearchData() {
@@ -1497,17 +1570,12 @@ export function clearSearchData() {
 }
 
 /* =========================================================
-   25. UTILIDADES DE DIAGNÓSTICO
+   28. UTILIDADES DE DIAGNÓSTICO
 ========================================================= */
-
-/**
- * Devuelve información del motor sin exponer
- * consultas privadas ni datos personales.
- */
 
 export function getSearchEngineInfo() {
   return {
-    version: "4.0",
+    version: "4.1",
 
     endpoint: SEARCH_ENDPOINT,
 
@@ -1519,17 +1587,23 @@ export function getSearchEngineInfo() {
 
     maxQueryLength: CONFIG.maxQueryLength,
 
-    maxResults: CONFIG.maxResults
+    maxResults: CONFIG.maxResults,
+
+    defaultOrder: CONFIG.defaultOrder,
+
+    supportedOrders: [...ALLOWED_ORDERS],
+
+    supportedLocalSorts: [...ALLOWED_SORTS]
   };
 }
 
 /* =========================================================
-   26. INICIALIZACIÓN DEL HISTORIAL
+   29. INICIALIZACIÓN DEL HISTORIAL
 ========================================================= */
 
 loadRecentSearches();
 cleanSearchCache();
 
 /* =========================================================
-   FIN — SHUNEL SEARCH ENGINE 4.0
+   FIN — SHUNEL SEARCH ENGINE 4.1
 ========================================================= */
