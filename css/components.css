@@ -1,15 +1,19 @@
 
-/* =========================================================
+/* ==========================================================================
    SHUNEL — COMPONENTS
-   LIQUID GLASS EDITION
-   MOBILE FIRST · SVG ICON SYSTEM
-========================================================= */
+   COMPONENT SYSTEM 3.0
+   MOBILE FIRST · SVG ICON SYSTEM · ACCESSIBLE · RESPONSIVE
+   100 CSS IMPROVEMENTS
+   ========================================================================== */
 
-/* =========================================================
+
+/* ==========================================================================
    01. DESIGN TOKENS
-========================================================= */
+   ========================================================================== */
 
 :root {
+  color-scheme: dark;
+
   --component-bg: #080808;
   --component-surface: #111111;
   --component-surface-raised: #191919;
@@ -31,19 +35,67 @@
 
   --component-transition:
     .22s cubic-bezier(.2, .8, .2, 1);
+
+  /* Additional design tokens */
+
+  --component-bg-hover: rgba(255, 255, 255, .045);
+  --component-bg-active: rgba(255, 255, 255, .085);
+
+  --component-focus-color: #b7d2ff;
+  --component-focus-ring: 0 0 0 3px rgba(150, 190, 255, .3);
+
+  --component-success: #76c99b;
+  --component-warning: #e7bd78;
+  --component-danger: #e58a8a;
+  --component-info: #91b8ed;
+
+  --component-row-height: 66px;
+  --component-art-size: 46px;
+  --component-action-size: 44px;
+
+  --component-menu-width: 210px;
+  --component-toast-max-width: 420px;
+
+  --component-shadow-menu:
+    0 12px 35px rgba(0, 0, 0, .4);
+
+  --component-shadow-toast:
+    0 9px 30px rgba(0, 0, 0, .4);
+
+  --component-skeleton-base: #191919;
+  --component-skeleton-highlight: #292929;
+
+  --component-safe-bottom:
+    env(safe-area-inset-bottom, 0px);
+
+  --component-safe-top:
+    env(safe-area-inset-top, 0px);
 }
 
-/* =========================================================
-   02. COMPONENT RESET
-========================================================= */
 
+/* ==========================================================================
+   02. COMPONENT RESET
+   ========================================================================== */
+
+.track-list,
+.track-list *,
 .track-row,
 .track-row *,
+.track-art,
+.track-main,
+.track-actions,
 .icon-button,
 .track-action,
 .text-button,
 .empty-state,
-.toast {
+.empty-state *,
+.toast,
+.toast *,
+.track-playing-indicator,
+.track-context-menu,
+.track-context-menu *,
+.track-skeleton,
+.track-skeleton * {
   box-sizing: border-box;
 }
 
@@ -54,9 +106,31 @@
   font-family: inherit;
 }
 
-/* =========================================================
+.track-list {
+  min-width: 0;
+}
+
+.track-row img {
+  max-width: 100%;
+}
+
+.track-row button {
+  font-family: inherit;
+}
+
+.track-row button:focus {
+  outline: none;
+}
+
+.track-row button:focus-visible {
+  outline: 2px solid var(--component-focus-color);
+  outline-offset: 2px;
+}
+
+
+/* ==========================================================================
    03. SVG ICON SYSTEM
-========================================================= */
+   ========================================================================== */
 
 .icon-button svg,
 .track-action svg,
@@ -77,7 +151,8 @@
 
   transition:
     transform var(--component-transition),
-    opacity var(--component-transition);
+    opacity var(--component-transition),
+    color var(--component-transition);
 }
 
 .track-action svg {
@@ -85,31 +160,85 @@
   height: 18px;
 }
 
-/* =========================================================
+.icon-button svg,
+.track-action svg,
+.text-button svg {
+  overflow: visible;
+}
+
+.icon-button svg *,
+.track-action svg *,
+.text-button svg * {
+  pointer-events: none;
+}
+
+.icon-button svg[fill="currentColor"],
+.track-action svg[fill="currentColor"] {
+  fill: currentColor;
+}
+
+.icon-button svg[stroke="none"],
+.track-action svg[stroke="none"] {
+  stroke: none;
+}
+
+
+/* ==========================================================================
    04. TRACK LIST
-========================================================= */
+   ========================================================================== */
 
 .track-list {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 6px;
 
   width: 100%;
   min-width: 0;
+
+  margin: 0;
+  padding: 0;
+
+  list-style: none;
 }
 
-/* =========================================================
+.track-list > * {
+  min-width: 0;
+}
+
+.track-list:empty {
+  display: block;
+}
+
+.track-list img {
+  display: block;
+}
+
+.track-list button {
+  font: inherit;
+}
+
+.track-list > .track-row:last-child {
+  margin-bottom: 0;
+}
+
+
+/* ==========================================================================
    05. TRACK ROW
-========================================================= */
+   ========================================================================== */
 
 .track-row {
   position: relative;
 
   width: 100%;
   min-width: 0;
-  min-height: 66px;
+  min-height: var(--component-row-height);
 
   display: grid;
-  grid-template-columns: 46px minmax(0, 1fr) auto;
+  grid-template-columns:
+    var(--component-art-size)
+    minmax(0, 1fr)
+    auto;
+
   align-items: center;
   gap: 12px;
 
@@ -125,19 +254,11 @@
   transition:
     background var(--component-transition),
     border-color var(--component-transition),
-    transform var(--component-transition);
-}
+    transform var(--component-transition),
+    opacity var(--component-transition);
 
-.track-row:hover {
-  background: rgba(255, 255, 255, .065);
-  border-color: var(--component-border);
+  -webkit-tap-highlight-color: transparent;
 }
-
-.track-row:active {
-  transform: scale(.992);
-}
-
-/* Subtle glass highlight */
 
 .track-row::before {
   content: "";
@@ -163,12 +284,6 @@
   transition: opacity var(--component-transition);
 }
 
-.track-row:hover::before {
-  opacity: 1;
-}
-
-/* Current track */
-
 .track-row.active,
 .track-row.is-playing {
   background: rgba(255, 255, 255, .085);
@@ -180,22 +295,138 @@
   color: #fff;
 }
 
-/* =========================================================
-   06. TRACK ART
-========================================================= */
+.track-row:active {
+  transform: scale(.992);
+}
+
+.track-row:last-child {
+  margin-bottom: 0;
+}
+
+
+/* ==========================================================================
+   06. TRACK ROW STATES
+   ========================================================================== */
+
+.track-row[aria-current="true"] {
+  background: rgba(255, 255, 255, .085);
+  border-color: var(--component-border-light);
+}
+
+.track-row[aria-selected="true"] {
+  background: rgba(255, 255, 255, .075);
+  border-color: rgba(255, 255, 255, .16);
+}
+
+.track-row[aria-disabled="true"] {
+  opacity: .45;
+  pointer-events: none;
+}
+
+.track-row.is-disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+.track-row.is-selected {
+  background: rgba(255, 255, 255, .075);
+  border-color: rgba(255, 255, 255, .16);
+}
+
+.track-row.is-playing {
+  border-color: rgba(255, 255, 255, .16);
+}
+
+.track-row.active.is-playing {
+  background: rgba(255, 255, 255, .105);
+}
+
+
+/* ==========================================================================
+   07. TRACK ROW INTERACTION
+   ========================================================================== */
+
+@media (hover: hover) and (pointer: fine) {
+  .track-row:hover {
+    background: rgba(255, 255, 255, .065);
+    border-color: var(--component-border);
+  }
+
+  .track-row:hover::before {
+    opacity: 1;
+  }
+}
+
+.track-row:focus {
+  outline: none;
+}
+
+.track-row:focus-visible {
+  outline: 2px solid var(--component-focus-color);
+  outline-offset: 2px;
+}
+
+.track-row:focus-within {
+  border-color: rgba(183, 210, 255, .35);
+}
+
+.track-row:active::before {
+  opacity: 1;
+}
+
+
+/* ==========================================================================
+   08. TRACK ROW ACTIVE INDICATOR
+   ========================================================================== */
+
+.track-row.active::after,
+.track-row.is-playing::after {
+  content: "";
+
+  position: absolute;
+
+  inset-block: 14px;
+  inset-inline-start: 0;
+
+  width: 2px;
+
+  border-radius: 2px;
+  background: #d5d5d5;
+
+  pointer-events: none;
+}
+
+.track-row.active.is-playing::after {
+  background: #fff;
+}
+
+.track-row:not(.active):not(.is-playing)::after {
+  content: none;
+}
+
+
+/* ==========================================================================
+   09. TRACK ART
+   ========================================================================== */
 
 .track-art {
-  width: 46px;
-  height: 46px;
+  width: var(--component-art-size);
+  height: var(--component-art-size);
 
   display: block;
   flex-shrink: 0;
 
+  aspect-ratio: 1 / 1;
   object-fit: cover;
+  object-position: center;
+
+  overflow: hidden;
 
   border-radius: 9px;
 
   background: #222;
+
+  border: 1px solid rgba(255, 255, 255, .055);
 
   box-shadow:
     0 3px 10px rgba(0, 0, 0, .25);
@@ -203,7 +434,8 @@
   transition:
     transform var(--component-transition),
     border-radius var(--component-transition),
-    filter var(--component-transition);
+    filter var(--component-transition),
+    opacity var(--component-transition);
 }
 
 .track-row:active .track-art {
@@ -215,16 +447,75 @@
   filter: brightness(1.08);
 }
 
-/* =========================================================
-   07. TRACK INFORMATION
-========================================================= */
+.track-art.is-loading {
+  opacity: .55;
+}
+
+.track-art.is-loaded {
+  opacity: 1;
+}
+
+.track-art:not([src]),
+.track-art[src=""] {
+  background: #202020;
+}
+
+.track-art[loading="lazy"] {
+  content-visibility: auto;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .track-row:hover .track-art {
+    filter: brightness(1.06);
+  }
+}
+
+
+/* ==========================================================================
+   10. TRACK ART FALLBACK
+   ========================================================================== */
+
+.track-art:not([src]),
+.track-art[src=""],
+.track-art[src*="undefined"],
+.track-art[src*="null"] {
+  object-fit: contain;
+  background:
+    linear-gradient(
+      145deg,
+      #242424,
+      #151515
+    );
+}
+
+.track-art:focus-visible {
+  outline: 2px solid var(--component-focus-color);
+  outline-offset: 3px;
+}
+
+
+/* ==========================================================================
+   11. TRACK INFORMATION
+   ========================================================================== */
 
 .track-main {
   min-width: 0;
+  width: 100%;
+
   overflow: hidden;
+
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
 }
 
 .track-name {
+  display: block;
+
+  min-width: 0;
+  max-width: 100%;
+
   overflow: hidden;
 
   color: var(--component-text);
@@ -241,9 +532,14 @@
 }
 
 .track-channel {
+  display: block;
+
+  min-width: 0;
+  max-width: 100%;
+
   overflow: hidden;
 
-  margin-top: 4px;
+  margin: 0;
 
   color: var(--component-muted);
 
@@ -255,21 +551,80 @@
   white-space: nowrap;
 }
 
-/* =========================================================
-   08. TRACK ACTIONS
-========================================================= */
+
+/* ==========================================================================
+   12. TRACK TEXT STATES
+   ========================================================================== */
+
+.track-row.active .track-name,
+.track-row.is-playing .track-name {
+  color: #fff;
+}
+
+.track-row.active .track-channel,
+.track-row.is-playing .track-channel {
+  color: #bdbdbd;
+}
+
+.track-name a,
+.track-channel a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.track-name a:focus-visible,
+.track-channel a:focus-visible {
+  outline: 1px solid var(--component-focus-color);
+  outline-offset: 2px;
+}
+
+.track-name,
+.track-channel {
+  overflow-wrap: anywhere;
+}
+
+.track-main > * {
+  min-width: 0;
+}
+
+
+/* ==========================================================================
+   13. TRACK ACTIONS
+   ========================================================================== */
 
 .track-actions {
+  min-width: 0;
+  min-height: var(--component-action-size);
+
   display: flex;
   align-items: center;
   justify-content: flex-end;
+
   gap: 3px;
+
+  flex-shrink: 0;
 }
+
+.track-actions > * {
+  flex-shrink: 0;
+}
+
+.track-actions:empty {
+  display: none;
+}
+
+
+/* ==========================================================================
+   14. ICON BUTTON
+   ========================================================================== */
 
 .icon-button,
 .track-action {
-  width: 35px;
-  height: 35px;
+  width: var(--component-action-size);
+  height: var(--component-action-size);
+
+  min-width: var(--component-action-size);
+  min-height: var(--component-action-size);
 
   padding: 0;
 
@@ -288,7 +643,10 @@
     background var(--component-transition),
     color var(--component-transition),
     border-color var(--component-transition),
-    transform var(--component-transition);
+    transform var(--component-transition),
+    opacity var(--component-transition);
+
+  -webkit-tap-highlight-color: transparent;
 }
 
 .icon-button:hover,
@@ -300,7 +658,7 @@
 
 .icon-button:active,
 .track-action:active {
-  transform: scale(.89);
+  transform: scale(.94);
   background: rgba(255, 255, 255, .12);
 }
 
@@ -309,11 +667,68 @@
   opacity: .35;
   cursor: not-allowed;
   transform: none;
+  pointer-events: none;
 }
 
-/* =========================================================
-   09. FAVORITES
-========================================================= */
+
+/* ==========================================================================
+   15. BUTTON FOCUS
+   ========================================================================== */
+
+.icon-button:focus,
+.track-action:focus,
+.text-button:focus {
+  outline: none;
+}
+
+.icon-button:focus-visible,
+.track-action:focus-visible,
+.text-button:focus-visible {
+  outline: 2px solid var(--component-focus-color);
+  outline-offset: 2px;
+  box-shadow: var(--component-focus-ring);
+}
+
+.icon-button[aria-pressed="true"],
+.track-action[aria-pressed="true"] {
+  color: #fff;
+}
+
+.icon-button[aria-expanded="true"],
+.track-action[aria-expanded="true"] {
+  background: var(--component-glass-hover);
+  border-color: var(--component-border-light);
+}
+
+
+/* ==========================================================================
+   16. BUTTON HOVER
+   ========================================================================== */
+
+@media (hover: hover) and (pointer: fine) {
+  .icon-button:hover,
+  .track-action:hover {
+    color: #fff;
+    background: var(--component-glass-hover);
+  }
+
+  .text-button:hover {
+    color: #fff;
+  }
+}
+
+@media (hover: none) {
+  .icon-button:hover,
+  .track-action:hover,
+  .text-button:hover {
+    background: transparent;
+  }
+}
+
+
+/* ==========================================================================
+   17. FAVORITES
+   ========================================================================== */
 
 .track-action.is-favorite,
 .favorite-current.is-favorite,
@@ -336,32 +751,71 @@
   background: rgba(255, 255, 255, .12);
 }
 
-/* =========================================================
-   10. TEXT BUTTON
-========================================================= */
+.track-action[aria-pressed="true"] svg {
+  fill: currentColor;
+}
+
+.track-action[aria-pressed="false"] svg {
+  fill: none;
+}
+
+
+/* ==========================================================================
+   18. FAVORITE FEEDBACK
+   ========================================================================== */
+
+.track-action.is-favorite:active svg {
+  transform: scale(.88);
+}
+
+.favorite-current.is-favorite svg {
+  transform: scale(1);
+}
+
+.track-row.is-favorite .track-name {
+  color: #fff;
+}
+
+.track-action.is-favorite:focus-visible {
+  outline-color: #fff;
+}
+
+
+/* ==========================================================================
+   19. TEXT BUTTON
+   ========================================================================== */
 
 .text-button {
-  min-height: 34px;
+  min-height: 44px;
 
-  padding: 8px 0;
+  padding: 8px 10px;
 
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+
   gap: 7px;
 
-  border: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+
   background: transparent;
 
   color: #b5b5b5;
 
   font-size: 11px;
   font-weight: 600;
+  line-height: 1.4;
+
+  text-decoration: none;
 
   cursor: pointer;
 
   transition:
     color var(--component-transition),
-    opacity var(--component-transition);
+    opacity var(--component-transition),
+    background var(--component-transition),
+    border-color var(--component-transition);
 }
 
 .text-button:hover {
@@ -377,12 +831,45 @@
   height: 16px;
 }
 
-/* =========================================================
-   11. EMPTY STATE
-========================================================= */
+.text-button:disabled {
+  opacity: .4;
+  cursor: not-allowed;
+}
+
+
+/* ==========================================================================
+   20. TEXT BUTTON STATES
+   ========================================================================== */
+
+.text-button[aria-pressed="true"] {
+  color: #fff;
+  background: rgba(255, 255, 255, .07);
+}
+
+.text-button[aria-expanded="true"] {
+  color: #fff;
+  background: rgba(255, 255, 255, .08);
+}
+
+.text-button svg {
+  flex-shrink: 0;
+}
+
+.text-button > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+
+/* ==========================================================================
+   21. EMPTY STATE
+   ========================================================================== */
 
 .empty-state {
   width: 100%;
+  max-width: 520px;
+
+  margin-inline: auto;
 
   padding: 42px 22px;
 
@@ -403,10 +890,20 @@
   line-height: 1.7;
 }
 
-/* =========================================================
-   12. EMPTY STATE ICON
-   Optional if an icon exists inside .empty-state.
-========================================================= */
+.empty-state > * {
+  max-width: 100%;
+}
+
+.empty-state p {
+  max-width: 360px;
+  margin-inline: auto;
+  overflow-wrap: anywhere;
+}
+
+
+/* ==========================================================================
+   22. EMPTY STATE ICON
+   ========================================================================== */
 
 .empty-state svg {
   width: 30px;
@@ -425,41 +922,106 @@
   stroke-linejoin: round;
 }
 
-/* =========================================================
-   13. TOAST
-========================================================= */
+.empty-state svg * {
+  vector-effect: non-scaling-stroke;
+}
+
+
+/* ==========================================================================
+   23. EMPTY STATE TYPOGRAPHY
+   ========================================================================== */
+
+.empty-state h2,
+.empty-state h3,
+.empty-state strong {
+  display: block;
+
+  margin: 0;
+
+  color: var(--component-text);
+
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.empty-state p {
+  margin-top: 8px;
+
+  color: var(--component-muted);
+
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+
+/* ==========================================================================
+   24. EMPTY STATE ACTIONS
+   ========================================================================== */
+
+.empty-state .text-button {
+  margin-top: 15px;
+}
+
+.empty-state button {
+  max-width: 100%;
+}
+
+.empty-state:empty {
+  display: none;
+}
+
+
+/* ==========================================================================
+   25. TOAST
+   ========================================================================== */
 
 .toast {
   position: fixed;
 
-  z-index: 500;
+  z-index: 10000;
 
   left: 50%;
 
   bottom:
     calc(
       65px + 76px +
-      env(safe-area-inset-bottom, 0px) +
+      var(--component-safe-bottom) +
       18px
     );
 
   width: max-content;
-  max-width: calc(100% - 35px);
+
+  max-width:
+    min(
+      var(--component-toast-max-width),
+      calc(100vw - 35px)
+    );
+
+  min-height: 44px;
 
   padding: 12px 17px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  gap: 9px;
 
   border: 1px solid rgba(255, 255, 255, .13);
   border-radius: 13px;
 
-  background: rgba(32, 32, 32, .88);
+  background: rgba(32, 32, 32, .94);
   color: #fff;
 
   -webkit-backdrop-filter: blur(24px) saturate(150%);
   backdrop-filter: blur(24px) saturate(150%);
 
   font-size: 11px;
-  line-height: 1.45;
+  line-height: 1.5;
   text-align: center;
+
+  overflow-wrap: anywhere;
 
   opacity: 0;
   visibility: hidden;
@@ -472,9 +1034,7 @@
     visibility .22s ease,
     transform .25s cubic-bezier(.2, .8, .2, 1);
 
-  box-shadow:
-    0 9px 30px rgba(0, 0, 0, .4),
-    inset 0 1px 0 rgba(255, 255, 255, .07);
+  box-shadow: var(--component-shadow-toast);
 }
 
 .toast.visible,
@@ -485,28 +1045,181 @@
   transform: translate(-50%, 0) scale(1);
 }
 
-/* =========================================================
-   14. TOAST ICON
-   Optional when an SVG is present.
-========================================================= */
+
+/* ==========================================================================
+   26. TOAST ICON
+   ========================================================================== */
 
 .toast svg {
   width: 16px;
   height: 16px;
 
   display: inline-block;
-  vertical-align: middle;
+  flex: 0 0 auto;
 
-  margin-right: 6px;
+  vertical-align: middle;
 
   fill: none;
   stroke: currentColor;
   stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
-/* =========================================================
-   15. OPTIONAL: TRACK LOADING
-========================================================= */
+
+/* ==========================================================================
+   27. TOAST TYPES
+   ========================================================================== */
+
+.toast[data-type="success"] {
+  border-color: rgba(118, 201, 155, .35);
+}
+
+.toast[data-type="success"] svg {
+  color: var(--component-success);
+}
+
+.toast[data-type="warning"] {
+  border-color: rgba(231, 189, 120, .35);
+}
+
+.toast[data-type="warning"] svg {
+  color: var(--component-warning);
+}
+
+.toast[data-type="error"] {
+  border-color: rgba(229, 138, 138, .35);
+}
+
+.toast[data-type="error"] svg {
+  color: var(--component-danger);
+}
+
+.toast[data-type="info"] {
+  border-color: rgba(145, 184, 237, .35);
+}
+
+.toast[data-type="info"] svg {
+  color: var(--component-info);
+}
+
+
+/* ==========================================================================
+   28. TOAST TEXT
+   ========================================================================== */
+
+.toast > span,
+.toast > p {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.toast strong {
+  color: #fff;
+  font-weight: 650;
+}
+
+
+/* ==========================================================================
+   29. TOAST SAFE AREA
+   ========================================================================== */
+
+@supports (padding: max(0px)) {
+  .toast {
+    bottom:
+      max(
+        18px,
+        calc(
+          65px + 76px +
+          env(safe-area-inset-bottom, 0px) +
+          18px
+        )
+      );
+  }
+}
+
+
+/* ==========================================================================
+   30. PLAYING INDICATOR
+   ========================================================================== */
+
+.track-playing-indicator {
+  width: 20px;
+  height: 20px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  gap: 3px;
+
+  flex: 0 0 auto;
+
+  color: #fff;
+}
+
+.track-playing-indicator span {
+  width: 3px;
+  height: 6px;
+
+  display: block;
+
+  border-radius: 3px;
+  background: currentColor;
+}
+
+
+/* ==========================================================================
+   31. PLAYING ANIMATION
+   ========================================================================== */
+
+.track-playing-indicator.active span {
+  animation: track-bars .65s ease-in-out infinite alternate;
+}
+
+.track-playing-indicator span:nth-child(2) {
+  animation-delay: .2s;
+}
+
+.track-playing-indicator span:nth-child(3) {
+  animation-delay: .35s;
+}
+
+.track-playing-indicator span:nth-child(4) {
+  animation-delay: .12s;
+}
+
+@keyframes track-bars {
+  from {
+    height: 5px;
+    opacity: .5;
+  }
+
+  to {
+    height: 16px;
+    opacity: 1;
+  }
+}
+
+
+/* ==========================================================================
+   32. PLAYING INDICATOR PAUSED
+   ========================================================================== */
+
+.track-playing-indicator:not(.active) span {
+  animation: none;
+  height: 5px;
+}
+
+.track-row:not(.is-playing) .track-playing-indicator span {
+  animation-play-state: paused;
+}
+
+
+/* ==========================================================================
+   33. OPTIONAL TRACK LOADING
+   ========================================================================== */
 
 .track-row.loading {
   overflow: hidden;
@@ -529,6 +1242,7 @@
   transform: translateX(-100%);
 
   animation: track-shimmer 1.4s infinite;
+
   pointer-events: none;
 }
 
@@ -538,82 +1252,178 @@
   }
 }
 
-/* =========================================================
-   16. OPTIONAL: TRACK PLAYING INDICATOR
-========================================================= */
 
-.track-playing-indicator {
-  display: flex;
+/* ==========================================================================
+   34. SKELETON BASE
+   ========================================================================== */
+
+.track-skeleton {
+  width: 100%;
+  min-height: var(--component-row-height);
+
+  display: grid;
+
+  grid-template-columns:
+    var(--component-art-size)
+    minmax(0, 1fr)
+    auto;
+
   align-items: center;
-  justify-content: center;
-  gap: 3px;
 
-  width: 20px;
-  height: 20px;
+  gap: 12px;
+
+  padding: 8px;
+
+  overflow: hidden;
+
+  border: 1px solid var(--component-border);
+  border-radius: var(--component-radius);
+
+  background: var(--component-skeleton-base);
 }
 
-.track-playing-indicator span {
-  width: 3px;
-  height: 6px;
 
-  border-radius: 3px;
-  background: #fff;
+/* ==========================================================================
+   35. SKELETON SHAPES
+   ========================================================================== */
+
+.track-skeleton-art,
+.track-skeleton-line,
+.track-skeleton-action {
+  position: relative;
+
+  overflow: hidden;
+
+  background: var(--component-skeleton-highlight);
+
+  border-radius: 7px;
 }
 
-.track-playing-indicator.active span {
-  animation: track-bars .65s ease-in-out infinite alternate;
+.track-skeleton-art {
+  width: var(--component-art-size);
+  height: var(--component-art-size);
 }
 
-.track-playing-indicator span:nth-child(2) {
-  animation-delay: .2s;
+.track-skeleton-line {
+  width: 78%;
+  height: 11px;
 }
 
-.track-playing-indicator span:nth-child(3) {
-  animation-delay: .35s;
+.track-skeleton-line:last-child {
+  width: 48%;
+  height: 9px;
 }
 
-@keyframes track-bars {
-  from {
-    height: 5px;
-    opacity: .5;
-  }
+.track-skeleton-action {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+}
 
+
+/* ==========================================================================
+   36. SKELETON SHIMMER
+   ========================================================================== */
+
+.track-skeleton-art::after,
+.track-skeleton-line::after,
+.track-skeleton-action::after {
+  content: "";
+
+  position: absolute;
+  inset: 0;
+
+  background:
+    linear-gradient(
+      100deg,
+      transparent 15%,
+      rgba(255, 255, 255, .075) 50%,
+      transparent 85%
+    );
+
+  transform: translateX(-100%);
+
+  animation: skeleton-loading 1.5s ease-in-out infinite;
+}
+
+@keyframes skeleton-loading {
   to {
-    height: 16px;
-    opacity: 1;
+    transform: translateX(100%);
   }
 }
 
-/* =========================================================
-   17. OPTIONAL: TRACK CONTEXT MENU
-========================================================= */
+
+/* ==========================================================================
+   37. SKELETON CONTENT
+   ========================================================================== */
+
+.track-skeleton-main {
+  display: flex;
+  flex-direction: column;
+
+  gap: 9px;
+
+  min-width: 0;
+}
+
+.track-skeleton > * {
+  flex-shrink: 0;
+}
+
+
+/* ==========================================================================
+   38. SKELETON REDUCED MOTION
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .track-skeleton,
+  .track-skeleton::after,
+  .track-skeleton-art::after,
+  .track-skeleton-line::after,
+  .track-skeleton-action::after {
+    animation: none !important;
+  }
+}
+
+
+/* ==========================================================================
+   39. CONTEXT MENU
+   ========================================================================== */
 
 .track-context-menu {
   position: absolute;
-  z-index: 400;
 
-  min-width: 185px;
+  z-index: 1000;
+
+  width: max-content;
+  min-width: var(--component-menu-width);
+  max-width: min(280px, calc(100vw - 24px));
 
   padding: 6px;
 
   border: 1px solid var(--component-border-light);
   border-radius: 14px;
 
-  background: rgba(28, 28, 28, .94);
+  background: rgba(28, 28, 28, .96);
 
   -webkit-backdrop-filter: blur(25px) saturate(150%);
   backdrop-filter: blur(25px) saturate(150%);
 
-  box-shadow: 0 15px 45px rgba(0, 0, 0, .5);
+  box-shadow: var(--component-shadow-menu);
 }
+
+
+/* ==========================================================================
+   40. CONTEXT MENU BUTTONS
+   ========================================================================== */
 
 .track-context-menu button {
   width: 100%;
-
-  min-height: 39px;
+  min-height: 44px;
 
   display: flex;
   align-items: center;
+
   gap: 10px;
 
   padding: 9px 11px;
@@ -625,59 +1435,172 @@
   color: #eee;
 
   text-align: left;
+
   font: inherit;
-  font-size: 11px;
+  font-size: 12px;
+
+  cursor: pointer;
+
+  transition:
+    background var(--component-transition),
+    color var(--component-transition);
 }
 
 .track-context-menu button:active {
   background: rgba(255, 255, 255, .09);
 }
 
-/* =========================================================
-   18. OPTIONAL: TRACK DRAGGING
-========================================================= */
+
+/* ==========================================================================
+   41. CONTEXT MENU HOVER
+   ========================================================================== */
+
+@media (hover: hover) and (pointer: fine) {
+  .track-context-menu button:hover {
+    background: rgba(255, 255, 255, .08);
+    color: #fff;
+  }
+}
+
+
+/* ==========================================================================
+   42. CONTEXT MENU ICONS
+   ========================================================================== */
+
+.track-context-menu button svg {
+  width: 17px;
+  height: 17px;
+
+  flex: 0 0 auto;
+
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+
+  pointer-events: none;
+}
+
+
+/* ==========================================================================
+   43. CONTEXT MENU DANGEROUS ACTION
+   ========================================================================== */
+
+.track-context-menu button[data-danger="true"] {
+  color: var(--component-danger);
+}
+
+.track-context-menu button[data-danger="true"]:hover {
+  background: rgba(229, 138, 138, .1);
+}
+
+
+/* ==========================================================================
+   44. CONTEXT MENU FOCUS
+   ========================================================================== */
+
+.track-context-menu button:focus-visible {
+  outline: 2px solid var(--component-focus-color);
+  outline-offset: -2px;
+}
+
+
+/* ==========================================================================
+   45. DRAGGING
+   ========================================================================== */
 
 .track-row.dragging {
   opacity: .5;
   transform: scale(.98);
+
+  background: rgba(255, 255, 255, .09);
+
+  z-index: 5;
 }
+
+
+/* ==========================================================================
+   46. DRAG OVER
+   ========================================================================== */
 
 .track-row.drag-over {
-  border-color: rgba(255, 255, 255, .3);
+  border-color: rgba(255, 255, 255, .4);
   background: rgba(255, 255, 255, .09);
+
+  outline: 1px dashed rgba(255, 255, 255, .4);
+  outline-offset: -3px;
 }
 
-/* =========================================================
-   19. OPTIONAL: SKELETON
-========================================================= */
 
-.track-skeleton {
-  height: 65px;
+/* ==========================================================================
+   47. DRAG HANDLE
+   Optional when the HTML contains a .drag-handle element.
+   ========================================================================== */
 
-  border-radius: 11px;
+.drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 
-  background:
-    linear-gradient(
-      90deg,
-      #111,
-      #202020,
-      #111
-    );
+  width: 36px;
+  height: 44px;
 
-  background-size: 200% 100%;
+  color: var(--component-subtle);
 
-  animation: skeleton-loading 1.4s linear infinite;
+  cursor: grab;
+  touch-action: none;
 }
 
-@keyframes skeleton-loading {
-  to {
-    background-position: -200% 0;
-  }
+.drag-handle:active {
+  cursor: grabbing;
 }
 
-/* =========================================================
-   20. MOBILE
-========================================================= */
+.drag-handle svg {
+  width: 17px;
+  height: 17px;
+}
+
+
+/* ==========================================================================
+   48. DRAG HANDLE FOCUS
+   ========================================================================== */
+
+.drag-handle:focus-visible {
+  outline: 2px solid var(--component-focus-color);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+
+/* ==========================================================================
+   49. TRACK ROW TRANSITIONS
+   ========================================================================== */
+
+.track-row,
+.track-row::before,
+.track-row::after {
+  transition:
+    background-color var(--component-transition),
+    border-color var(--component-transition),
+    opacity var(--component-transition);
+}
+
+
+/* ==========================================================================
+   50. TRACK ROW PERFORMANCE
+   ========================================================================== */
+
+.track-row {
+  backface-visibility: hidden;
+}
+
+.track-row img {
+  content-visibility: auto;
+}
+
+
+/* ==========================================================================
+   51. MOBILE BASE
+   ========================================================================== */
 
 @media (max-width: 650px) {
   .track-list {
@@ -687,9 +1610,13 @@
   .track-row {
     min-height: 63px;
 
-    grid-template-columns: 43px minmax(0, 1fr) auto;
+    grid-template-columns:
+      43px
+      minmax(0, 1fr)
+      auto;
 
     gap: 10px;
+
     padding: 7px;
   }
 
@@ -709,21 +1636,42 @@
   .track-actions {
     gap: 0;
   }
+}
 
+
+/* ==========================================================================
+   52. MOBILE BUTTON SIZES
+   ========================================================================== */
+
+@media (max-width: 650px) {
   .track-action,
   .icon-button {
-    width: 33px;
-    height: 34px;
+    width: 40px;
+    height: 40px;
+
+    min-width: 40px;
+    min-height: 40px;
+  }
+
+  .track-action svg,
+  .icon-button svg {
+    width: 18px;
+    height: 18px;
   }
 }
 
-/* =========================================================
-   21. SMALL PHONES
-========================================================= */
+
+/* ==========================================================================
+   53. SMALL PHONES
+   ========================================================================== */
 
 @media (max-width: 380px) {
   .track-row {
-    grid-template-columns: 40px minmax(0, 1fr) auto;
+    grid-template-columns:
+      40px
+      minmax(0, 1fr)
+      auto;
+
     gap: 8px;
   }
 
@@ -732,33 +1680,81 @@
     height: 40px;
   }
 
-  .track-action,
-  .icon-button {
-    width: 30px;
-    height: 32px;
+  .track-name {
+    font-size: 11px;
   }
 
-  .track-action svg {
-    width: 17px;
-    height: 17px;
+  .track-channel {
+    font-size: 9px;
   }
 }
 
-/* =========================================================
-   22. LARGE SCREENS
-========================================================= */
 
-@media (min-width: 900px) {
-  .track-list {
-    gap: 5px;
+/* ==========================================================================
+   54. VERY SMALL PHONES
+   ========================================================================== */
+
+@media (max-width: 350px) {
+  .track-row {
+    gap: 6px;
+    padding: 6px;
+  }
+
+  .track-art {
+    width: 38px;
+    height: 38px;
   }
 
   .track-row {
-    padding: 9px 11px;
+    grid-template-columns:
+      38px
+      minmax(0, 1fr)
+      auto;
   }
 
-  .track-row:hover {
-    transform: translateX(2px);
+  .track-actions {
+    gap: 0;
+  }
+}
+
+
+/* ==========================================================================
+   55. LANDSCAPE MOBILE
+   ========================================================================== */
+
+@media (max-width: 900px) and (orientation: landscape) {
+  .track-row {
+    min-height: 58px;
+  }
+
+  .track-art {
+    width: 40px;
+    height: 40px;
+  }
+
+  .empty-state {
+    padding-block: 25px;
+  }
+}
+
+
+/* ==========================================================================
+   56. TABLET
+   ========================================================================== */
+
+@media (min-width: 651px) and (max-width: 899px) {
+  .track-row {
+    grid-template-columns:
+      48px
+      minmax(0, 1fr)
+      auto;
+
+    min-height: 68px;
+  }
+
+  .track-art {
+    width: 48px;
+    height: 48px;
   }
 
   .track-name {
@@ -770,41 +1766,577 @@
   }
 }
 
-/* =========================================================
-   23. ACCESSIBILITY
-========================================================= */
+
+/* ==========================================================================
+   57. DESKTOP
+   ========================================================================== */
+
+@media (min-width: 900px) {
+  .track-list {
+    gap: 5px;
+  }
+
+  .track-row {
+    padding: 9px 11px;
+  }
+
+  .track-name {
+    font-size: 13px;
+  }
+
+  .track-channel {
+    font-size: 11px;
+  }
+}
+
+
+/* ==========================================================================
+   58. DESKTOP ROW INTERACTION
+   ========================================================================== */
+
+@media (min-width: 900px) and (hover: hover) {
+  .track-row:hover {
+    transform: translateX(2px);
+  }
+
+  .track-row:active {
+    transform: translateX(1px) scale(.995);
+  }
+}
+
+
+/* ==========================================================================
+   59. LARGE DESKTOP
+   ========================================================================== */
+
+@media (min-width: 1400px) {
+  .track-row {
+    min-height: 72px;
+    padding-inline: 13px;
+  }
+
+  .track-art {
+    width: 50px;
+    height: 50px;
+  }
+
+  .track-row {
+    grid-template-columns:
+      50px
+      minmax(0, 1fr)
+      auto;
+  }
+}
+
+
+/* ==========================================================================
+   60. TOAST MOBILE
+   ========================================================================== */
+
+@media (max-width: 650px) {
+  .toast {
+    max-width: calc(100vw - 28px);
+
+    bottom:
+      calc(
+        65px + 76px +
+        var(--component-safe-bottom) +
+        14px
+      );
+
+    padding: 11px 14px;
+
+    font-size: 11px;
+  }
+}
+
+
+/* ==========================================================================
+   61. TOAST LANDSCAPE
+   ========================================================================== */
+
+@media (max-width: 900px) and (orientation: landscape) {
+  .toast {
+    bottom:
+      calc(
+        12px +
+        var(--component-safe-bottom)
+      );
+  }
+}
+
+
+/* ==========================================================================
+   62. TOAST STACK SUPPORT
+   Optional class for a wrapper containing multiple notifications.
+   ========================================================================== */
+
+.toast-container {
+  position: fixed;
+
+  z-index: 10000;
+
+  left: 50%;
+  bottom: calc(20px + var(--component-safe-bottom));
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+
+  gap: 8px;
+
+  width: min(100%, 460px);
+
+  padding-inline: 14px;
+
+  transform: translateX(-50%);
+
+  pointer-events: none;
+}
+
+.toast-container .toast {
+  position: relative;
+
+  inset: auto;
+
+  transform: none;
+
+  width: 100%;
+  max-width: 100%;
+
+  pointer-events: auto;
+}
+
+
+/* ==========================================================================
+   63. ACCESSIBILITY FOCUS
+   ========================================================================== */
 
 .icon-button:focus-visible,
 .track-action:focus-visible,
 .text-button:focus-visible,
-.track-row:focus-visible {
-  outline: 2px solid #fff;
+.track-row:focus-visible,
+.track-context-menu button:focus-visible {
+  outline: 2px solid var(--component-focus-color);
   outline-offset: 3px;
 }
 
-.icon-button:focus:not(:focus-visible),
-.track-action:focus:not(:focus-visible),
-.text-button:focus:not(:focus-visible) {
-  outline: none;
-}
 
-@media (prefers-reduced-motion: reduce) {
-  .track-row,
-  .icon-button,
-  .track-action,
-  .toast,
-  .text-button,
-  .track-art,
-  .track-playing-indicator span,
-  .track-skeleton {
-    animation: none !important;
-    transition: none !important;
+/* ==========================================================================
+   64. HIGH CONTRAST FOCUS
+   ========================================================================== */
+
+@media (forced-colors: active) {
+  .icon-button:focus-visible,
+  .track-action:focus-visible,
+  .text-button:focus-visible,
+  .track-row:focus-visible {
+    outline: 2px solid Highlight;
   }
 }
 
-/* =========================================================
-   24. LIQUID GLASS FALLBACK
-========================================================= */
+
+/* ==========================================================================
+   65. HIGH CONTRAST COMPONENTS
+   ========================================================================== */
+
+@media (forced-colors: active) {
+  .track-row,
+  .empty-state,
+  .toast,
+  .track-context-menu {
+    border: 1px solid CanvasText;
+  }
+
+  .track-action,
+  .icon-button,
+  .text-button {
+    color: ButtonText;
+  }
+}
+
+
+/* ==========================================================================
+   66. REDUCED MOTION
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .track-row,
+  .track-row *,
+  .track-art,
+  .icon-button,
+  .track-action,
+  .text-button,
+  .toast,
+  .track-playing-indicator,
+  .track-playing-indicator span,
+  .track-skeleton,
+  .track-skeleton *,
+  .track-context-menu {
+    animation: none !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+
+/* ==========================================================================
+   67. REDUCED MOTION PLAYING INDICATOR
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .track-playing-indicator span {
+    height: 7px;
+    opacity: 1;
+  }
+}
+
+
+/* ==========================================================================
+   68. REDUCED MOTION LOADING
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .track-row.loading::after,
+  .track-skeleton-art::after,
+  .track-skeleton-line::after,
+  .track-skeleton-action::after {
+    display: none;
+  }
+}
+
+
+/* ==========================================================================
+   69. COLOR CONTRAST
+   ========================================================================== */
+
+.track-name {
+  color: #f5f5f5;
+}
+
+.track-channel {
+  color: #a5a5a5;
+}
+
+.text-button {
+  color: #c2c2c2;
+}
+
+.empty-state {
+  color: #b0b0b0;
+}
+
+
+/* ==========================================================================
+   70. TEXT WRAPPING
+   ========================================================================== */
+
+.track-name,
+.track-channel,
+.empty-state p,
+.toast {
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+
+/* ==========================================================================
+   71. LONG TRACK TITLES
+   ========================================================================== */
+
+.track-main {
+  overflow: hidden;
+  min-width: 0;
+}
+
+.track-name {
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
+/* ==========================================================================
+   72. LONG ARTIST NAMES
+   ========================================================================== */
+
+.track-channel {
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
+/* ==========================================================================
+   73. BUTTON LABELS
+   ========================================================================== */
+
+.icon-button[aria-label],
+.track-action[aria-label] {
+  position: relative;
+}
+
+.icon-button[aria-label]:empty,
+.track-action[aria-label]:empty {
+  overflow: hidden;
+}
+
+
+/* ==========================================================================
+   74. DISABLED STATES
+   ========================================================================== */
+
+.icon-button:disabled,
+.track-action:disabled,
+.text-button:disabled,
+button[aria-disabled="true"] {
+  opacity: .4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+
+/* ==========================================================================
+   75. LOADING BUTTON STATES
+   Optional when the HTML adds aria-busy.
+   ========================================================================== */
+
+.icon-button[aria-busy="true"],
+.track-action[aria-busy="true"],
+.text-button[aria-busy="true"] {
+  cursor: progress;
+  opacity: .7;
+}
+
+
+/* ==========================================================================
+   76. SELECTED BUTTON STATES
+   ========================================================================== */
+
+.icon-button[aria-pressed="true"],
+.track-action[aria-pressed="true"] {
+  color: #fff;
+  background: rgba(255, 255, 255, .08);
+}
+
+
+/* ==========================================================================
+   77. EXPANDED BUTTON STATES
+   ========================================================================== */
+
+.icon-button[aria-expanded="true"],
+.track-action[aria-expanded="true"],
+.text-button[aria-expanded="true"] {
+  color: #fff;
+  background: rgba(255, 255, 255, .08);
+}
+
+
+/* ==========================================================================
+   78. BUTTON ACTIVE FEEDBACK
+   ========================================================================== */
+
+.icon-button:not(:disabled):active,
+.track-action:not(:disabled):active,
+.text-button:not(:disabled):active {
+  opacity: .8;
+}
+
+
+/* ==========================================================================
+   79. ICON ALIGNMENT
+   ========================================================================== */
+
+.icon-button svg,
+.track-action svg,
+.text-button svg {
+  vertical-align: middle;
+}
+
+
+/* ==========================================================================
+   80. SVG STROKE CONSISTENCY
+   ========================================================================== */
+
+.icon-button svg,
+.track-action svg,
+.text-button svg {
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+
+/* ==========================================================================
+   81. IMAGE LAYOUT STABILITY
+   ========================================================================== */
+
+.track-art {
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+}
+
+
+/* ==========================================================================
+   82. IMAGE LOADING STATES
+   ========================================================================== */
+
+.track-art.is-loading {
+  background-color: #222;
+  opacity: .6;
+}
+
+.track-art.is-loaded {
+  opacity: 1;
+}
+
+
+/* ==========================================================================
+   83. IMAGE ERROR STATE
+   Optional when JavaScript adds .is-error.
+   ========================================================================== */
+
+.track-art.is-error {
+  object-fit: contain;
+
+  background:
+    linear-gradient(
+      145deg,
+      #262626,
+      #171717
+    );
+
+  opacity: .8;
+}
+
+
+/* ==========================================================================
+   84. TRACK LIST EMPTY
+   ========================================================================== */
+
+.track-list:empty {
+  min-height: 0;
+  padding: 0;
+}
+
+
+/* ==========================================================================
+   85. TRACK LIST OVERFLOW
+   ========================================================================== */
+
+.track-list,
+.track-row,
+.track-main {
+  max-width: 100%;
+}
+
+
+/* ==========================================================================
+   86. TRACK ROW STABILITY
+   ========================================================================== */
+
+.track-row {
+  contain: layout;
+}
+
+
+/* ==========================================================================
+   87. CONTEXT MENU VIEWPORT
+   ========================================================================== */
+
+.track-context-menu {
+  max-height: min(70vh, 420px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+
+/* ==========================================================================
+   88. CONTEXT MENU SCROLLBAR
+   ========================================================================== */
+
+.track-context-menu {
+  scrollbar-width: thin;
+  scrollbar-color: #555 transparent;
+}
+
+.track-context-menu::-webkit-scrollbar {
+  width: 5px;
+}
+
+.track-context-menu::-webkit-scrollbar-thumb {
+  background: #555;
+  border-radius: 5px;
+}
+
+
+/* ==========================================================================
+   89. CONTEXT MENU TOUCH
+   ========================================================================== */
+
+.track-context-menu button {
+  min-height: 44px;
+  touch-action: manipulation;
+}
+
+
+/* ==========================================================================
+   90. DRAG AND DROP TOUCH
+   ========================================================================== */
+
+.track-row[draggable="true"] {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.drag-handle {
+  touch-action: none;
+}
+
+
+/* ==========================================================================
+   91. CONTAINER WIDTH ADAPTATION
+   Optional: enable on a dedicated wrapper, not on the entire app.
+   ========================================================================== */
+
+.track-component-container {
+  width: 100%;
+  min-width: 0;
+  container-type: inline-size;
+}
+
+
+/* ==========================================================================
+   92. CONTAINER QUERY COMPACT
+   ========================================================================== */
+
+@container (max-width: 360px) {
+  .track-component-container .track-row {
+    gap: 7px;
+    padding-inline: 6px;
+  }
+
+  .track-component-container .track-name {
+    font-size: 11px;
+  }
+}
+
+
+/* ==========================================================================
+   93. CONTAINER QUERY WIDE
+   ========================================================================== */
+
+@container (min-width: 600px) {
+  .track-component-container .track-row {
+    padding-inline: 12px;
+  }
+
+  .track-component-container .track-name {
+    font-size: 13px;
+  }
+}
+
+
+/* ==========================================================================
+   94. BACKDROP FILTER FALLBACK
+   ========================================================================== */
 
 @supports not (
   (backdrop-filter: blur(1px)) or
@@ -816,6 +2348,117 @@
   }
 }
 
-/* =========================================================
-   END — SHUNEL COMPONENTS
-========================================================= */
+
+/* ==========================================================================
+   95. BACKDROP FILTER SUPPORT
+   ========================================================================== */
+
+@supports (
+  (backdrop-filter: blur(1px)) or
+  (-webkit-backdrop-filter: blur(1px))
+) {
+  .toast,
+  .track-context-menu {
+    -webkit-backdrop-filter:
+      blur(var(--component-blur)) saturate(150%);
+
+    backdrop-filter:
+      blur(var(--component-blur)) saturate(150%);
+  }
+}
+
+
+/* ==========================================================================
+   96. SAFARI BUTTON RESET
+   ========================================================================== */
+
+.icon-button,
+.track-action,
+.text-button {
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+
+/* ==========================================================================
+   97. SAFARI IMAGE RENDERING
+   ========================================================================== */
+
+.track-art {
+  -webkit-user-drag: none;
+}
+
+
+/* ==========================================================================
+   98. TOUCH ACTION OPTIMIZATION
+   ========================================================================== */
+
+.icon-button,
+.track-action,
+.text-button,
+.track-context-menu button {
+  touch-action: manipulation;
+}
+
+
+/* ==========================================================================
+   99. PRINT FALLBACK
+   ========================================================================== */
+
+@media print {
+  .track-actions,
+  .track-context-menu,
+  .toast,
+  .track-playing-indicator {
+    display: none !important;
+  }
+
+  .track-row {
+    color: #000;
+    background: #fff;
+    border-color: #ddd;
+    break-inside: avoid;
+  }
+
+  .track-name {
+    color: #000;
+  }
+
+  .track-channel {
+    color: #444;
+  }
+}
+
+
+/* ==========================================================================
+   100. FINAL COMPONENT SAFETY
+   ========================================================================== */
+
+.track-row *,
+.track-actions *,
+.track-main *,
+.track-context-menu * {
+  min-width: 0;
+}
+
+.track-row img,
+.track-row svg {
+  max-width: 100%;
+}
+
+.track-row button,
+.track-context-menu button {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.track-row,
+.track-actions,
+.track-main {
+  min-width: 0;
+}
+
+
+/* ==========================================================================
+   END — SHUNEL COMPONENT SYSTEM 3.0
+   ========================================================================== */

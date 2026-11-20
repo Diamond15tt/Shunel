@@ -1,60 +1,129 @@
 
-/* =========================================
+/* =========================================================
    SHUNEL — LYRICS DESIGN SYSTEM
-   Version 4.0
+   Version 5.0
    Native / Editorial / Karaoke
-========================================= */
+
+   Visual-only upgrade.
+   Compatible with:
+   #lyricsContainer, .lyrics-container
+   .lyric-line, .lyric-line.active
+   #lyricsTitle, #lyricsSubtitle
+   #lyricsStudio, #lyricsStudioTrigger
+   Existing data-lyrics-* attributes
+========================================================= */
+
+
+/* =========================================================
+   01. DESIGN TOKENS
+========================================================= */
 
 :root {
+  color-scheme: dark;
+
+  /* Typography */
   --lyrics-size: 25px;
+  --lyrics-size-min: 16px;
+  --lyrics-size-max: 38px;
+
+  --lyrics-font:
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+
+  --lyrics-editorial-font:
+    Georgia,
+    "Times New Roman",
+    serif;
+
+  /* Main colors */
   --lyrics-active: #F1F3F8;
-  --lyrics-muted: #8793A6;
+  --lyrics-muted: #9AA6B8;
   --lyrics-accent: #8BAFEA;
 
+  --lyrics-neighbor: #BCC6D5;
+  --lyrics-subtle: #78869B;
+
+  /* Reading layout */
+  --lyrics-line-width: 760px;
+  --lyrics-line-gap: 15px;
+  --lyrics-line-padding: 9px;
+
+  --lyrics-line-height: 1.55;
+  --lyrics-editorial-line-height: 1.7;
+
+  /* Motion */
   --lyrics-motion: 360ms;
   --lyrics-easing: cubic-bezier(.22, 1, .36, 1);
 
+  /* Studio */
   --studio-background: #10141D;
   --studio-surface: #171E2A;
-  --studio-border: rgba(180, 195, 220, .12);
+  --studio-surface-raised: #202A39;
+
+  --studio-border: rgba(180, 195, 220, .14);
+
   --studio-text: #EDF1F8;
-  --studio-muted: #8996AA;
+  --studio-muted: #AAB7CA;
+
+  --studio-accent: #8BAFEA;
+  --studio-accent-soft: rgba(139, 175, 234, .12);
+
+  --studio-radius: 14px;
 }
 
-/* =========================================
-   LYRICS VIEW
-========================================= */
+
+/* =========================================================
+   02. LYRICS VIEW
+========================================================= */
 
 #lyricsContainer,
 .lyrics-container {
   position: relative;
+
+  box-sizing: border-box;
+
   width: 100%;
+
+  min-width: 0;
   min-height: 48vh;
   max-height: 66vh;
 
-  padding:
-    34px
-    clamp(18px, 5vw, 42px)
-    220px;
-
   margin: 0 auto;
+
+  padding:
+    clamp(28px, 5vh, 42px)
+    clamp(16px, 5vw, 42px)
+    220px;
 
   overflow-x: hidden;
   overflow-y: auto;
 
   border: 0;
   border-radius: 0;
+
   background: transparent;
   box-shadow: none;
+
+  color: var(--lyrics-active);
 
   text-align: center;
 
   overscroll-behavior-y: contain;
   -webkit-overflow-scrolling: touch;
+
   scrollbar-width: none;
 
   scroll-behavior: smooth;
   scroll-padding-block: 40vh;
+
+  -webkit-tap-highlight-color: transparent;
+}
+
+#lyricsContainer *,
+.lyrics-container * {
+  box-sizing: border-box;
 }
 
 #lyricsContainer::-webkit-scrollbar,
@@ -62,199 +131,319 @@
   display: none;
 }
 
-/* =========================================
-   HEADER
-========================================= */
+
+/* =========================================================
+   03. LYRICS HEADER
+========================================================= */
 
 #lyricsTitle {
+  max-width: 760px;
+
+  margin-inline: auto;
+
   color: var(--lyrics-active);
+
+  font-family: var(--lyrics-font);
   font-size: clamp(21px, 5vw, 28px);
   font-weight: 700;
-  letter-spacing: -.8px;
-  line-height: 1.2;
+
+  letter-spacing: -.55px;
+  line-height: 1.25;
+
+  text-wrap: balance;
+  overflow-wrap: anywhere;
 }
 
 #lyricsSubtitle {
-  max-width: 700px;
-  margin-inline: auto;
+  max-width: 620px;
 
-  color: #899AB4;
-  font-size: 15px;
+  margin: 8px auto 0;
+
+  color: #9AA8BD;
+
+  font-family: var(--lyrics-font);
+  font-size: 14px;
   font-weight: 450;
-  line-height: 1.75;
+
+  letter-spacing: .05px;
+  line-height: 1.65;
 
   overflow-wrap: anywhere;
 }
 
-/* =========================================
-   LYRIC LINES
-========================================= */
+
+/* =========================================================
+   04. LYRIC LINES — BASE
+========================================================= */
 
 #lyricsContainer .lyric-line {
   position: relative;
 
-  width: 100%;
-  max-width: 760px;
+  box-sizing: border-box;
 
-  margin: 14px auto;
-  padding: 9px 8px;
+  width: 100%;
+  max-width: var(--lyrics-line-width);
+
+  margin: var(--lyrics-line-gap) auto;
+  padding: var(--lyrics-line-padding) 8px;
 
   color: var(--lyrics-muted);
 
-  font-size: clamp(16px, var(--lyrics-size), 38px);
-  font-weight: 650;
-  line-height: 1.55;
-  letter-spacing: -.85px;
+  font-family: var(--lyrics-font);
 
-  opacity: .48;
-  transform: scale(.975);
+  font-size: clamp(
+    var(--lyrics-size-min),
+    var(--lyrics-size),
+    var(--lyrics-size-max)
+  );
+
+  font-weight: 550;
+
+  line-height: var(--lyrics-line-height);
+  letter-spacing: -.35px;
+
+  opacity: .58;
+
+  transform: translateZ(0) scale(.985);
+  transform-origin: center center;
 
   background: transparent;
+
   border: 0;
   border-radius: 0;
+
   box-shadow: none;
 
+  text-shadow: none;
+
   overflow-wrap: anywhere;
+  word-break: normal;
+
   text-wrap: pretty;
 
-  user-select: none;
-  -webkit-user-select: none;
+  user-select: text;
+  -webkit-user-select: text;
+
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 
   transition:
     color var(--lyrics-motion) var(--lyrics-easing),
     opacity var(--lyrics-motion) var(--lyrics-easing),
     transform var(--lyrics-motion) var(--lyrics-easing),
-    filter var(--lyrics-motion) var(--lyrics-easing),
     text-shadow var(--lyrics-motion) var(--lyrics-easing);
 
   scroll-margin-block: 40vh;
 }
 
-/* Verso activo */
+
+/* =========================================================
+   05. ACTIVE LYRIC
+========================================================= */
 
 #lyricsContainer .lyric-line.active {
   color: var(--lyrics-active);
 
+  font-weight: 700;
+
   opacity: 1;
-  transform: scale(1);
+
+  transform: translateZ(0) scale(1);
 
   background: transparent !important;
+
   border: 0 !important;
   border-radius: 0 !important;
+
   box-shadow: none !important;
 
   filter: none;
-  text-shadow: 0 2px 25px rgba(255, 255, 255, .045);
+
+  text-shadow:
+    0 1px 18px rgba(255, 255, 255, .055);
 }
 
-/* =========================================
-   NEIGHBORING LINES
-========================================= */
+
+/* =========================================================
+   06. NEIGHBORING LINES
+========================================================= */
 
 #lyricsContainer .lyric-line.active + .lyric-line {
-  opacity: .65;
+  color: var(--lyrics-neighbor);
+  opacity: .76;
 }
 
-#lyricsContainer .lyric-line:has(+ .lyric-line.active) {
-  opacity: .65;
+@supports selector(:has(*)) {
+  #lyricsContainer .lyric-line:has(+ .lyric-line.active) {
+    color: var(--lyrics-neighbor);
+    opacity: .76;
+  }
 }
 
-/* =========================================
-   PLAIN LYRICS
-========================================= */
+
+/* =========================================================
+   07. PLAIN LYRICS
+========================================================= */
 
 #lyricsContainer[data-lyrics-type="plain"] .lyric-line {
   color: #D7DEEA;
-  opacity: .92;
+
+  font-weight: 500;
+
+  opacity: .94;
+
   transform: none;
+
   filter: none;
   text-shadow: none;
-  font-weight: 500;
 }
 
 #lyricsContainer[data-lyrics-type="plain"] .lyric-line.active {
   color: var(--lyrics-active);
+
+  font-weight: 700;
+
   opacity: 1;
-  font-weight: 650;
 }
 
-/* =========================================
-   LOADING / EMPTY / ERROR
-========================================= */
+
+/* =========================================================
+   08. LOADING / EMPTY / ERROR
+========================================================= */
 
 #lyricsContainer .muted {
+  box-sizing: border-box;
+
+  width: 100%;
   max-width: 420px;
+
   margin: 45px auto;
   padding: 20px;
 
-  color: #8996AA;
+  color: #A3AFC1;
+
+  font-family: var(--lyrics-font);
   font-size: 14px;
-  line-height: 1.8;
+  font-weight: 450;
+
+  line-height: 1.75;
+
   text-align: center;
+
+  overflow-wrap: anywhere;
 }
 
 #lyricsContainer[data-lyrics-type="loading"] .muted {
-  opacity: .7;
+  opacity: .78;
 }
 
 #lyricsContainer[data-lyrics-type="empty"] .muted {
-  opacity: .85;
+  opacity: .92;
 }
 
-/* =========================================
-   STYLE: PURE
-========================================= */
+
+/* =========================================================
+   09. STYLE — PURE
+   Minimal, clean and readable.
+========================================================= */
 
 #lyricsContainer[data-lyrics-style="pure"] .lyric-line {
-  font-weight: 500;
-  letter-spacing: -.35px;
+  font-weight: 450;
+
+  letter-spacing: -.25px;
+
+  opacity: .62;
+
   transform: none;
-  opacity: .55;
+
+  text-shadow: none;
 }
 
 #lyricsContainer[data-lyrics-style="pure"] .lyric-line.active {
   font-weight: 700;
+
   opacity: 1;
+
+  transform: none;
+
+  text-shadow: none;
 }
 
-/* =========================================
-   STYLE: CINEMA
-========================================= */
 
-#lyricsContainer[data-lyrics-style="cinema"] .lyric-line {
-  font-size: clamp(19px, calc(var(--lyrics-size) * 1.08), 40px);
-  font-weight: 650;
-  letter-spacing: -1px;
-  opacity: .25;
-  filter: blur(.7px);
-}
+/* =========================================================
+   10. STYLE — CINEMA
+   Visual depth without constant blur.
+========================================================= */
 
-#lyricsContainer[data-lyrics-style="cinema"] .lyric-line.active {
-  opacity: 1;
+#lyricsContainer[data-lyrics-style="cinema"] .lyric-line,
+#lyricsContainer[data-lyrics-style="cinematic"] .lyric-line {
+  font-size: clamp(
+    19px,
+    calc(var(--lyrics-size) * 1.08),
+    40px
+  );
+
+  font-weight: 600;
+
+  letter-spacing: -.65px;
+
+  opacity: .38;
+
+  transform: scale(.975);
+
   filter: none;
-  text-shadow: 0 0 35px rgba(139, 175, 234, .17);
+
+  text-shadow: none;
 }
 
-/* =========================================
-   STYLE: KARAOKE
-========================================= */
+#lyricsContainer[data-lyrics-style="cinema"] .lyric-line.active,
+#lyricsContainer[data-lyrics-style="cinematic"] .lyric-line.active {
+  color: var(--lyrics-active);
+
+  font-weight: 700;
+
+  opacity: 1;
+
+  transform: scale(1.015);
+
+  text-shadow:
+    0 0 28px rgba(139, 175, 234, .15);
+}
+
+
+/* =========================================================
+   11. STYLE — KARAOKE
+   Strong active line and clear contrast.
+========================================================= */
 
 #lyricsContainer[data-lyrics-style="karaoke"] .lyric-line {
-  font-weight: 700;
-  opacity: .35;
+  font-weight: 600;
+
+  letter-spacing: -.4px;
+
+  opacity: .44;
+
   transform: none;
 }
 
 #lyricsContainer[data-lyrics-style="karaoke"] .lyric-line.active {
-  opacity: 1;
-  font-weight: 800;
   color: #FFFFFF;
-  text-shadow: 0 0 25px rgba(139, 175, 234, .2);
+
+  font-weight: 750;
+
+  opacity: 1;
+
+  transform: none;
+
+  text-shadow:
+    0 0 20px rgba(139, 175, 234, .17);
 }
 
-/* =========================================
-   STYLE: EDITORIAL
-========================================= */
+
+/* =========================================================
+   12. STYLE — EDITORIAL
+   Literary typography and controlled reading width.
+========================================================= */
 
 #lyricsContainer[data-lyrics-style="editorial"] {
   text-align: left;
@@ -262,74 +451,142 @@
 
 #lyricsContainer[data-lyrics-style="editorial"] .lyric-line {
   max-width: 680px;
-  font-family: Georgia, "Times New Roman", serif;
+
+  font-family: var(--lyrics-editorial-font);
+
+  font-size: clamp(
+    17px,
+    var(--lyrics-size),
+    38px
+  );
+
   font-weight: 400;
-  letter-spacing: -.3px;
-  line-height: 1.65;
+
+  letter-spacing: -.2px;
+
+  line-height: var(--lyrics-editorial-line-height);
+
+  opacity: .7;
+
   transform: none;
 }
 
 #lyricsContainer[data-lyrics-style="editorial"] .lyric-line.active {
+  color: var(--lyrics-active);
+
   font-weight: 700;
+
+  opacity: 1;
+
+  transform: none;
+
+  text-shadow: none;
 }
 
-/* =========================================
-   STYLE: MIDNIGHT
-========================================= */
+
+/* =========================================================
+   13. STYLE — MIDNIGHT
+   Cool, restrained and atmospheric.
+========================================================= */
 
 #lyricsContainer[data-lyrics-style="midnight"] .lyric-line {
-  font-weight: 550;
-  letter-spacing: -.45px;
-  opacity: .38;
+  font-weight: 500;
+
+  letter-spacing: -.35px;
+
+  opacity: .5;
+
+  transform: none;
 }
 
 #lyricsContainer[data-lyrics-style="midnight"] .lyric-line.active {
   color: #DCE7F8;
-  text-shadow: 0 0 25px rgba(210, 220, 240, .22);
+
+  font-weight: 700;
+
   opacity: 1;
+
+  transform: none;
+
+  text-shadow:
+    0 0 22px rgba(170, 195, 235, .16);
 }
 
-/* =========================================
-   STYLE: FOCUS
-========================================= */
+
+/* =========================================================
+   14. STYLE — FOCUS
+   Emphasis through hierarchy, not heavy blur.
+========================================================= */
 
 #lyricsContainer[data-lyrics-style="focus"] .lyric-line {
-  opacity: .16;
-  filter: blur(1.2px);
-  transform: scale(.96);
+  font-weight: 500;
+
+  opacity: .34;
+
+  transform: scale(.975);
+
+  filter: none;
+
+  text-shadow: none;
 }
 
 #lyricsContainer[data-lyrics-style="focus"] .lyric-line.active {
+  color: var(--lyrics-active);
+
+  font-weight: 700;
+
   opacity: 1;
+
+  transform: scale(1.02);
+
   filter: none;
-  transform: scale(1.025);
+
+  text-shadow:
+    0 0 24px rgba(139, 175, 234, .12);
 }
 
-/* =========================================
-   LEGACY STYLE COMPATIBILITY
-========================================= */
+
+/* =========================================================
+   15. LEGACY STYLE COMPATIBILITY
+========================================================= */
+
+/* Previous Minimal style */
 
 #lyricsContainer[data-lyrics-style="minimal"] .lyric-line {
-  font-weight: 550;
-  letter-spacing: -.4px;
+  font-weight: 500;
+
+  letter-spacing: -.3px;
+
+  opacity: .62;
+
+  transform: none;
 }
 
 #lyricsContainer[data-lyrics-style="minimal"] .lyric-line.active {
   font-weight: 700;
+
+  opacity: 1;
 }
+
+/* Previous Silver color style */
 
 #lyricsContainer[data-lyrics-style="silver"] .lyric-line.active {
   color: #D2D9E5;
 }
 
+/* Previous Neon color style */
+
 #lyricsContainer[data-lyrics-style="neon"] .lyric-line.active {
   color: #A5C9FF;
-  text-shadow: 0 0 24px rgba(105, 160, 255, .25);
+
+  text-shadow:
+    0 0 22px rgba(105, 160, 255, .2);
 }
 
-/* =========================================
-   ACTIVE COLORS
-========================================= */
+
+/* =========================================================
+   16. ACTIVE COLORS
+========================================================= */
 
 #lyricsContainer[data-lyrics-color="white"] {
   --lyrics-active: #F1F3F8;
@@ -343,9 +600,10 @@
   --lyrics-active: #D2D9E5;
 }
 
-/* =========================================
-   ALIGNMENT
-========================================= */
+
+/* =========================================================
+   17. ALIGNMENT
+========================================================= */
 
 #lyricsContainer[data-lyrics-alignment="left"] {
   text-align: left;
@@ -355,20 +613,26 @@
   text-align: center;
 }
 
-/* =========================================
-   MOTION
-========================================= */
+
+/* =========================================================
+   18. MOTION SETTINGS
+========================================================= */
 
 #lyricsContainer[data-lyrics-motion="smooth"] {
   --lyrics-motion: 360ms;
+
+  scroll-behavior: smooth;
 }
 
 #lyricsContainer[data-lyrics-motion="cinematic"] {
   --lyrics-motion: 650ms;
+
+  scroll-behavior: smooth;
 }
 
 #lyricsContainer[data-lyrics-motion="none"] {
   --lyrics-motion: 0ms;
+
   scroll-behavior: auto;
 }
 
@@ -377,98 +641,132 @@
   animation: none !important;
 }
 
-/* =========================================
-   LYRICS STUDIO TRIGGER
-========================================= */
+
+/* =========================================================
+   19. LYRICS STUDIO TRIGGER
+========================================================= */
 
 #lyricsStudioTrigger {
   position: fixed;
 
   right: 17px;
-  bottom: calc(175px + env(safe-area-inset-bottom));
+
+  bottom:
+    calc(175px + env(safe-area-inset-bottom));
 
   z-index: 900;
 
   display: flex;
   align-items: center;
+  justify-content: center;
+
   gap: 8px;
 
-  padding: 11px 15px;
+  min-width: 44px;
+  min-height: 44px;
 
-  border: 1px solid rgba(180, 195, 220, .14);
+  padding: 11px 16px;
+
+  border: 1px solid rgba(180, 195, 220, .16);
+
   border-radius: 30px;
 
-  background: rgba(17, 22, 32, .94);
+  background: rgba(17, 22, 32, .96);
+
   color: #EDF1F8;
 
-  font: inherit;
+  font-family: inherit;
   font-size: 12px;
   font-weight: 650;
 
+  letter-spacing: .1px;
+
   cursor: pointer;
+
   -webkit-tap-highlight-color: transparent;
 
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 
   transition:
-    background 200ms ease,
-    border-color 200ms ease,
-    transform 200ms ease;
+    background 180ms ease,
+    border-color 180ms ease,
+    transform 180ms ease,
+    opacity 180ms ease;
 }
 
 #lyricsStudioTrigger:active {
   transform: scale(.96);
 }
 
-#lyricsStudioTrigger:hover {
-  border-color: rgba(139, 175, 234, .4);
-}
 
-/* =========================================
-   STUDIO PANEL
-========================================= */
+/* =========================================================
+   20. STUDIO PANEL
+========================================================= */
 
 #lyricsStudio {
   position: fixed;
 
   right: 16px;
-  bottom: calc(225px + env(safe-area-inset-bottom));
+
+  bottom:
+    calc(225px + env(safe-area-inset-bottom));
 
   z-index: 901;
 
+  box-sizing: border-box;
+
   width: min(340px, calc(100vw - 32px));
 
-  max-height: min(
-    570px,
-    calc(100dvh - 270px - env(safe-area-inset-bottom))
-  );
+  max-width: calc(100vw - 24px);
 
+  max-height:
+    calc(100vh - 270px - env(safe-area-inset-bottom));
+
+  overflow-x: hidden;
   overflow-y: auto;
+
   overscroll-behavior: contain;
 
   padding: 21px;
 
   border: 1px solid var(--studio-border);
-  border-radius: 17px;
+
+  border-radius: var(--studio-radius);
 
   background: var(--studio-background);
+
   color: var(--studio-text);
 
-  box-shadow: 0 18px 55px rgba(0, 0, 0, .42);
+  box-shadow:
+    0 18px 48px rgba(0, 0, 0, .36);
 
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
 
-  transform: translateY(12px) scale(.985);
+  transform: translateY(10px) scale(.99);
+
+  transform-origin: bottom right;
 
   transition:
-    opacity 220ms ease,
-    visibility 220ms ease,
-    transform 220ms var(--lyrics-easing);
+    opacity 200ms ease,
+    visibility 200ms ease,
+    transform 200ms var(--lyrics-easing);
 
   -webkit-overflow-scrolling: touch;
+
+  scrollbar-width: none;
+}
+
+@supports (height: 100dvh) {
+  #lyricsStudio {
+    max-height:
+      min(
+        570px,
+        calc(100dvh - 270px - env(safe-area-inset-bottom))
+      );
+  }
 }
 
 #lyricsStudio::-webkit-scrollbar {
@@ -477,124 +775,199 @@
 
 #lyricsStudio.is-open {
   opacity: 1;
+
   visibility: visible;
+
   pointer-events: auto;
+
   transform: translateY(0) scale(1);
 }
 
-/* =========================================
-   STUDIO HEADER
-========================================= */
+
+/* =========================================================
+   21. STUDIO HEADER
+========================================================= */
 
 #lyricsStudio .studio-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+
+  gap: 12px;
+
   margin-bottom: 17px;
 }
 
 #lyricsStudio .studio-heading {
+  margin: 0;
+
+  color: var(--studio-text);
+
+  font-family: inherit;
   font-size: 17px;
   font-weight: 700;
-  letter-spacing: -.4px;
+
+  letter-spacing: -.35px;
+  line-height: 1.3;
 }
 
 #lyricsStudio .studio-close {
   display: grid;
   place-items: center;
 
-  width: 34px;
-  height: 34px;
+  flex: 0 0 44px;
+
+  width: 44px;
+  height: 44px;
+
+  padding: 0;
 
   border: 0;
   border-radius: 50%;
 
-  background: #202A39;
-  color: #C7D1E0;
+  background: var(--studio-surface-raised);
 
+  color: #D5DEEB;
+
+  font-family: inherit;
   font-size: 20px;
+  line-height: 1;
+
   cursor: pointer;
+
+  -webkit-tap-highlight-color: transparent;
+
+  transition:
+    background 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
 }
 
-/* =========================================
-   STUDIO STATUS
-========================================= */
+#lyricsStudio .studio-close:active {
+  transform: scale(.94);
+}
+
+
+/* =========================================================
+   22. STUDIO STATUS
+========================================================= */
 
 #lyricsStudio .studio-status {
   display: flex;
   align-items: center;
 
-  min-height: 36px;
-  padding: 9px 11px;
+  box-sizing: border-box;
 
-  border: 1px solid rgba(180, 195, 220, .1);
-  border-radius: 8px;
+  min-height: 40px;
+
+  padding: 9px 12px;
+
+  border: 1px solid rgba(180, 195, 220, .12);
+
+  border-radius: 9px;
 
   background: rgba(23, 30, 42, .8);
-  color: #AAB7CA;
 
+  color: #B8C3D3;
+
+  font-family: inherit;
   font-size: 12px;
-  line-height: 1.5;
+  font-weight: 450;
+
+  line-height: 1.55;
+
+  overflow-wrap: anywhere;
 }
 
 #lyricsStudio .studio-status.is-synced {
-  color: #A5C9FF;
-  border-color: rgba(139, 175, 234, .25);
+  color: #B8D1F6;
+
+  border-color: rgba(139, 175, 234, .28);
 }
 
 #lyricsStudio .studio-status.is-plain {
-  color: #AAB7CA;
+  color: #B8C3D3;
 }
 
-/* =========================================
-   STUDIO SECTIONS
-========================================= */
+
+/* =========================================================
+   23. STUDIO SECTIONS
+========================================================= */
 
 #lyricsStudio .studio-section {
-  margin-top: 20px;
+  margin-top: 21px;
 }
 
 #lyricsStudio .studio-label {
   display: block;
+
   margin-bottom: 11px;
 
-  color: #AAB7CA;
+  color: var(--studio-muted);
 
+  font-family: inherit;
   font-size: 12px;
   font-weight: 650;
+
+  letter-spacing: .1px;
+  line-height: 1.4;
 }
 
 #lyricsStudio .studio-options {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr));
+
   gap: 8px;
 }
 
 #lyricsStudio .studio-option {
-  min-height: 41px;
-  padding: 9px;
+  box-sizing: border-box;
 
-  border: 1px solid #2A3546;
-  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  min-width: 0;
+  min-height: 44px;
+
+  padding: 9px 10px;
+
+  border: 1px solid #303B4D;
+
+  border-radius: 9px;
 
   background: transparent;
-  color: #AAB7CA;
 
-  font: inherit;
+  color: #B5C1D2;
+
+  font-family: inherit;
   font-size: 12px;
+  font-weight: 550;
+
+  line-height: 1.4;
+
+  text-align: center;
+
+  overflow-wrap: anywhere;
 
   cursor: pointer;
+
   -webkit-tap-highlight-color: transparent;
 
   transition:
-    border-color 180ms ease,
-    background 180ms ease,
-    color 180ms ease;
+    border-color 160ms ease,
+    background 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
 }
 
 #lyricsStudio .studio-option.is-selected {
   border-color: #8BAFEA;
-  background: rgba(139, 175, 234, .11);
+
+  background: var(--studio-accent-soft);
+
   color: #EDF1F8;
 }
 
@@ -602,66 +975,104 @@
   transform: scale(.98);
 }
 
-/* =========================================
-   SIZE CONTROL
-========================================= */
+
+/* =========================================================
+   24. SIZE CONTROL
+========================================================= */
 
 #lyricsStudio .studio-range-info {
   display: flex;
   align-items: center;
   justify-content: space-between;
 
-  color: #8996AA;
+  gap: 12px;
+
+  color: #AAB7CA;
+
+  font-family: inherit;
   font-size: 12px;
+  line-height: 1.4;
 }
 
 #lyricsStudio .studio-range-info strong {
   color: #EDF1F8;
+
   font-size: 13px;
-  font-weight: 650;
+  font-weight: 700;
+
+  font-variant-numeric: tabular-nums;
 }
 
 #lyricsStudio input[type="range"] {
+  display: block;
+
+  box-sizing: border-box;
+
   width: 100%;
-  margin-top: 12px;
+  min-height: 32px;
+
+  margin: 10px 0 0;
+
+  padding: 5px 0;
 
   accent-color: #8BAFEA;
+
   cursor: pointer;
+
+  touch-action: pan-y;
 }
 
-/* =========================================
-   AUTO SCROLL
-========================================= */
+
+/* =========================================================
+   25. AUTO SCROLL
+========================================================= */
 
 #lyricsStudio .studio-toggle {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+
+  gap: 14px;
+
+  box-sizing: border-box;
 
   width: 100%;
-  padding: 12px 0;
+  min-height: 48px;
+
+  padding: 11px 0;
 
   border: 0;
-  background: transparent;
-  color: #AAB7CA;
 
-  font: inherit;
+  background: transparent;
+
+  color: #B8C3D3;
+
+  font-family: inherit;
   font-size: 12px;
+  font-weight: 500;
+
+  line-height: 1.45;
+
   text-align: left;
 
   cursor: pointer;
+
+  -webkit-tap-highlight-color: transparent;
 }
 
 #lyricsStudio .studio-switch {
   position: relative;
-  flex: 0 0 38px;
 
-  width: 38px;
-  height: 22px;
+  display: block;
+
+  flex: 0 0 40px;
+
+  width: 40px;
+  height: 23px;
 
   border-radius: 20px;
-  background: #303B4D;
+
+  background: #354153;
 
   transition: background 180ms ease;
 }
@@ -670,16 +1081,21 @@
   content: "";
 
   position: absolute;
+
   top: 3px;
   left: 3px;
 
-  width: 16px;
-  height: 16px;
+  width: 17px;
+  height: 17px;
 
   border-radius: 50%;
-  background: #EDF1F8;
 
-  transition: transform 180ms ease;
+  background: #F1F3F8;
+
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, .2);
+
+  transition: transform 180ms var(--lyrics-easing);
 }
 
 #lyricsStudio .studio-toggle[aria-pressed="true"] .studio-switch {
@@ -687,50 +1103,106 @@
 }
 
 #lyricsStudio .studio-toggle[aria-pressed="true"] .studio-switch::after {
-  transform: translateX(16px);
+  transform: translateX(17px);
 }
 
-/* =========================================
-   RESET
-========================================= */
+
+/* =========================================================
+   26. RESET
+========================================================= */
 
 #lyricsStudio .studio-reset {
-  width: 100%;
-  margin-top: 18px;
-  padding: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 
-  border: 1px solid #2A3546;
+  box-sizing: border-box;
+
+  width: 100%;
+  min-height: 44px;
+
+  margin-top: 18px;
+  padding: 11px 14px;
+
+  border: 1px solid #303B4D;
+
   border-radius: 9px;
 
   background: transparent;
-  color: #AAB7CA;
 
-  font: inherit;
+  color: #B8C3D3;
+
+  font-family: inherit;
   font-size: 12px;
+  font-weight: 550;
 
   cursor: pointer;
-  transition: border-color 180ms ease, color 180ms ease;
+
+  -webkit-tap-highlight-color: transparent;
+
+  transition:
+    border-color 160ms ease,
+    color 160ms ease,
+    background 160ms ease;
 }
 
-#lyricsStudio .studio-reset:hover {
-  border-color: rgba(139, 175, 234, .45);
-  color: #EDF1F8;
+
+/* =========================================================
+   27. HOVER STATES
+   Only for devices that actually support hover.
+========================================================= */
+
+@media (hover: hover) and (pointer: fine) {
+  #lyricsStudioTrigger:hover {
+    border-color: rgba(139, 175, 234, .42);
+
+    background: rgba(26, 34, 48, .98);
+  }
+
+  #lyricsStudio .studio-close:hover {
+    background: #2B3749;
+
+    color: #FFFFFF;
+  }
+
+  #lyricsStudio .studio-option:hover {
+    border-color: rgba(139, 175, 234, .55);
+
+    color: #EDF1F8;
+  }
+
+  #lyricsStudio .studio-reset:hover {
+    border-color: rgba(139, 175, 234, .5);
+
+    background: rgba(139, 175, 234, .06);
+
+    color: #EDF1F8;
+  }
 }
 
-/* =========================================
-   FOCUS
-========================================= */
+
+/* =========================================================
+   28. FOCUS AND KEYBOARD ACCESSIBILITY
+========================================================= */
 
 #lyricsStudio button:focus-visible,
 #lyricsStudio input:focus-visible,
 #lyricsStudioTrigger:focus-visible {
-  outline: 2px solid #8BAFEA;
+  outline: 2px solid #A5C9FF;
+
   outline-offset: 3px;
 }
 
-/* =========================================
-   MOBILE
-========================================= */
+#lyricsStudio button:focus:not(:focus-visible),
+#lyricsStudio input:focus:not(:focus-visible),
+#lyricsStudioTrigger:focus:not(:focus-visible) {
+  outline: none;
+}
+
+
+/* =========================================================
+   29. MOBILE — GENERAL
+========================================================= */
 
 @media (max-width: 600px) {
   #lyricsContainer,
@@ -742,56 +1214,178 @@
       25px
       15px
       calc(235px + env(safe-area-inset-bottom));
+
+    scroll-padding-block: 38vh;
   }
 
   #lyricsContainer .lyric-line {
     max-width: 100%;
-    margin: 12px auto;
+
+    margin: 13px auto;
+
     padding: 9px 3px;
 
-    line-height: 1.55;
-    letter-spacing: -.65px;
+    font-size: clamp(
+      16px,
+      var(--lyrics-size),
+      36px
+    );
+
+    line-height: 1.58;
+
+    letter-spacing: -.3px;
   }
 
-  #lyricsContainer[data-lyrics-style="cinema"] .lyric-line {
-    font-size: clamp(19px, calc(var(--lyrics-size) * 1.04), 36px);
+  #lyricsContainer .lyric-line.active {
+    transform: none;
+  }
+
+  #lyricsContainer[data-lyrics-style="cinema"] .lyric-line,
+  #lyricsContainer[data-lyrics-style="cinematic"] .lyric-line {
+    font-size: clamp(
+      19px,
+      calc(var(--lyrics-size) * 1.04),
+      36px
+    );
+  }
+
+  #lyricsContainer[data-lyrics-style="focus"] .lyric-line.active {
+    transform: none;
+  }
+
+  #lyricsContainer[data-lyrics-style="editorial"] .lyric-line {
+    max-width: 100%;
+
+    line-height: 1.7;
   }
 
   #lyricsStudio {
     right: 12px;
-    bottom: calc(215px + env(safe-area-inset-bottom));
+
+    bottom:
+      calc(215px + env(safe-area-inset-bottom));
 
     width: calc(100vw - 24px);
 
-    max-height: min(
-      540px,
-      calc(100dvh - 255px - env(safe-area-inset-bottom))
-    );
+    max-width: calc(100vw - 24px);
+
+    padding: 19px;
   }
 
   #lyricsStudioTrigger {
     right: 14px;
-    bottom: calc(165px + env(safe-area-inset-bottom));
+
+    bottom:
+      calc(165px + env(safe-area-inset-bottom));
   }
 }
 
-/* =========================================
-   SMALL SCREENS
-========================================= */
+
+/* =========================================================
+   30. SMALL SCREENS
+========================================================= */
 
 @media (max-width: 380px) {
+  #lyricsContainer,
+  .lyrics-container {
+    padding-inline: 12px;
+  }
+
   #lyricsContainer .lyric-line {
-    letter-spacing: -.4px;
+    letter-spacing: -.2px;
+
+    padding-inline: 2px;
+  }
+
+  #lyricsContainer[data-lyrics-style="cinema"] .lyric-line,
+  #lyricsContainer[data-lyrics-style="cinematic"] .lyric-line {
+    letter-spacing: -.45px;
   }
 
   #lyricsStudio {
-    padding: 17px;
+    padding: 16px;
+  }
+
+  #lyricsStudio .studio-options {
+    gap: 7px;
+  }
+
+  #lyricsStudio .studio-option {
+    padding-inline: 7px;
+
+    font-size: 11px;
   }
 }
 
-/* =========================================
-   REDUCED MOTION
-========================================= */
+
+/* =========================================================
+   31. VERY SMALL SCREENS
+========================================================= */
+
+@media (max-width: 340px) {
+  #lyricsContainer,
+  .lyrics-container {
+    padding-inline: 9px;
+  }
+
+  #lyricsContainer .lyric-line {
+    font-size: clamp(
+      16px,
+      var(--lyrics-size),
+      32px
+    );
+  }
+
+  #lyricsStudio {
+    right: 9px;
+
+    width: calc(100vw - 18px);
+    max-width: calc(100vw - 18px);
+  }
+
+  #lyricsStudio .studio-heading {
+    font-size: 16px;
+  }
+}
+
+
+/* =========================================================
+   32. SHORT SCREENS AND LANDSCAPE
+========================================================= */
+
+@media (max-height: 560px) {
+  #lyricsStudio {
+    bottom:
+      calc(12px + env(safe-area-inset-bottom));
+
+    max-height:
+      calc(100vh - 24px - env(safe-area-inset-bottom));
+  }
+
+  #lyricsStudioTrigger {
+    bottom:
+      calc(12px + env(safe-area-inset-bottom));
+  }
+}
+
+@media (max-height: 560px) and (orientation: landscape) {
+  #lyricsContainer,
+  .lyrics-container {
+    min-height: 60vh;
+    max-height: 78vh;
+
+    padding-bottom: 130px;
+  }
+
+  #lyricsStudio {
+    width: min(360px, calc(100vw - 24px));
+  }
+}
+
+
+/* =========================================================
+   33. REDUCED MOTION
+========================================================= */
 
 @media (prefers-reduced-motion: reduce) {
   #lyricsContainer,
@@ -802,8 +1396,78 @@
   #lyricsContainer .lyric-line,
   #lyricsStudio,
   #lyricsStudioTrigger,
-  #lyricsStudio button {
+  #lyricsStudio button,
+  #lyricsStudio .studio-switch,
+  #lyricsStudio .studio-switch::after {
     transition: none !important;
+
     animation: none !important;
   }
+
+  #lyricsContainer .lyric-line,
+  #lyricsContainer .lyric-line.active {
+    transform: none !important;
+  }
 }
+
+
+/* =========================================================
+   34. HIGH CONTRAST / FORCED COLORS
+========================================================= */
+
+@media (forced-colors: active) {
+  #lyricsContainer .lyric-line {
+    color: CanvasText;
+  }
+
+  #lyricsContainer .lyric-line.active {
+    color: Highlight;
+
+    text-shadow: none;
+  }
+
+  #lyricsStudio,
+  #lyricsStudioTrigger {
+    border: 1px solid ButtonText;
+  }
+
+  #lyricsStudio .studio-option.is-selected {
+    border: 2px solid Highlight;
+
+    color: Highlight;
+  }
+
+  #lyricsStudio button:focus-visible,
+  #lyricsStudio input:focus-visible,
+  #lyricsStudioTrigger:focus-visible {
+    outline: 2px solid Highlight;
+  }
+}
+
+
+/* =========================================================
+   35. FALLBACKS
+========================================================= */
+
+/* Fallback for browsers without text-wrap: pretty */
+
+@supports not (text-wrap: pretty) {
+  #lyricsContainer .lyric-line,
+  #lyricsTitle,
+  #lyricsSubtitle {
+    text-wrap: wrap;
+  }
+}
+
+/* Fallback for browsers without backdrop-filter */
+
+@supports not (backdrop-filter: blur(1px)) {
+  #lyricsStudioTrigger {
+    background: #171E2A;
+  }
+}
+
+
+/* =========================================================
+   END — SHUNEL LYRICS DESIGN SYSTEM 5.0
+========================================================= */
