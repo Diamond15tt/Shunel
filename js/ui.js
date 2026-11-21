@@ -2672,10 +2672,28 @@ export class ShunelUI {
       }
     });
 
+    // SCROLL FIX: scrollIntoView() también movía TODA la página en cada
+    // línea de la letra (por eso el scroll "saltaba" solo). Ahora se
+    // desplaza únicamente el cuadro de la letra.
     if (activeLine) {
-      activeLine.scrollIntoView({
-        behavior: "smooth",
-        block: "center"
+      const scroller =
+        this.elements.lyricsContainer || container;
+
+      const lineBox = activeLine.getBoundingClientRect();
+      const boxRect = scroller.getBoundingClientRect();
+
+      const target =
+        scroller.scrollTop +
+        (lineBox.top - boxRect.top) -
+        (scroller.clientHeight - lineBox.height) / 2;
+
+      const reduceMotion = window.matchMedia?.(
+        "(prefers-reduced-motion: reduce)"
+      ).matches;
+
+      scroller.scrollTo({
+        top: Math.max(0, target),
+        behavior: reduceMotion ? "auto" : "smooth"
       });
     }
 
