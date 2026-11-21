@@ -4,7 +4,7 @@ import {
   searchPopularTracks,
   searchNewTracks
 } from "./search.js";
-
+import { initCostaRicaTop50 } from "./charts.js";
 import { YouTubePlayer } from "./player.js";
 import { QueueManager } from "./queue.js";
 import { MusicLibrary } from "./library.js";
@@ -892,22 +892,30 @@ function bindDiscoverSearches() {
 
     const normalized = normalizeDiscoverQuery(query);
 
-    if (
-      normalized.includes("popular") ||
-      normalized.includes("mas escuchado") ||
-      normalized.includes("mas escuchados")
-    ) {
-      navigateToView("search");
-
-      ui.toastMessage("Buscando la música más popular...");
-
-      executeSearch(
-        query,
-        searchPopularTracks
-      );
-
-      return;
-    }
+if (
+  normalized.includes("popular") ||
+  normalized.includes("mas escuchado") ||
+  normalized.includes("mas escuchados")
+) {
+  navigateToView("home");
+  
+  const chart = document.getElementById(
+    "spotifyCostaRicaTop50"
+  );
+  
+  if (chart) {
+    chart.scrollIntoView({
+      behavior: "smooth",
+      block: "start"
+    });
+  } else {
+    ui.toastMessage(
+      "El Top 50 todavía se está cargando."
+    );
+  }
+  
+  return;
+}
 
     if (
       normalized.includes("nueva") ||
@@ -933,6 +941,57 @@ function bindDiscoverSearches() {
       searchTracks
     );
   });
+}
+/* =========================================
+   SPOTIFY TOP 50 — COSTA RICA
+   Conexión con búsqueda y reproducción
+========================================= */
+
+function initializeCostaRicaTop50() {
+  try {
+    const result = initCostaRicaTop50({
+      searchTracks,
+      
+      onPlay: track => {
+        if (!track) return;
+        
+        const query = [
+            track.artist,
+            track.title
+          ]
+          .filter(Boolean)
+          .join(" ")
+          .trim();
+        
+        if (!query) return;
+        
+        navigateToView("search");
+        
+        if (ui.elements.input) {
+          ui.elements.input.value = query;
+        }
+        
+        executeSearch(query, searchTracks);
+      },
+      
+      container: "#spotifyCostaRicaTop50"
+    });
+    
+    if (result && typeof result.catch === "function") {
+      result.catch(error => {
+        console.error(
+          "[Shunel] Error al cargar el Top 50:",
+          error
+        );
+      });
+    }
+    
+  } catch (error) {
+    console.error(
+      "[Shunel] No se pudo inicializar el Top 50:",
+      error
+    );
+  }
 }
 
 /* =========================================
@@ -1146,7 +1205,9 @@ function bindEvents() {
 
   bindNavigation();
   bindLibraryFilters();
-  bindDiscoverSearches();
+  bindDiscoverSearches(
+    
+  );
   bindPlayerEvents();
   bindQueueEvents();
 
@@ -1264,6 +1325,7 @@ function initializePlayer() {
 
 function initialize() {
   bindEvents();
+  initializeCostaRicaTop50();
 
   setupMediaSession();
 
@@ -1277,6 +1339,8 @@ function initialize() {
   updateMediaPlaybackState(false);
 
   navigateToView("home");
+  
+  initializeCostaRicaTop50();
 
   initializePlayer();
 
