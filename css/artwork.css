@@ -1,0 +1,28 @@
+/* SHUNEL — Artwork presentation */
+:root { --shunel-artwork: none; }
+#currentThumbnail,
+#fullPlayerThumbnail,
+[data-shunel-artwork] {
+  background: var(--shunel-raised, #0d1423);
+  object-fit: cover;
+  -webkit-user-drag: none;
+}
+#fullPlayer::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: var(--shunel-artwork);
+  background-size: cover;
+  background-position: center;
+  filter: blur(42px) saturate(1.12);
+  opacity: .16;
+  transform: scale(1.12);
+}
+#fullPlayer > * { position: relative; z-index: 1; }
+.shunel-artwork-loading { opacity: .65; transition: opacity .2s ease; }
+.shunel-artwork-ready { opacity: 1; transition: opacity .25s ease; }
+@media (prefers-reduced-motion: reduce) {
+  .shunel-artwork-loading, .shunel-artwork-ready { transition: none; }
+}

@@ -1,0 +1,9 @@
+/* SHUNEL — Radio and discovery */
+.shunel-radio-section { display: grid; gap: 12px; min-width: 0; }
+.shunel-radio-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.shunel-radio-track { display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--border, rgba(255,255,255,.08)); }
+.shunel-radio-track img { width: 48px; height: 48px; object-fit: cover; background: var(--shunel-raised, #0d1423); }
+.shunel-radio-track-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shunel-radio-track-artist { color: var(--muted, #98a2b3); font-size: .88em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shunel-radio-empty, .shunel-radio-error { color: var(--muted, #98a2b3); padding: 16px 0; }
+.shunel-radio-error { color: #e69a9a; }
