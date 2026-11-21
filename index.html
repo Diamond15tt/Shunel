@@ -1,114 +1,172 @@
 <!DOCTYPE html>
-
 <!--
-  =====================================================================
-  SHUNEL · HTML ADAPTADO A charts.js (Top 50 Costa Rica) + MEJORAS
-  Todos los id, clases, data-* y textos originales siguen intactos.
-  =====================================================================
+  // =====================================================================
+  // SHUNEL · index.html (auditado y refactorizado)
+  // PWA musical en español orientada a Costa Rica:
+  // YouTube IFrame API + Top 50 Spotify CR + letras sincronizadas +
+  // biblioteca / favoritos / historial / cola guardados en el navegador.
+  //
+  // Regla de oro: TODOS los id, clases y data-* que usan app.js, ui.js,
+  // charts.js y lyrics-studio.js se mantienen intactos.
+  // Los comentarios usan "//" dentro de comentarios HTML, /* */ (CSS)
+  // y // (JS) para que el archivo siga siendo HTML válido.
+  // =====================================================================
 -->
-
-<html lang="es" dir="ltr" class="no-js">
+<html lang="es-CR" dir="ltr" class="no-js">
 
 <head>
+
+  <!-- // ================================================================
+       // 1. META BÁSICOS
+       // ================================================================ -->
   <meta charset="UTF-8">
-
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1, viewport-fit=cover"
-  >
-
-  <meta name="theme-color" content="#080808">
-  <meta name="description" content="Shunel, tu espacio musical.">
-
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta
-    name="apple-mobile-web-app-status-bar-style"
-    content="black-translucent"
-  >
-
-  <meta name="mobile-web-app-capable" content="yes">
-
-  <!-- Metadatos adicionales -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Shunel</title>
+  <meta name="description" content="Shunel, tu espacio musical: escucha, guarda tus favoritos y descubre el Top 50 de Costa Rica.">
   <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#080808">
   <meta name="format-detection" content="telephone=no">
-  <meta name="application-name" content="Shunel">
-  <meta name="apple-mobile-web-app-title" content="Shunel">
-  <meta name="msapplication-TileColor" content="#080808">
-  <meta name="robots" content="index, follow">
   <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta name="robots" content="index, follow">
   <meta name="author" content="Shunel">
-  <meta name="keywords" content="música, reproductor, YouTube, canciones, playlist, Shunel, Top 50 Costa Rica">
+  <link rel="canonical" href="https://shunel.vercel.app/">
 
-  <!-- Open Graph -->
+  <!-- // ================================================================
+       // 2. PWA / iOS (pantalla de inicio)
+       // ================================================================ -->
+  <meta name="application-name" content="Shunel">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Shunel">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" type="image/png" sizes="360x360" href="/assets/logo.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/logo.png">
+
+  <!-- // ================================================================
+       // 3. OPEN GRAPH / X (URLs absolutas: WhatsApp e iMessage las exigen)
+       // ================================================================ -->
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Shunel">
+  <meta property="og:url" content="https://shunel.vercel.app/">
   <meta property="og:title" content="Shunel">
   <meta property="og:description" content="Shunel, tu espacio musical.">
-  <meta property="og:locale" content="es_LA">
-  <meta property="og:image" content="/assets/logo.png">
+  <meta property="og:locale" content="es_CR">
+  <meta property="og:image" content="https://shunel.vercel.app/assets/logo.png">
   <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="360">
+  <meta property="og:image:height" content="360">
   <meta property="og:image:alt" content="Logo de Shunel">
-
-  <!-- Twitter / X -->
   <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="Shunel">
   <meta name="twitter:description" content="Shunel, tu espacio musical.">
-  <meta name="twitter:image" content="/assets/logo.png">
+  <meta name="twitter:image" content="https://shunel.vercel.app/assets/logo.png">
   <meta name="twitter:image:alt" content="Logo de Shunel">
 
-  <!-- Legado de Windows/IE -->
-  <meta name="msapplication-tap-highlight" content="no">
-
-  <title>Shunel</title>
-
-  <link rel="manifest" href="/manifest.json">
-
-  <!-- Iconos -->
-  <link rel="icon" type="image/png" href="/assets/logo.png">
-  <link rel="apple-touch-icon" href="/assets/logo.png">
-
-  <!-- Rendimiento: conexiones y precargas anticipadas -->
+  <!-- // ================================================================
+       // 4. RENDIMIENTO: conexiones anticipadas + precarga de módulos
+       // (solo dominios que la app usa de verdad)
+       // ================================================================ -->
   <link rel="preconnect" href="https://www.youtube.com">
   <link rel="preconnect" href="https://i.ytimg.com">
-  <link rel="dns-prefetch" href="https://www.youtube-nocookie.com">
-  <link rel="dns-prefetch" href="https://www.gstatic.com">
-  <link rel="dns-prefetch" href="https://www.googleapis.com">
-  <link rel="preload" as="image" href="/assets/logo.png" fetchpriority="high">
   <link rel="modulepreload" href="/js/app.js">
+  <link rel="modulepreload" href="/js/ui.js">
+  <link rel="modulepreload" href="/js/player.js">
+  <link rel="modulepreload" href="/js/queue.js">
+  <link rel="modulepreload" href="/js/library.js">
+  <link rel="modulepreload" href="/js/storage.js">
+  <link rel="modulepreload" href="/js/search.js">
   <link rel="modulepreload" href="/js/charts.js">
 
-  <!-- STYLES -->
+  <!-- // ================================================================
+       // 5. ARRANQUE TEMPRANO (antes del CSS para evitar parpadeos)
+       // - marca .js / .is-ios / .is-standalone / .is-touch
+       // - aplica el color de acento guardado antes del primer pintado
+       // ================================================================ -->
+  <script>
+    (function () {
+      "use strict";
+      // // Raíz del documento
+      var root = document.documentElement;
+      root.classList.replace("no-js", "js");
+
+      // // iOS / iPadOS (iPadOS se reporta como "Macintosh" con pantalla táctil)
+      var ua = navigator.userAgent || "";
+      var isIOS = /iP(hone|od|ad)/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+      if (isIOS) root.classList.add("is-ios");
+
+      // // App instalada en pantalla de inicio
+      var standalone = (window.matchMedia && matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true;
+      if (standalone) root.classList.add("is-standalone");
+
+      // // Dispositivo táctil sin hover
+      if (window.matchMedia && matchMedia("(hover: none)").matches) root.classList.add("is-touch");
+
+      // // Color de acento guardado (shunel_accent_v1)
+      try {
+        var accent = localStorage.getItem("shunel_accent_v1");
+        if (accent && /^#[0-9a-f]{6}$/i.test(accent)) {
+          var r = parseInt(accent.slice(1, 3), 16) / 255;
+          var g = parseInt(accent.slice(3, 5), 16) / 255;
+          var b = parseInt(accent.slice(5, 7), 16) / 255;
+          var lin = function (c) { return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+          var lum = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+          root.style.setProperty("--shunel-accent", accent);
+          root.style.setProperty("--shunel-on-accent", lum > 0.4 ? "#080808" : "#ffffff");
+        }
+      } catch (error) { /* // localStorage bloqueado (modo privado antiguo) */ }
+    })();
+  </script>
+
+  <!-- // ================================================================
+       // 6. HOJAS DE ESTILO (mismo orden que antes: la cascada no cambia)
+       // ================================================================ -->
   <link rel="stylesheet" href="/css/style.css">
   <link rel="stylesheet" href="/css/components.css">
   <link rel="stylesheet" href="/css/player.css">
   <link rel="stylesheet" href="/css/animations.css">
   <link rel="stylesheet" href="/css/lyrics.css">
+  <!-- // OJO: mods.css y mods-layout-fix.css NO están en el repo público
+       // (GitHub Diamond15tt/Shunel). Súbelos o borra estas 2 líneas,
+       // si no, Safari hace 2 peticiones 404 en cada carga. -->
+  <link rel="stylesheet" href="/css/mods.css">
+  <link rel="stylesheet" href="/css/mods-layout-fix.css">
+  <!-- // Módulos adicionales (app.js también los asegura con ensureStylesheet) -->
+  <link rel="stylesheet" href="/css/artwork.css">
+  <link rel="stylesheet" href="/css/radio.css">
 
-  <!-- Marca que JavaScript está activo (lo antes posible) -->
-  <script>
-    document.documentElement.classList.replace("no-js", "js");
-  </script>
-
-  <!-- Datos estructurados -->
+  <!-- // ================================================================
+       // 7. DATOS ESTRUCTURADOS
+       // ================================================================ -->
   <script type="application/ld+json">
     {
       "@context": "https://schema.org",
       "@type": "WebApplication",
       "name": "Shunel",
+      "url": "https://shunel.vercel.app/",
       "description": "Shunel, tu espacio musical.",
       "applicationCategory": "MultimediaApplication",
-      "operatingSystem": "Any",
-      "inLanguage": "es",
-      "browserRequirements": "Requires JavaScript"
+      "operatingSystem": "iOS, Android, Windows, macOS",
+      "inLanguage": "es-CR",
+      "browserRequirements": "Requires JavaScript",
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "CRC" }
     }
   </script>
 
-  <!-- =====================================
-       MEJORAS INLINE (Estilos + Letras)
-  ====================================== -->
+  <!-- // ================================================================
+       // 8. ESTILOS INLINE (mejoras que no viven en los .css)
+       // ================================================================ -->
   <style id="shunel-enhancements">
-    :root { color-scheme: dark; }
+    /* // ---------- 8.1 Tokens de acento personalizables ---------- */
+    :root {
+      color-scheme: dark;
+      --shunel-accent: #ffffff;
+      --shunel-on-accent: #080808;
+      --shunel-sheet-bg: rgba(18, 18, 18, 0.86);
+      --shunel-hairline: rgba(255, 255, 255, 0.1);
+    }
 
+    /* // ---------- 8.2 Base ---------- */
     html {
       -webkit-text-size-adjust: 100%;
       text-size-adjust: 100%;
@@ -116,24 +174,22 @@
       -moz-osx-font-smoothing: grayscale;
       scroll-behavior: smooth;
       scroll-padding-top: calc(env(safe-area-inset-top, 0px) + 72px);
-      overscroll-behavior-y: contain;
     }
 
     :focus-visible {
-      outline: 2px solid #ffffff;
+      outline: 2px solid var(--shunel-accent);
       outline-offset: 3px;
       border-radius: 6px;
     }
 
     :focus:not(:focus-visible) { outline: none; }
-
     .main-content:focus { outline: none; }
 
-    a, button, input, select, textarea, [role="button"] {
+    a, button, input, select, textarea, label, [role="button"] {
       -webkit-tap-highlight-color: transparent;
     }
 
-    button, [role="button"], input[type="range"], .bottom-nav-item {
+    button, [role="button"], input[type="range"], .bottom-nav-item, label {
       touch-action: manipulation;
     }
 
@@ -143,27 +199,20 @@
       -webkit-touch-callout: none;
     }
 
-    img {
-      max-width: 100%;
-      -webkit-user-drag: none;
-      user-drag: none;
-    }
+    img { max-width: 100%; -webkit-user-drag: none; }
 
-    ::selection {
-      background: rgba(255, 255, 255, 0.25);
-      color: #ffffff;
-    }
+    ::selection { background: rgba(255, 255, 255, 0.25); color: #ffffff; }
 
     [hidden] { display: none !important; }
 
-    button:disabled, input:disabled, [aria-disabled="true"] {
-      cursor: not-allowed;
-    }
+    button:disabled, input:disabled, [aria-disabled="true"] { cursor: not-allowed; }
 
-    /* Enlace para saltar al contenido */
+    * { scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.25) transparent; }
+
+    /* // ---------- 8.3 Accesibilidad: skip link + sr-only ---------- */
     .skip-link {
       position: fixed;
-      top: -100px;
+      top: 0;
       left: 12px;
       z-index: 10000;
       padding: 10px 16px;
@@ -172,14 +221,12 @@
       font: 600 14px/1.2 system-ui, -apple-system, "Segoe UI", sans-serif;
       border-radius: 8px;
       text-decoration: none;
-      transition: top 0.15s ease;
+      transform: translateY(-120%);
+      transition: transform 0.15s ease;
     }
 
-    .skip-link:focus {
-      top: calc(env(safe-area-inset-top, 0px) + 12px);
-    }
+    .skip-link:focus { transform: translateY(calc(env(safe-area-inset-top, 0px) + 12px)); }
 
-    /* Solo para lectores de pantalla */
     .sr-only {
       position: absolute;
       width: 1px;
@@ -192,67 +239,56 @@
       border: 0;
     }
 
-    @media (prefers-reduced-motion: reduce) {
-      html { scroll-behavior: auto; }
-
-      *, *::before, *::after {
-        animation-duration: 0.01ms !important;
-        animation-iteration-count: 1 !important;
-        transition-duration: 0.01ms !important;
-        scroll-behavior: auto !important;
-      }
-    }
-
-    @media (forced-colors: active) {
-      :focus-visible { outline: 3px solid Highlight; }
-      button, input { border: 1px solid ButtonText; }
-    }
-
-    @media print {
-      .player-dock, .full-player, .queue-panel, .bottom-nav,
-      .topbar, .toast, .youtube-stage, .skip-link,
-      .shunel-chart__refresh {
-        display: none !important;
-      }
-
-      body { background: #ffffff !important; color: #000000 !important; }
-    }
-
-    /* Banner sin conexión */
-    html.is-offline body::before {
-      content: "Sin conexión. Algunas funciones pueden no estar disponibles.";
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      z-index: 9999;
-      padding: calc(env(safe-area-inset-top, 0px) + 6px) 12px 6px;
+    /* // ---------- 8.4 Avisos: sin JS / sin conexión ---------- */
+    .noscript-warning,
+    .offline-banner {
+      margin: 0;
+      padding: 10px 16px;
       background: #2a2a2a;
       color: #ffffff;
-      font: 600 12px/1.3 system-ui, -apple-system, "Segoe UI", sans-serif;
+      font: 600 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
       text-align: center;
+    }
+
+    /* // Antes era body::before y chocaba con el fondo Liquid Glass de style.css */
+    .offline-banner {
+      position: fixed;
+      inset: 0 0 auto 0;
+      z-index: 9999;
+      padding-top: calc(env(safe-area-inset-top, 0px) + 6px);
       pointer-events: none;
     }
 
-    /* Aviso sin JavaScript */
-    .noscript-warning {
-      margin: 0;
-      padding: 14px 16px;
-      background: #2a2a2a;
+    /* // ---------- 8.5 Acento aplicado (por defecto blanco = identidad original) ---------- */
+    .play-button {
+      background: var(--shunel-accent) !important;
+      color: var(--shunel-on-accent) !important;
+    }
+
+    .filter-chip.active {
+      background: var(--shunel-accent);
+      color: var(--shunel-on-accent);
+      border-color: transparent;
+    }
+
+    .bottom-nav-item.active { color: var(--shunel-accent); }
+
+    input[type="range"] { accent-color: var(--shunel-accent); }
+
+    /* // Burbujas del usuario en Shunel AI */
+    .shunel-ai-message.shunel-ai-user {
+      background: rgba(255, 255, 255, 0.1);
+      background: color-mix(in srgb, var(--shunel-accent) 18%, transparent);
+      border: 1px solid color-mix(in srgb, var(--shunel-accent) 35%, transparent);
       color: #ffffff;
-      font: 600 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
-      text-align: center;
     }
 
-    * {
-      scrollbar-width: thin;
-      scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
-    }
+    /* // ---------- 8.6 iOS: el volumen lo controlan los botones físicos ---------- */
+    html.is-ios .volume-icon,
+    html.is-ios #volumeBar { display: none !important; }
 
-    /* Top 50 Costa Rica (charts.js) */
-    #spotifyCostaRicaTop50 {
-      scroll-margin-top: calc(env(safe-area-inset-top, 0px) + 72px);
-    }
+    /* // ---------- 8.7 Top 50 Costa Rica (charts.js) ---------- */
+    #spotifyCostaRicaTop50 { scroll-margin-top: calc(env(safe-area-inset-top, 0px) + 72px); }
 
     #spotifyCostaRicaTop50 .top50-fallback {
       margin: 0;
@@ -261,12 +297,147 @@
       font-size: 13px;
     }
 
-    #spotifyCostaRicaTop50 .top50-fallback a {
-      color: inherit;
-      text-underline-offset: 3px;
+    #spotifyCostaRicaTop50 .top50-fallback a { color: inherit; text-underline-offset: 3px; }
+
+    /* // ---------- 8.8 Escenario de YouTube: estados de carga / error ---------- */
+    .youtube-frame-wrap[data-state="loading"] {
+      background:
+        linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.05) 50%, transparent 70%) 0 0 / 200% 100%,
+        rgba(255, 255, 255, 0.02);
+      animation: shunel-shimmer 1.4s linear infinite;
     }
 
-    /* Letras */
+    .youtube-frame-wrap[data-state="error"] { outline: 1px solid rgba(255, 120, 120, 0.35); }
+
+    .player-disclaimer:empty { display: none; }
+
+    @keyframes shunel-shimmer { to { background-position: -200% 0, 0 0; } }
+
+    /* // ---------- 8.9 Visualizador <canvas> del reproductor expandido ---------- */
+    .shunel-visualizer {
+      display: block;
+      width: min(100%, 320px);
+      height: 32px;
+      margin: 10px auto 0;
+      pointer-events: none;
+    }
+
+    html.visualizer-off .shunel-visualizer { display: none; }
+
+    @media (max-height: 640px) {
+      .shunel-visualizer { height: 22px; margin-top: 6px; }
+    }
+
+    /* // ---------- 8.10 Hoja de Apariencia (Liquid Glass) ---------- */
+    .shunel-sheet {
+      width: min(100% - 24px, 420px);
+      max-height: min(86dvh, 640px);
+      margin: auto auto calc(env(safe-area-inset-bottom, 0px) + 12px);
+      padding: 0;
+      border: 1px solid var(--shunel-hairline);
+      border-radius: 28px;
+      background: var(--shunel-sheet-bg);
+      color: #ffffff;
+      -webkit-backdrop-filter: blur(28px) saturate(170%);
+      backdrop-filter: blur(28px) saturate(170%);
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      overflow: auto;
+      overscroll-behavior: contain;
+    }
+
+    .shunel-sheet::backdrop { background: rgba(0, 0, 0, 0.55); }
+
+    .shunel-sheet[open] { animation: shunel-sheet-in 0.32s cubic-bezier(0.2, 0.9, 0.25, 1); }
+
+    @keyframes shunel-sheet-in { from { transform: translateY(24px); opacity: 0; } }
+
+    .shunel-sheet form { display: grid; gap: 18px; padding: 18px 18px 20px; margin: 0; }
+
+    .shunel-sheet__header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+
+    .shunel-sheet__header h2 { margin: 0; font-size: 20px; letter-spacing: -0.01em; }
+
+    .shunel-sheet fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
+
+    .shunel-sheet legend,
+    .shunel-sheet__label {
+      margin-bottom: 10px;
+      padding: 0;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.6);
+    }
+
+    .shunel-swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); gap: 10px; }
+
+    .shunel-swatch { position: relative; display: grid; place-items: center; min-height: 44px; cursor: pointer; }
+
+    .shunel-swatch input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+
+    .shunel-swatch span {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: var(--swatch);
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+      transition: transform 0.18s ease, box-shadow 0.18s ease;
+    }
+
+    .shunel-swatch input:checked + span { box-shadow: 0 0 0 2px #080808, 0 0 0 4px var(--swatch); transform: scale(0.92); }
+
+    .shunel-swatch input:focus-visible + span { outline: 2px solid #ffffff; outline-offset: 4px; }
+
+    .shunel-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 44px;
+      font-size: 15px;
+    }
+
+    .shunel-row input[type="color"] {
+      width: 44px;
+      height: 44px;
+      padding: 0;
+      border: 1px solid var(--shunel-hairline);
+      border-radius: 12px;
+      background: transparent;
+    }
+
+    .shunel-row input[type="checkbox"] { width: 24px; height: 24px; accent-color: var(--shunel-accent); }
+
+    .shunel-sheet__hint { margin: 4px 0 0; font-size: 12.5px; line-height: 1.45; color: rgba(255, 255, 255, 0.55); }
+
+    .shunel-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+    .shunel-actions .shunel-btn--wide { grid-column: 1 / -1; }
+
+    .shunel-btn {
+      min-height: 44px;
+      padding: 0 14px;
+      border: 1px solid var(--shunel-hairline);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.06);
+      color: #ffffff;
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    .shunel-btn:active { transform: scale(0.98); }
+
+    .shunel-btn--primary { background: var(--shunel-accent); color: var(--shunel-on-accent); border-color: transparent; }
+
+    @media (prefers-reduced-transparency: reduce) {
+      .shunel-sheet { background: #121212; -webkit-backdrop-filter: none; backdrop-filter: none; }
+    }
+
+    /* // ---------- 8.11 Letras ---------- */
     .lyrics-container {
       max-width: 700px;
       margin: 20px auto 40px;
@@ -275,6 +446,7 @@
       border: 1px solid rgba(255, 255, 255, 0.06);
       border-radius: 16px;
       max-height: 55vh;
+      max-height: 55dvh;
       overflow-y: auto;
       overscroll-behavior: contain;
       scroll-behavior: smooth;
@@ -284,27 +456,19 @@
       text-align: center;
     }
 
-    @supports (height: 100dvh) {
-      .lyrics-container { max-height: 55dvh; }
-    }
-
     .lyrics-container:focus-visible { outline-offset: -3px; }
 
     .lyric-line {
       padding: 8px 12px;
       border-radius: 8px;
       color: rgba(255, 255, 255, 0.4);
-      transition:
-        color 0.2s ease,
-        background-color 0.2s ease,
-        transform 0.2s ease;
+      transition: color 0.2s ease, background-color 0.2s ease, transform 0.2s ease;
       cursor: pointer;
       scroll-margin-block: 40vh;
     }
 
-    .lyric-line:hover {
-      color: rgba(255, 255, 255, 0.8);
-      background: rgba(255, 255, 255, 0.04);
+    @media (hover: hover) {
+      .lyric-line:hover { color: rgba(255, 255, 255, 0.8); background: rgba(255, 255, 255, 0.04); }
     }
 
     .lyric-line.active,
@@ -315,13 +479,38 @@
       transform: scale(1.02);
     }
 
+    /* // ---------- 8.12 Preferencias del sistema ---------- */
     @media (prefers-reduced-motion: reduce) {
-      .lyric-line.active,
-      .lyric-line[aria-current="true"] { transform: none; }
+      html { scroll-behavior: auto; }
+      .lyric-line.active, .lyric-line[aria-current="true"] { transform: none; }
+      .youtube-frame-wrap[data-state="loading"], .shunel-sheet[open] { animation: none; }
     }
 
     @media (prefers-contrast: more) {
       .lyric-line { color: rgba(255, 255, 255, 0.75); }
+    }
+
+    @media (forced-colors: active) {
+      :focus-visible { outline: 3px solid Highlight; }
+      button, input { border: 1px solid ButtonText; }
+    }
+
+    @media print {
+      .player-dock, .full-player, .queue-panel, .bottom-nav, .topbar, .toast,
+      .youtube-stage, .skip-link, .shunel-chart__refresh, .offline-banner, .shunel-sheet {
+        display: none !important;
+      }
+      body { background: #ffffff !important; color: #000000 !important; }
+    }
+  
+    /* // Lyrics Studio: el botón flotante se oculta cuando el reproductor
+       // completo o el panel de apariencia están abiertos (evita que tape
+       // la barra de progreso y el botón de favorito). */
+    body:has(#fullPlayer.active) .lyrics-studio-trigger,
+    body:has(#appearanceSheet[open]) .lyrics-studio-trigger {
+      opacity: 0;
+      pointer-events: none;
+      visibility: hidden;
     }
   </style>
 
@@ -329,37 +518,31 @@
 
 <body>
 
-  <!-- Aviso si JavaScript está desactivado -->
+  <!-- // ================================================================
+       // 9. AVISOS GLOBALES (sin JS, saltar contenido, conexión)
+       // ================================================================ -->
   <noscript>
     <p class="noscript-warning">
       Shunel necesita JavaScript para funcionar. Actívalo en tu navegador para continuar.
     </p>
   </noscript>
 
-  <!-- Saltar al contenido -->
   <a class="skip-link" href="#main-content">Saltar al contenido principal</a>
 
-  <!-- Anuncios de conexión para lectores de pantalla -->
-  <div
-    class="sr-only"
-    id="connectionStatus"
-    role="status"
-    aria-live="polite"
-    aria-atomic="true"
-  ></div>
+  <!-- // Banner visual sin conexión (antes era body::before) -->
+  <p class="offline-banner" id="offlineBanner" role="alert" hidden>
+    Sin conexión. Algunas funciones pueden no estar disponibles.
+  </p>
+
+  <!-- // Anuncios de conexión para lectores de pantalla -->
+  <div class="sr-only" id="connectionStatus" role="status" aria-live="polite" aria-atomic="true"></div>
 
   <div class="app-shell">
 
-    <!-- =====================================
-         SVG ICON SPRITE
-    ====================================== -->
-
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      style="position:absolute;width:0;height:0;overflow:hidden"
-      aria-hidden="true"
-      focusable="false"
-    >
+    <!-- // ==============================================================
+         // 10. SPRITE DE ÍCONOS (estilo Lucide, trazo = currentColor)
+         // ============================================================== -->
+    <svg xmlns="http://www.w3.org/2000/svg" style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true" focusable="false">
 
       <symbol id="icon-home" viewBox="0 0 24 24">
         <path d="m3 10 9-7 9 7"/>
@@ -458,301 +641,162 @@
         <path d="M12 7v5l3 2"/>
       </symbol>
 
+      <!-- // Unificado: ahora hereda fill/stroke como el resto del sprite -->
       <symbol id="icon-external" viewBox="0 0 24 24">
-        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <polyline points="15 3 21 3 21 9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <line x1="10" y1="14" x2="21" y2="3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+        <path d="M15 3h6v6"/>
+        <path d="M10 14 21 3"/>
       </symbol>
 
-      <!-- Icono para Letras -->
       <symbol id="icon-lyrics" viewBox="0 0 24 24">
-        <path d="M4 6h16M4 10h16M4 14h10M4 18h6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        <path d="M4 6h16M4 10h16M4 14h10M4 18h6"/>
+      </symbol>
+
+      <!-- // Nuevo: paleta para la hoja de Apariencia -->
+      <symbol id="icon-palette" viewBox="0 0 24 24">
+        <path d="M12 3a9 9 0 0 0 0 18c1.1 0 1.8-.8 1.8-1.8 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-1 .8-1.8 1.8-1.8H17a4 4 0 0 0 4-4c0-4.4-4-8-9-8z"/>
+        <circle cx="7.5" cy="11.5" r="1.2"/>
+        <circle cx="10.5" cy="7.5" r="1.2"/>
+        <circle cx="15.5" cy="7.8" r="1.2"/>
       </symbol>
 
     </svg>
 
 
-    <!-- =====================================
-         HEADER
-    ====================================== -->
-
+    <!-- // ==============================================================
+         // 11. HEADER
+         // ============================================================== -->
     <header class="topbar">
 
-      <a
-        class="mobile-brand"
-        href="#"
-        aria-label="Shunel inicio"
-        title="Ir al inicio"
-        data-view="home"
-      >
-
-        <img
-          src="/assets/logo.png"
-          alt="Shunel"
-          class="brand-logo"
-          decoding="async"
-          fetchpriority="high"
-          draggable="false"
-        >
-
+      <a class="mobile-brand" href="/" aria-label="Shunel, ir al inicio" data-view="home">
+        <img src="/assets/logo.png" alt="" class="brand-logo" width="360" height="360" decoding="async" fetchpriority="high" draggable="false">
         <strong translate="no">Shunel</strong>
-
       </a>
 
       <div class="topbar-spacer"></div>
 
-      <button
-        class="icon-button profile-button"
-        id="profileButton"
-        type="button"
-        aria-label="Perfil"
-        title="Perfil"
-      >
-        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-          <use href="#icon-user"/>
-        </svg>
+      <!-- // Nuevo: abre la hoja de Apariencia (acento, visualizador, respaldo) -->
+      <button class="icon-button" id="appearanceButton" type="button" aria-label="Apariencia y datos" aria-haspopup="dialog" aria-controls="appearanceSheet">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#icon-palette"/></svg>
+      </button>
+
+      <button class="icon-button profile-button" id="profileButton" type="button" aria-label="Perfil y biblioteca">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#icon-user"/></svg>
       </button>
 
     </header>
 
 
-    <!-- =====================================
-         MAIN CONTENT
-    ====================================== -->
-
+    <!-- // ==============================================================
+         // 12. CONTENIDO PRINCIPAL
+         // ============================================================== -->
     <main class="main-content" id="main-content" tabindex="-1">
 
-
-      <!-- =====================================
-           INICIO
-      ====================================== -->
-
-      <section
-        class="view active"
-        id="view-home"
-        aria-hidden="false"
-        aria-labelledby="homeTitle"
-      >
+      <!-- // ------------------------------------------------------------
+           // 12.1 VISTA: INICIO
+           // ------------------------------------------------------------ -->
+      <section class="view active" id="view-home" aria-hidden="false" aria-labelledby="homeTitle">
 
         <div class="home-greeting">
-
-          <p class="eyebrow"></p>
-
+          <!-- // El saludo (Buenos días / tardes / noches) lo pone el script 19 -->
+          <p class="eyebrow" id="homeGreeting" hidden></p>
           <h1 id="homeTitle">
             Tu música.
             <span>Tu momento.</span>
           </h1>
-
-          <p class="hero-copy">
-
-          </p>
-
+          <p class="hero-copy" hidden></p>
         </div>
 
+        <!-- // Accesos rápidos -->
+        <div class="quick-access" role="group" aria-label="Accesos rápidos">
 
-        <!-- ACCESOS RÁPIDOS -->
-
-        <div
-          class="quick-access"
-          role="group"
-          aria-label="Accesos rápidos"
-        >
-
-          <button
-            class="quick-card"
-            type="button"
-            title="Ir a tus favoritos"
-            data-view="library"
-            data-library-filter="favorites"
-          >
-
+          <button class="quick-card" type="button" data-view="library" data-library-filter="favorites">
             <span class="quick-card-icon">
-              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                <use href="#icon-heart"/>
-              </svg>
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#icon-heart"/></svg>
             </span>
-
             <span>Favoritos</span>
-
           </button>
 
-
-          <button
-            class="quick-card"
-            type="button"
-            title="Ir a toda tu biblioteca"
-            data-view="library"
-            data-library-filter="all"
-          >
-
+          <button class="quick-card" type="button" data-view="library" data-library-filter="all">
             <span class="quick-card-icon">
-              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                <use href="#icon-library"/>
-              </svg>
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#icon-library"/></svg>
             </span>
-
             <span>Biblioteca</span>
-
           </button>
 
         </div>
 
-
-        <!-- RECIENTES -->
-
+        <!-- // Escuchado recientemente -->
         <div class="section-heading">
-
           <div>
             <p class="eyebrow">TU MÚSICA</p>
-            <h2>Escuchado recientemente</h2>
+            <h2 id="homeRecentTitle">Escuchado recientemente</h2>
           </div>
-
-          <button
-            class="text-button"
-            type="button"
-            aria-label="Ver todo el historial"
-            title="Ver todo el historial"
-            data-view="history"
-          >
+          <button class="text-button" type="button" aria-label="Ver todo el historial" data-view="history">
             Ver todo
           </button>
-
         </div>
 
-        <div
-          class="track-list"
-          id="homeRecentList"
-          role="group"
-          aria-label="Escuchado recientemente"
-          aria-live="polite"
-        ></div>
+        <div class="track-list" id="homeRecentList" role="group" aria-labelledby="homeRecentTitle"></div>
 
-
-        <!-- RECOMENDACIONES -->
-
+        <!-- // Explorar -->
         <div class="section-heading">
-
           <div>
             <p class="eyebrow">DESCUBRE</p>
-            <h2>Explora música</h2>
+            <h2 id="homeDiscoverTitle">Explora música</h2>
           </div>
-
         </div>
 
-        <div
-          class="home-discover"
-          role="group"
-          aria-label="Explorar música"
-        >
+        <div class="home-discover" role="group" aria-labelledby="homeDiscoverTitle">
 
-          <button
-            class="discover-card"
-            type="button"
-            title="Buscar: música popular"
-            data-search="música popular"
-          >
-
+          <button class="discover-card" type="button" data-search="música popular">
             <span>
-              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                <use href="#icon-music"/>
-              </svg>
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#icon-music"/></svg>
             </span>
-
             <strong>Lo más escuchado</strong>
-
           </button>
 
-
-          <button
-            class="discover-card"
-            type="button"
-            title="Buscar: música nueva"
-            data-search="música nueva"
-          >
-
+          <button class="discover-card" type="button" data-search="música nueva">
             <span>
-              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                <use href="#icon-sparkles"/>
-              </svg>
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#icon-sparkles"/></svg>
             </span>
-
             <strong>Música nueva</strong>
-
           </button>
 
         </div>
 
-
-        <!-- TOP 50 COSTA RICA (charts.js lo monta aquí) -->
-
-        <section
-          class="shunel-chart"
-          id="spotifyCostaRicaTop50"
-          aria-label="Top 50 de Spotify Costa Rica"
-          aria-busy="true"
-        >
-
+        <!-- // Top 50 Costa Rica: app.js -> initializeCostaRicaTop50() lo monta aquí -->
+        <section class="shunel-chart" id="spotifyCostaRicaTop50" aria-labelledby="top50Title" aria-busy="true">
           <p class="eyebrow">RANKING DE COSTA RICA</p>
-
-          <h2>Top 50 de Spotify</h2>
-
-          <p class="top50-fallback" role="status">
-            Cargando ranking...
-            <noscript>
+          <h2 id="top50Title">Top 50 de Spotify</h2>
+          <p class="top50-fallback" role="status">Cargando ranking...</p>
+          <noscript>
+            <p class="top50-fallback">
               Activa JavaScript o consulta el ranking en
-              <a
-                href="https://kworb.net/spotify/country/cr_daily.html"
-                target="_blank"
-                rel="noopener noreferrer"
-              >Kworb</a>.
-            </noscript>
-          </p>
-
+              <a href="https://kworb.net/spotify/country/cr_daily.html" target="_blank" rel="noopener noreferrer">Kworb</a>.
+            </p>
+          </noscript>
         </section>
 
       </section>
 
 
-      <!-- =====================================
-           BUSCAR
-      ====================================== -->
-
-      <section
-        class="view"
-        id="view-search"
-        aria-hidden="true"
-        aria-labelledby="searchTitle"
-      >
+      <!-- // ------------------------------------------------------------
+           // 12.2 VISTA: BUSCAR
+           // ------------------------------------------------------------ -->
+      <section class="view" id="view-search" aria-hidden="true" inert aria-labelledby="searchTitle">
 
         <div class="page-heading">
-
           <p class="eyebrow">DESCUBRE ALGO NUEVO</p>
-
           <h1 id="searchTitle">Buscar</h1>
-
-          <p class="hero-copy">
-            Encuentra canciones, artistas y álbumes.
-          </p>
-
+          <p class="hero-copy">Encuentra canciones, artistas y álbumes.</p>
         </div>
 
-
-        <!-- BUSCADOR -->
-
-        <form
-          class="search-form"
-          id="searchForm"
-          role="search"
-          aria-label="Buscar música"
-          autocomplete="off"
-        >
+        <!-- // Buscador -->
+        <form class="search-form" id="searchForm" role="search" aria-label="Buscar música" autocomplete="off">
 
           <span class="search-symbol" aria-hidden="true">
-
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <use href="#icon-search"/>
-            </svg>
-
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#icon-search"/></svg>
           </span>
 
           <input
@@ -766,675 +810,279 @@
             autocapitalize="off"
             autocorrect="off"
             spellcheck="false"
-            inputmode="search"
             enterkeyhint="search"
             aria-label="Buscar canciones, artistas o álbumes"
             aria-describedby="status"
             aria-controls="results"
-            aria-keyshortcuts="/"
+            aria-keyshortcuts="/ Control+K Meta+K"
             required
           >
 
-          <button
-            class="primary-button"
-            id="searchButton"
-            type="submit"
-            title="Buscar"
-            aria-controls="results"
-          >
+          <button class="primary-button" id="searchButton" type="submit" aria-controls="results">
             Buscar
           </button>
 
         </form>
 
-
-        <p
-          class="status-message"
-          id="status"
-          role="status"
-          aria-live="polite"
-          aria-atomic="true"
-        >
+        <!-- // Estado de la búsqueda (única región viva de esta vista) -->
+        <p class="status-message" id="status" role="status" aria-live="polite" aria-atomic="true">
           Busca una canción para comenzar.
         </p>
 
-
-        <!-- RESULTADOS -->
-
+        <!-- // Resultados -->
         <div class="section-heading">
-
           <div>
             <p class="eyebrow">TU BÚSQUEDA</p>
-            <h2>Resultados</h2>
+            <h2 id="resultsTitle">Resultados</h2>
           </div>
-
-          <span
-            class="muted tiny"
-            id="resultCount"
-            aria-live="polite"
-            aria-atomic="true"
-          ></span>
-
+          <span class="muted tiny" id="resultCount" aria-live="polite" aria-atomic="true"></span>
         </div>
 
-        <div
-          class="track-list"
-          id="results"
-          role="group"
-          aria-label="Resultados de búsqueda"
-          aria-live="polite"
-          aria-relevant="additions text"
-        ></div>
+        <div class="track-list" id="results" role="group" aria-labelledby="resultsTitle"></div>
 
       </section>
 
 
-      <!-- =====================================
-           BIBLIOTECA
-      ====================================== -->
-
-      <section
-        class="view"
-        id="view-library"
-        aria-hidden="true"
-        aria-labelledby="libraryTitle"
-      >
+      <!-- // ------------------------------------------------------------
+           // 12.3 VISTA: BIBLIOTECA
+           // ------------------------------------------------------------ -->
+      <section class="view" id="view-library" aria-hidden="true" inert aria-labelledby="libraryTitle">
 
         <div class="page-heading">
-
           <p class="eyebrow">TU COLECCIÓN</p>
-
           <h1 id="libraryTitle">Biblioteca</h1>
-
-          <p class="hero-copy">
-            Todo lo que has guardado en Shunel.
-          </p>
-
+          <p class="hero-copy">Todo lo que has guardado en Shunel.</p>
         </div>
 
-        <!-- FILTROS DE BIBLIOTECA -->
+        <!-- // Filtros -->
+        <div class="library-filters" role="group" aria-label="Filtros de biblioteca">
 
-        <div
-          class="library-filters"
-          role="group"
-          aria-label="Filtros de biblioteca"
-        >
-
-          <button
-            class="filter-chip active"
-            type="button"
-            title="Mostrar todo"
-            data-library-filter="all"
-            aria-pressed="true"
-            aria-controls="libraryList favoritesList"
-          >
+          <button class="filter-chip active" type="button" data-library-filter="all" aria-pressed="true" aria-controls="libraryList favoritesList">
             Todo
           </button>
 
-          <button
-            class="filter-chip"
-            type="button"
-            title="Mostrar solo favoritos"
-            data-library-filter="favorites"
-            aria-pressed="false"
-            aria-controls="libraryList favoritesList"
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <use href="#icon-heart"/>
-            </svg>
-
+          <button class="filter-chip" type="button" data-library-filter="favorites" aria-pressed="false" aria-controls="libraryList favoritesList">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#icon-heart"/></svg>
             Favoritos
           </button>
 
         </div>
 
-        <!-- CANCIONES GUARDADAS -->
+        <!-- // Canciones guardadas -->
+        <div class="track-list" id="libraryList" role="group" aria-label="Canciones guardadas"></div>
 
-        <div
-          class="track-list"
-          id="libraryList"
-          role="group"
-          aria-label="Canciones guardadas"
-          aria-live="polite"
-        ></div>
-
-        <!-- FAVORITOS -->
-
-        <div
-          class="track-list"
-          id="favoritesList"
-          role="group"
-          aria-label="Canciones favoritas"
-          aria-live="polite"
-          hidden
-        ></div>
+        <!-- // Favoritos -->
+        <div class="track-list" id="favoritesList" role="group" aria-label="Canciones favoritas" hidden></div>
 
       </section>
 
 
-      <!-- =====================================
-           HISTORIAL
-      ====================================== -->
-
-      <section
-        class="view"
-        id="view-history"
-        aria-hidden="true"
-        aria-labelledby="historyTitle"
-      >
+      <!-- // ------------------------------------------------------------
+           // 12.4 VISTA: HISTORIAL
+           // ------------------------------------------------------------ -->
+      <section class="view" id="view-history" aria-hidden="true" inert aria-labelledby="historyTitle">
 
         <div class="page-heading">
-
           <p class="eyebrow">RECIENTEMENTE</p>
-
           <h1 id="historyTitle">Historial</h1>
-
-          <p class="hero-copy">
-            Vuelve a escuchar lo que te gusta.
-          </p>
-
+          <p class="hero-copy">Vuelve a escuchar lo que te gusta.</p>
         </div>
 
-        <div
-          class="track-list"
-          id="historyList"
-          role="group"
-          aria-label="Historial de reproducción"
-          aria-live="polite"
-        ></div>
+        <div class="track-list" id="historyList" role="group" aria-labelledby="historyTitle"></div>
 
       </section>
 
 
-      <!-- =====================================
-           LETRAS
-      ====================================== -->
-
-      <section
-        class="view"
-        id="view-lyrics"
-        aria-hidden="true"
-        aria-labelledby="lyricsTitle"
-      >
+      <!-- // ------------------------------------------------------------
+           // 12.5 VISTA: LETRAS (lyrics.js + lyrics-studio.js)
+           // ------------------------------------------------------------ -->
+      <section class="view" id="view-lyrics" aria-hidden="true" inert aria-labelledby="lyricsTitle">
 
         <div class="page-heading">
-
           <p class="eyebrow">LETRA DE LA CANCIÓN</p>
-
           <h1 id="lyricsTitle">Sincronizada</h1>
-
-          <p
-            class="hero-copy"
-            id="lyricsSubtitle"
-            aria-live="polite"
-          >
-            Cargando letra...
-          </p>
-
+          <p class="hero-copy" id="lyricsSubtitle" aria-live="polite">Cargando letra...</p>
         </div>
 
-        <div
-          class="lyrics-container"
-          id="lyricsContainer"
-          role="region"
-          aria-label="Letra de la canción"
-          aria-live="polite"
-          tabindex="0"
-        >
+        <!-- // Sin aria-live: la línea activa cambia cada segundo y saturaría VoiceOver -->
+        <div class="lyrics-container" id="lyricsContainer" role="region" aria-label="Letra de la canción" tabindex="0">
           <p class="muted">Reproduce una canción para ver su letra aquí.</p>
         </div>
 
       </section>
 
 
-      <!-- =====================================
-           YOUTUBE PLAYER
-      ====================================== -->
-
-      <section
-        class="youtube-stage"
-        id="youtubeStage"
-        aria-label="Reproductor de YouTube"
-      >
+      <!-- // ------------------------------------------------------------
+           // 12.6 ESCENARIO DE YOUTUBE (player.js reemplaza #youtubePlayerHost por el iframe)
+           // ------------------------------------------------------------ -->
+      <section class="youtube-stage" id="youtubeStage" aria-labelledby="youtubeStageTitle">
 
         <div class="section-heading">
-
           <div>
-            <p class="eyebrow"></p>
-            <h2></h2>
+            <p class="eyebrow" hidden></p>
+            <h2 class="sr-only" id="youtubeStageTitle">Reproductor de YouTube</h2>
           </div>
-
         </div>
 
-        <div class="youtube-frame-wrap">
+        <div class="youtube-frame-wrap" data-state="loading" aria-busy="true">
           <div id="youtubePlayerHost"></div>
         </div>
 
-        <p class="player-disclaimer">
-
-        </p>
+        <!-- // Aquí se explica el error real de YouTube (2, 5, 100, 101, 150, 153) -->
+        <p class="player-disclaimer" id="playerDisclaimer" role="status" aria-live="polite"></p>
 
       </section>
 
 
-      <!-- FOOTER -->
-
+      <!-- // Pie de página -->
       <footer class="footer">
-
-        <span>SHUNEL</span>
-
+        <span translate="no">SHUNEL</span>
         <span id="footerYear"></span>
-
       </footer>
 
     </main>
 
 
-    <!-- =====================================
-         MINI PLAYER
-    ====================================== -->
-
-    <section
-      class="player-dock"
-      id="playerDock"
-      aria-label="Reproductor musical"
-    >
+    <!-- // ==============================================================
+         // 13. MINI REPRODUCTOR (dock)
+         // ============================================================== -->
+    <section class="player-dock" id="playerDock" aria-label="Reproductor musical">
 
       <div class="now-playing">
 
-        <img
-          id="currentThumbnail"
-          src="/assets/placeholder.svg"
-          alt=""
-          class="current-art"
-          decoding="async"
-          draggable="false"
-        >
+        <img id="currentThumbnail" src="/assets/placeholder.svg" alt="" class="current-art" width="48" height="48" decoding="async" draggable="false">
 
-        <div
-          class="now-playing-text"
-          aria-live="polite"
-          aria-atomic="true"
-        >
-
-          <div
-            class="current-title"
-            id="currentTitle"
-          >
-
-          </div>
-
-          <div
-            class="current-channel"
-            id="currentChannel"
-          >
-            Tu música comienza aquí
-          </div>
-
+        <div class="now-playing-text">
+          <div class="current-title" id="currentTitle">Nada sonando</div>
+          <div class="current-channel" id="currentChannel">Tu música comienza aquí</div>
         </div>
 
-        <button
-          class="icon-button favorite-current"
-          id="favoriteCurrent"
-          type="button"
-          aria-label="Agregar a favoritos"
-          title="Favorito"
-        >
-
-          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <use href="#icon-heart"/>
-          </svg>
-
+        <button class="icon-button favorite-current" id="favoriteCurrent" type="button" aria-label="Agregar a favoritos" aria-pressed="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#icon-heart"/></svg>
         </button>
 
       </div>
-
 
       <div class="player-center">
 
-        <div
-          class="player-controls"
-          role="group"
-          aria-label="Controles de reproducción"
-        >
+        <div class="player-controls" role="group" aria-label="Controles de reproducción">
 
-          <button
-            class="control-button"
-            id="previousButton"
-            type="button"
-            aria-label="Canción anterior"
-            title="Canción anterior"
-          >
-
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <use href="#icon-previous"/>
-            </svg>
-
+          <button class="control-button" id="previousButton" type="button" aria-label="Canción anterior">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#icon-previous"/></svg>
           </button>
 
-
-          <button
-            class="play-button"
-            id="playButton"
-            type="button"
-            aria-label="Reproducir"
-            title="Reproducir / Pausar"
-          >
-
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <use href="#icon-play"/>
-            </svg>
-
+          <button class="play-button" id="playButton" type="button" aria-label="Reproducir" aria-pressed="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#icon-play"/></svg>
           </button>
 
-
-          <button
-            class="control-button"
-            id="nextButton"
-            type="button"
-            aria-label="Siguiente canción"
-            title="Siguiente canción"
-          >
-
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <use href="#icon-next"/>
-            </svg>
-
+          <button class="control-button" id="nextButton" type="button" aria-label="Siguiente canción">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#icon-next"/></svg>
           </button>
 
         </div>
 
-
         <div class="progress-row">
-
           <span id="currentTime">0:00</span>
-
-          <input
-            id="progressBar"
-            type="range"
-            min="0"
-            max="100"
-            value="0"
-            step="0.1"
-            autocomplete="off"
-            title="Progreso"
-            aria-label="Progreso de reproducción"
-          >
-
+          <input id="progressBar" type="range" min="0" max="100" value="0" step="0.1" autocomplete="off" aria-label="Progreso de reproducción">
           <span id="duration">0:00</span>
-
         </div>
 
       </div>
 
+      <div class="player-extra" role="group" aria-label="Cola y volumen">
 
-      <div
-        class="player-extra"
-        role="group"
-        aria-label="Cola y volumen"
-      >
-
-        <button
-          class="queue-toggle"
-          id="queueToggle"
-          type="button"
-          aria-label="Mostrar cola"
-          aria-controls="queuePanel"
-          aria-expanded="false"
-          title="Mostrar cola"
-        >
-
-          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <use href="#icon-queue"/>
-          </svg>
-
+        <button class="queue-toggle" id="queueToggle" type="button" aria-label="Mostrar cola" aria-controls="queuePanel" aria-expanded="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#icon-queue"/></svg>
           <span>Cola</span>
-
         </button>
 
+        <!-- // En iOS se oculta: el volumen de un video embebido no se puede cambiar por JS -->
         <span class="volume-icon" aria-hidden="true">
-
-          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <use href="#icon-volume"/>
-          </svg>
-
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#icon-volume"/></svg>
         </span>
 
-        <input
-          id="volumeBar"
-          type="range"
-          min="0"
-          max="100"
-          value="75"
-          autocomplete="off"
-          title="Volumen"
-          aria-label="Volumen"
-        >
+        <input id="volumeBar" type="range" min="0" max="100" value="75" step="1" autocomplete="off" aria-label="Volumen">
 
       </div>
 
     </section>
 
 
-    <!-- =====================================
-         FULL PLAYER
-    ====================================== -->
-
-    <section
-      class="full-player"
-      id="fullPlayer"
-      role="dialog"
-      aria-modal="true"
-      tabindex="-1"
-      aria-label="Reproductor expandido"
-      aria-describedby="fullPlayerChannel"
-      aria-hidden="true"
-    >
+    <!-- // ==============================================================
+         // 14. REPRODUCTOR EXPANDIDO (ui.toggleFullPlayer maneja inert/aria-hidden)
+         // ============================================================== -->
+    <section class="full-player" id="fullPlayer" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="fullPlayerTitle" aria-describedby="fullPlayerChannel" aria-hidden="true" inert>
 
       <div class="full-player-header">
 
-        <button
-          class="icon-button"
-          id="closeFullPlayer"
-          type="button"
-          aria-label="Cerrar reproductor"
-          title="Cerrar reproductor"
-        >
-
-          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <use href="#icon-chevron-down"/>
-          </svg>
-
+        <button class="icon-button" id="closeFullPlayer" type="button" aria-label="Cerrar reproductor">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#icon-chevron-down"/></svg>
         </button>
 
-        <span>REPRODUCIENDO....</span>
+        <span aria-hidden="true">REPRODUCIENDO</span>
 
-        <!-- Botón para ver Letras -->
-        <button
-          class="icon-button"
-          id="openLyricsButton"
-          type="button"
-          aria-label="Ver letra de la canción"
-          aria-controls="view-lyrics"
-          title="Ver letra"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <use href="#icon-lyrics"/>
-          </svg>
+        <!-- // Ir a la letra -->
+        <button class="icon-button" id="openLyricsButton" type="button" aria-label="Ver letra de la canción" aria-controls="view-lyrics">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#icon-lyrics"/></svg>
         </button>
 
-        <!-- Botón para abrir el reproductor/vídeo nativo y activar PiP -->
-        <button
-          class="icon-button"
-          id="openNativePlayer"
-          type="button"
-          aria-label="Abrir vídeo en reproductor nativo"
-          title="Abrir vídeo para PiP"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <use href="#icon-external"/>
-          </svg>
+        <!-- // Abre youtube.com: el iframe embebido no permite PiP programático desde Shunel -->
+        <button class="icon-button" id="openNativePlayer" type="button" aria-label="Abrir en YouTube para usar imagen en imagen">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#icon-external"/></svg>
         </button>
 
-        <button
-          class="icon-button"
-          id="fullPlayerQueue"
-          type="button"
-          aria-label="Abrir cola"
-          aria-controls="queuePanel"
-          aria-expanded="false"
-          title="Abrir cola"
-        >
-
-          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <use href="#icon-queue"/>
-          </svg>
-
+        <button class="icon-button" id="fullPlayerQueue" type="button" aria-label="Abrir cola" aria-controls="queuePanel" aria-expanded="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#icon-queue"/></svg>
         </button>
 
       </div>
 
-
       <div class="full-player-content">
 
-        <img
-          id="fullPlayerThumbnail"
-          src="/assets/placeholder.svg"
-          alt="Portada de la canción"
-          class="full-player-art"
-          decoding="async"
-          draggable="false"
-        >
+        <img id="fullPlayerThumbnail" src="/assets/placeholder.svg" alt="Portada de la canción" class="full-player-art" width="480" height="480" decoding="async" draggable="false">
 
+        <!-- // Visualizador decorativo (rAF + DPR limitado). Ver nota en el script 21 -->
+        <canvas class="shunel-visualizer" id="shunelVisualizer" width="320" height="32" aria-hidden="true"></canvas>
 
         <div class="full-player-info">
-
           <div>
-
-            <h2 id="fullPlayerTitle">
-              ...
-            </h2>
-
-            <p id="fullPlayerChannel">
-              Shunel
-            </p>
-
+            <h2 id="fullPlayerTitle">Nada sonando</h2>
+            <p id="fullPlayerChannel">Shunel</p>
           </div>
-
-          <button
-            class="icon-button"
-            id="fullPlayerFavorite"
-            type="button"
-            aria-label="Agregar a favoritos"
-            title="Favorito"
-          >
-
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <use href="#icon-heart"/>
-            </svg>
-
+          <button class="icon-button" id="fullPlayerFavorite" type="button" aria-label="Agregar a favoritos" aria-pressed="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#icon-heart"/></svg>
           </button>
-
         </div>
-
 
         <div class="full-progress">
-
-          <input
-            id="fullProgressBar"
-            type="range"
-            min="0"
-            max="100"
-            value="0"
-            step="0.1"
-            autocomplete="off"
-            title="Progreso"
-            aria-label="Progreso de reproducción"
-          >
-
+          <input id="fullProgressBar" type="range" min="0" max="100" value="0" step="0.1" autocomplete="off" aria-label="Progreso de reproducción">
           <div class="full-time">
-
             <span id="fullCurrentTime">0:00</span>
-
             <span id="fullDuration">0:00</span>
-
           </div>
-
         </div>
 
+        <div class="full-player-controls" role="group" aria-label="Controles de reproducción">
 
-        <div
-          class="full-player-controls"
-          role="group"
-          aria-label="Controles de reproducción"
-        >
-
-          <button
-            class="control-button"
-            id="fullPreviousButton"
-            type="button"
-            aria-label="Canción anterior"
-            title="Canción anterior"
-          >
-
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <use href="#icon-previous"/>
-            </svg>
-
+          <button class="control-button" id="fullPreviousButton" type="button" aria-label="Canción anterior">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#icon-previous"/></svg>
           </button>
 
-
-          <button
-            class="play-button"
-            id="fullPlayButton"
-            type="button"
-            aria-label="Reproducir"
-            title="Reproducir / Pausar"
-          >
-
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <use href="#icon-play"/>
-            </svg>
-
+          <button class="play-button" id="fullPlayButton" type="button" aria-label="Reproducir" aria-pressed="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#icon-play"/></svg>
           </button>
 
-
-          <button
-            class="control-button"
-            id="fullNextButton"
-            type="button"
-            aria-label="Siguiente canción"
-            title="Siguiente canción"
-          >
-
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <use href="#icon-next"/>
-            </svg>
-
+          <button class="control-button" id="fullNextButton" type="button" aria-label="Siguiente canción">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#icon-next"/></svg>
           </button>
 
         </div>
-
 
         <div class="full-player-options">
-
-          <button
-            class="queue-toggle"
-            id="fullQueueToggle"
-            type="button"
-            aria-controls="queuePanel"
-            aria-expanded="false"
-            title="Mostrar cola"
-          >
-
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <use href="#icon-queue"/>
-            </svg>
-
-            Cola
-
+          <button class="queue-toggle" id="fullQueueToggle" type="button" aria-label="Mostrar cola" aria-controls="queuePanel" aria-expanded="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#icon-queue"/></svg>
+            <span>Cola</span>
           </button>
-
         </div>
 
       </div>
@@ -1442,449 +1090,598 @@
     </section>
 
 
-    <!-- =====================================
-         BOTTOM NAVIGATION
-    ====================================== -->
+    <!-- // ==============================================================
+         // 15. NAVEGACIÓN INFERIOR
+         // ============================================================== -->
+    <nav class="bottom-nav" aria-label="Navegación principal">
 
-    <nav
-      class="bottom-nav"
-      aria-label="Navegación principal"
-    >
-
-      <button
-        class="bottom-nav-item active"
-        type="button"
-        title="Inicio"
-        data-view="home"
-        aria-label="Inicio"
-        aria-current="page"
-      >
-
+      <button class="bottom-nav-item active" type="button" data-view="home" aria-current="page">
         <span class="bottom-nav-icon">
-
-          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <use href="#icon-home"/>
-          </svg>
-
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#icon-home"/></svg>
         </span>
-
         <span>Inicio</span>
-
       </button>
 
-
-      <button
-        class="bottom-nav-item"
-        type="button"
-        title="Buscar"
-        data-view="search"
-        aria-label="Buscar"
-        aria-current="false"
-      >
-
+      <button class="bottom-nav-item" type="button" data-view="search" aria-current="false">
         <span class="bottom-nav-icon">
-
-          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <use href="#icon-search"/>
-          </svg>
-
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#icon-search"/></svg>
         </span>
-
         <span>Buscar</span>
-
       </button>
 
-
-      <button
-        class="bottom-nav-item"
-        type="button"
-        title="Biblioteca"
-        data-view="library"
-        aria-label="Biblioteca"
-        aria-current="false"
-      >
-
+      <button class="bottom-nav-item" type="button" data-view="library" aria-current="false">
         <span class="bottom-nav-icon">
-
-          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <use href="#icon-library"/>
-          </svg>
-
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#icon-library"/></svg>
         </span>
-
         <span>Biblioteca</span>
-
       </button>
 
-
-      <button
-        class="bottom-nav-item"
-        type="button"
-        title="Historial"
-        data-view="history"
-        aria-label="Historial"
-        aria-current="false"
-      >
-
+      <button class="bottom-nav-item" type="button" data-view="history" aria-current="false">
         <span class="bottom-nav-icon">
-
-          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <use href="#icon-history"/>
-          </svg>
-
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#icon-history"/></svg>
         </span>
-
         <span>Historial</span>
-
       </button>
 
     </nav>
 
 
-    <!-- =====================================
-         QUEUE PANEL
-    ====================================== -->
-
-    <aside
-      class="queue-panel"
-      id="queuePanel"
-      tabindex="-1"
-      aria-label="Cola de reproducción"
-      aria-hidden="true"
-    >
+    <!-- // ==============================================================
+         // 16. PANEL DE COLA (ui.toggleQueue maneja inert/aria-hidden)
+         // ============================================================== -->
+    <aside class="queue-panel" id="queuePanel" tabindex="-1" aria-labelledby="queueTitle" aria-hidden="true" inert>
 
       <div class="queue-header">
-
         <div>
-
           <p class="eyebrow">A CONTINUACIÓN</p>
-
-          <h2>Tu cola</h2>
-
+          <h2 id="queueTitle">Tu cola</h2>
         </div>
-
-        <button
-          class="icon-button"
-          id="closeQueue"
-          type="button"
-          aria-label="Cerrar cola"
-          title="Cerrar cola"
-        >
-
-          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <use href="#icon-close"/>
-          </svg>
-
+        <button class="icon-button" id="closeQueue" type="button" aria-label="Cerrar cola">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#icon-close"/></svg>
         </button>
-
       </div>
 
-      <div
-        class="queue-list"
-        id="queueList"
-        role="group"
-        aria-label="Canciones en la cola"
-        aria-live="polite"
-      ></div>
+      <div class="queue-list" id="queueList" role="group" aria-label="Canciones en la cola"></div>
 
-      <button
-        class="text-button"
-        id="clearQueue"
-        type="button"
-        title="Vaciar toda la cola"
-      >
-        Vaciar cola
-      </button>
+      <button class="text-button" id="clearQueue" type="button">Vaciar cola</button>
 
     </aside>
 
 
-    <!-- =====================================
-         TOAST
-    ====================================== -->
-
-    <div
-      class="toast"
-      id="toast"
-      role="status"
-      aria-live="polite"
-      aria-atomic="true"
-    ></div>
+    <!-- // ==============================================================
+         // 17. TOAST (mensajes cortos de ui.toastMessage)
+         // ============================================================== -->
+    <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
   </div>
 
 
-  <!-- =====================================
-       MEJORAS INLINE (JS ligero)
-  ====================================== -->
+  <!-- // ================================================================
+       // 18. HOJA DE APARIENCIA Y DATOS (nuevo, no depende de app.js)
+       // <dialog> + showModal(): foco atrapado y fondo inert nativos
+       // ================================================================ -->
+  <dialog class="shunel-sheet" id="appearanceSheet" aria-labelledby="appearanceTitle">
+    <form method="dialog">
+
+      <div class="shunel-sheet__header">
+        <h2 id="appearanceTitle">Apariencia</h2>
+        <button class="icon-button" type="submit" value="close" aria-label="Cerrar">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#icon-close"/></svg>
+        </button>
+      </div>
+
+      <!-- // Colores de acento (nombres ticos) -->
+      <fieldset>
+        <legend>Color de acento</legend>
+        <div class="shunel-swatches" id="accentSwatches">
+          <label class="shunel-swatch" style="--swatch:#ffffff"><input type="radio" name="accent" value="#ffffff" aria-label="Blanco (original)"><span></span></label>
+          <label class="shunel-swatch" style="--swatch:#e8d9b5"><input type="radio" name="accent" value="#e8d9b5" aria-label="Arena"><span></span></label>
+          <label class="shunel-swatch" style="--swatch:#c9a7ff"><input type="radio" name="accent" value="#c9a7ff" aria-label="Guaria morada"><span></span></label>
+          <label class="shunel-swatch" style="--swatch:#7fd3e6"><input type="radio" name="accent" value="#7fd3e6" aria-label="Pacífico"><span></span></label>
+          <label class="shunel-swatch" style="--swatch:#8fd6a0"><input type="radio" name="accent" value="#8fd6a0" aria-label="Selva"><span></span></label>
+          <label class="shunel-swatch" style="--swatch:#ff8a6b"><input type="radio" name="accent" value="#ff8a6b" aria-label="Volcán"><span></span></label>
+        </div>
+        <label class="shunel-row">
+          <span>Color personalizado</span>
+          <input type="color" id="accentCustom" value="#ffffff">
+        </label>
+      </fieldset>
+
+      <!-- // Visualizador -->
+      <div>
+        <label class="shunel-row">
+          <span>Visualizador en el reproductor</span>
+          <input type="checkbox" id="visualizerToggle" checked>
+        </label>
+        <p class="shunel-sheet__hint">
+          Sigue el ritmo de la reproducción. YouTube no deja que otras páginas lean su audio, así que no es un espectro real.
+        </p>
+      </div>
+
+      <!-- // Datos locales: persistencia + respaldo -->
+      <div>
+        <p class="shunel-sheet__label">Tus datos</p>
+        <div class="shunel-actions">
+          <button class="shunel-btn shunel-btn--wide" type="button" id="persistStorageButton">Proteger mis datos</button>
+          <button class="shunel-btn" type="button" id="exportDataButton">Exportar copia</button>
+          <button class="shunel-btn" type="button" id="importDataButton">Importar copia</button>
+        </div>
+        <input type="file" id="importDataInput" accept="application/json,.json" hidden>
+        <p class="shunel-sheet__hint" id="storageStatus" role="status" aria-live="polite">
+          Tu biblioteca, favoritos, historial y cola se guardan solo en este dispositivo.
+        </p>
+      </div>
+
+      <button class="shunel-btn shunel-btn--primary" type="submit" value="done">Listo</button>
+
+    </form>
+  </dialog>
+
+
+  <!-- // ================================================================
+       // 19. SCRIPT BASE (clásico): viewport, conexión, año, saludo, atajos
+       // Corre antes que app.js, igual que el script inline original.
+       // ================================================================ -->
   <script>
     (function () {
       "use strict";
 
+      // // Raíz del documento
       var root = document.documentElement;
 
-      /* Altura real del viewport en móviles (throttled con rAF) */
+      // // --app-height real (iOS cambia innerHeight al ocultar la barra)
       var heightQueued = false;
-
       function setAppHeight() {
         heightQueued = false;
         root.style.setProperty("--app-height", window.innerHeight + "px");
       }
-
       function queueAppHeight() {
         if (heightQueued) return;
         heightQueued = true;
-        window.requestAnimationFrame(setAppHeight);
+        requestAnimationFrame(setAppHeight);
       }
-
       setAppHeight();
       window.addEventListener("resize", queueAppHeight, { passive: true });
-      window.addEventListener("orientationchange", queueAppHeight, { passive: true });
-
-      if (window.visualViewport) {
-        window.visualViewport.addEventListener("resize", queueAppHeight, { passive: true });
+      // // "orientationchange" está obsoleto: se usa screen.orientation
+      if (window.screen && screen.orientation && screen.orientation.addEventListener) {
+        screen.orientation.addEventListener("change", queueAppHeight);
       }
 
-      /* Detecta si la app está instalada (PWA standalone) */
-      var standalone =
-        (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) ||
-        window.navigator.standalone === true;
-      if (standalone) root.classList.add("is-standalone");
-
-      /* Dispositivos táctiles */
-      if (window.matchMedia && window.matchMedia("(hover: none)").matches) {
-        root.classList.add("is-touch");
-      }
-
-      /* Estado de conexión (visual + lectores de pantalla) */
+      // // Estado de conexión (banner visual + lector de pantalla)
+      var banner = document.getElementById("offlineBanner");
       var connection = document.getElementById("connectionStatus");
       var wasOffline = !navigator.onLine;
-
       function syncOnline() {
         var offline = !navigator.onLine;
-
         root.classList.toggle("is-offline", offline);
-
+        if (banner) banner.hidden = !offline;
         if (connection) {
-          connection.textContent = offline
-            ? "Sin conexión."
-            : wasOffline
-              ? "Conexión restablecida."
-              : "";
+          connection.textContent = offline ? "Sin conexión." : (wasOffline ? "Conexión restablecida." : "");
         }
-
         wasOffline = offline;
       }
-
       syncOnline();
       window.addEventListener("online", syncOnline);
       window.addEventListener("offline", syncOnline);
 
-      /* Año automático en el pie de página */
+      // // Año del pie de página
       var year = document.getElementById("footerYear");
       if (year) year.textContent = "© " + new Date().getFullYear();
 
-      /* aria-expanded de los botones de cola sincronizado con el panel */
-      var queuePanel = document.getElementById("queuePanel");
-
-      var queueButtons = ["queueToggle", "fullQueueToggle", "fullPlayerQueue"]
-        .map(function (id) { return document.getElementById(id); })
-        .filter(Boolean);
-
-      function syncQueue() {
-        var open =
-          queuePanel.getAttribute("aria-hidden") === "false" ||
-          queuePanel.classList.contains("open") ||
-          queuePanel.classList.contains("is-open");
-
-        queueButtons.forEach(function (button) {
-          button.setAttribute("aria-expanded", String(open));
-        });
+      // // Saludo según la hora de Costa Rica
+      var greeting = document.getElementById("homeGreeting");
+      if (greeting) {
+        var hour = Number(new Intl.DateTimeFormat("es-CR", { hour: "numeric", hourCycle: "h23", timeZone: "America/Costa_Rica" }).format(new Date()));
+        greeting.textContent = hour >= 5 && hour < 12 ? "BUENOS DÍAS" : hour >= 12 && hour < 19 ? "BUENAS TARDES" : "BUENAS NOCHES";
+        greeting.hidden = false;
       }
 
-      if (queuePanel && window.MutationObserver) {
-        syncQueue();
-
-        new MutationObserver(syncQueue).observe(queuePanel, {
-          attributes: true,
-          attributeFilter: ["aria-hidden", "class"]
-        });
-      }
-
-      /* Título de la pestaña según la vista activa */
-      var BASE_TITLE = "Shunel";
-
-      var VIEW_TITLES = {
-        home: "",
-        search: "Buscar",
-        library: "Biblioteca",
-        history: "Historial",
-        lyrics: "Letra"
-      };
-
-      function syncTitle() {
-        var active = document.querySelector(".view.active");
-        if (!active || !active.id) return;
-
-        var key = active.id.replace(/^view-/, "");
-        if (!Object.prototype.hasOwnProperty.call(VIEW_TITLES, key)) return;
-
-        /* No pisa títulos puestos por la app (por ejemplo, la canción actual). */
-        var current = document.title;
-        if (current !== BASE_TITLE && !/ · Shunel$/.test(current)) return;
-
-        var label = VIEW_TITLES[key];
-
-        document.title = label ? label + " · " + BASE_TITLE : BASE_TITLE;
-      }
-
-      if (window.MutationObserver) {
-        var titleObserver = new MutationObserver(syncTitle);
-
-        Array.prototype.forEach.call(
-          document.querySelectorAll(".view"),
-          function (view) {
-            titleObserver.observe(view, {
-              attributes: true,
-              attributeFilter: ["class"]
-            });
-          }
-        );
-      }
-
-      /* Atajos: "/" o Ctrl/Cmd+K llevan al buscador */
+      // // Atajos de teclado: "/" o Ctrl/Cmd+K abren el buscador
       document.addEventListener("keydown", function (event) {
         if (event.defaultPrevented || event.isComposing) return;
-
         var target = event.target;
-
-        var typing =
-          target &&
-          (target.tagName === "INPUT" ||
-            target.tagName === "TEXTAREA" ||
-            target.tagName === "SELECT" ||
-            target.isContentEditable);
-
-        var isSlash =
-          event.key === "/" && !typing && !event.ctrlKey && !event.metaKey && !event.altKey;
-
-        var isCtrlK =
-          (event.ctrlKey || event.metaKey) && String(event.key).toLowerCase() === "k";
-
+        var typing = target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT" || target.isContentEditable);
+        var isSlash = event.key === "/" && !typing && !event.ctrlKey && !event.metaKey && !event.altKey;
+        var isCtrlK = (event.ctrlKey || event.metaKey) && String(event.key).toLowerCase() === "k";
         if (!isSlash && !isCtrlK) return;
-
         event.preventDefault();
-
         var searchTab = document.querySelector('.bottom-nav-item[data-view="search"]');
         if (searchTab) searchTab.click();
-
-        setTimeout(function () {
+        // // rAF en vez de setTimeout(60): espera a que ui.js quite el inert
+        requestAnimationFrame(function () {
           var input = document.getElementById("searchInput");
           if (input) input.focus();
-        }, 60);
+        });
       });
     })();
   </script>
 
 
-  <!-- =====================================
-       JAVASCRIPT
-  ====================================== -->
-
+  <!-- // ================================================================
+       // 20. APP PRINCIPAL
+       // Corregido: antes decía "<<script" (se pintaba un "<" suelto).
+       // lyrics-studio.js va primero porque antes también se ejecutaba
+       // antes que app.js (script clásico vs. módulo diferido).
+       // ================================================================ -->
+  <script src="/js/lyrics-studio.js"></script>
   <script type="module" src="/js/app.js"></script>
-  <<script src="/js/lyrics-studio.js"></script>
-  <!-- Top 50 Costa Rica: conecta charts.js con el buscador existente -->
+
+
+  <!-- // ================================================================
+       // 21. MEJORAS (módulo): no duplica nada de app.js / ui.js
+       // - Media Session, inert, play-request y Top 50 YA los maneja app.js
+       // - Aquí: cola aria, título, estados de YouTube, visualizador,
+       //   acento, respaldo de datos y aviso si el Top 50 no carga
+       // - Todo listener cuelga de un AbortController y los observers
+       //   se desconectan en pagehide (sin fugas de memoria)
+       // ================================================================ -->
   <script type="module">
-    const TOP50_ID = "spotifyCostaRicaTop50";
+    // // ---------- 21.0 Utilidades ----------
+    const $ = (selector, scope = document) => scope.querySelector(selector);
+    const root = document.documentElement;
+    const lifecycle = new AbortController();
+    const { signal } = lifecycle;
+    const observers = [];
+    const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
 
-    /*
-     * Al pulsar una canción se emite "shunel:play-request".
-     * Si app.js escucha ese evento y llama a preventDefault(), él se encarga
-     * de reproducir. Si no, se usa el buscador de Shunel con "artista título".
-     */
-    function requestPlay(track) {
-      const event = new CustomEvent("shunel:play-request", {
-        detail: track,
-        cancelable: true
-      });
-
-      if (!document.dispatchEvent(event)) return;
-
-      const input = document.getElementById("searchInput");
-      const form = document.getElementById("searchForm");
-
-      if (!input || !form) {
-        throw new Error("El buscador de Shunel no está disponible.");
-      }
-
-      document
-        .querySelector('.bottom-nav-item[data-view="search"]')
-        ?.click();
-
-      input.value = track.query;
-
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-
-      if (typeof form.requestSubmit === "function") {
-        form.requestSubmit();
-      } else {
-        form.dispatchEvent(
-          new Event("submit", { bubbles: true, cancelable: true })
-        );
-      }
+    function observe(target, callback, options) {
+      if (!target || !("MutationObserver" in window)) return null;
+      const observer = new MutationObserver(callback);
+      observer.observe(target, options);
+      observers.push(observer);
+      return observer;
     }
 
-    let booted = false;
+    function readStore(key, fallback = null) {
+      try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; }
+    }
 
-    async function bootTop50() {
-      if (booted) return;
+    function writeStore(key, value) {
+      try { localStorage.setItem(key, value); return true; } catch { return false; }
+    }
 
-      booted = true;
+    // // ---------- 21.1 aria-expanded de los 3 botones de cola ----------
+    // // ui.js actualiza queueToggle y fullQueueToggle; #fullPlayerQueue quedaba desincronizado
+    const queuePanel = $("#queuePanel");
+    const queueButtons = ["queueToggle", "fullQueueToggle", "fullPlayerQueue"].map(id => document.getElementById(id)).filter(Boolean);
+    function syncQueue() {
+      if (!queuePanel) return;
+      const open = queuePanel.getAttribute("aria-hidden") === "false" || queuePanel.classList.contains("open") || queuePanel.classList.contains("is-open") || queuePanel.classList.contains("active");
+      for (const button of queueButtons) button.setAttribute("aria-expanded", String(open));
+    }
+    syncQueue();
+    observe(queuePanel, syncQueue, { attributes: true, attributeFilter: ["aria-hidden", "class"] });
 
-      const root = document.getElementById(TOP50_ID);
+    // // ---------- 21.2 Título de la pestaña según la vista ----------
+    const BASE_TITLE = "Shunel";
+    const VIEW_TITLES = { home: "", search: "Buscar", library: "Biblioteca", history: "Historial", lyrics: "Letra" };
+    function syncTitle() {
+      const active = $(".view.active");
+      const key = active?.id?.replace(/^view-/, "");
+      if (!key || !(key in VIEW_TITLES)) return;
+      // // No pisa títulos que ponga la app (por ejemplo, la canción actual)
+      if (document.title !== BASE_TITLE && !/ · Shunel$/.test(document.title)) return;
+      document.title = VIEW_TITLES[key] ? `${VIEW_TITLES[key]} · ${BASE_TITLE}` : BASE_TITLE;
+    }
+    // // Se observan solo las 5 vistas (no todo <main>) para no disparar con cada fila de canción
+    for (const view of document.querySelectorAll(".view")) observe(view, syncTitle, { attributes: true, attributeFilter: ["class"] });
 
-      if (!root || root.querySelector(".shunel-chart__heading")) {
-        return;
+    // // ---------- 21.3 Estados del reproductor de YouTube ----------
+    const frameWrap = $(".youtube-frame-wrap");
+    const disclaimer = $("#playerDisclaimer");
+    const YT_ERRORS = {
+      2: "El enlace del video no es válido.",
+      5: "Este video no se puede reproducir en el navegador.",
+      100: "El video fue eliminado o es privado.",
+      101: "El dueño no permite reproducir este video fuera de YouTube. Ábrelo con el botón de YouTube.",
+      150: "El dueño no permite reproducir este video fuera de YouTube. Ábrelo con el botón de YouTube.",
+      153: "YouTube rechazó la petición por falta de referer. Revisa la política Referrer-Policy."
+    };
+    function setFrameState(state, message = "") {
+      if (!frameWrap) return;
+      frameWrap.dataset.state = state;
+      frameWrap.setAttribute("aria-busy", String(state === "loading"));
+      if (disclaimer) disclaimer.textContent = message;
+    }
+    // // El iframe aparece cuando player.js crea YT.Player: se le pone título accesible
+    observe(frameWrap, () => {
+      const iframe = frameWrap.querySelector("iframe");
+      if (!iframe) return;
+      if (!iframe.title) iframe.title = "Reproductor de YouTube";
+      if (frameWrap.dataset.state === "loading") setFrameState("ready");
+    }, { childList: true, subtree: true });
+    // // Mensajes postMessage que el iframe de YouTube envía a la página
+    window.addEventListener("message", event => {
+      if (!/^https:\/\/www\.youtube(-nocookie)?\.com$/.test(event.origin)) return;
+      let data = event.data;
+      if (typeof data === "string") { try { data = JSON.parse(data); } catch { return; } }
+      if (!data || typeof data !== "object") return;
+      if (data.event === "onError") {
+        const code = Number(data.info);
+        setFrameState("error", YT_ERRORS[code] || `YouTube no pudo reproducir este video (código ${code}).`);
+      } else if (data.event === "onStateChange" && Number(data.info) === 1 && frameWrap?.dataset.state === "error") {
+        setFrameState("ready");
+      }
+    }, { signal });
+    // // Si en 15 s no hay iframe, se avisa en vez de dejar un hueco vacío
+    const ytTimeout = setTimeout(() => {
+      if (frameWrap && !frameWrap.querySelector("iframe")) {
+        setFrameState("error", navigator.onLine ? "No se pudo cargar el reproductor de YouTube. Revisa bloqueadores de contenido." : "Sin conexión: el reproductor se cargará al volver la red.");
+      }
+    }, 15000);
+
+    // // ---------- 21.4 Top 50: aviso de respaldo (sin inicializar dos veces) ----------
+    // // Antes había un segundo initCostaRicaTop50() aquí que competía con app.js.
+    // // Ahora solo se muestra un enlace a Kworb si app.js no logra montarlo.
+    const top50 = $("#spotifyCostaRicaTop50");
+    const top50Timeout = setTimeout(() => {
+      if (!top50 || top50.querySelector(".shunel-chart__heading")) return;
+      const fallback = top50.querySelector(".top50-fallback");
+      if (!fallback) return;
+      top50.removeAttribute("aria-busy");
+      fallback.textContent = "No se pudo cargar el ranking ahora. ";
+      const link = document.createElement("a");
+      link.href = "https://kworb.net/spotify/country/cr_daily.html";
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.textContent = "Verlo en Kworb";
+      fallback.append(link, ".");
+    }, 12000);
+
+    // // ---------- 21.5 Color de acento ----------
+    const DEFAULT_ACCENT = "#ffffff";
+    const ACCENT_KEY = "shunel_accent_v1";
+    function onAccentFor(hex) {
+      const channel = i => { const c = parseInt(hex.slice(i, i + 2), 16) / 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+      const luminance = 0.2126 * channel(1) + 0.7152 * channel(3) + 0.0722 * channel(5);
+      return luminance > 0.4 ? "#080808" : "#ffffff";
+    }
+    function applyAccent(hex, persist = true) {
+      if (!/^#[0-9a-f]{6}$/i.test(hex)) return;
+      const value = hex.toLowerCase();
+      root.style.setProperty("--shunel-accent", value);
+      root.style.setProperty("--shunel-on-accent", onAccentFor(value));
+      if (persist) writeStore(ACCENT_KEY, value);
+      for (const radio of document.querySelectorAll('input[name="accent"]')) radio.checked = radio.value === value;
+      const custom = $("#accentCustom");
+      if (custom) custom.value = value;
+      visualizer.refreshColor();
+    }
+
+    // // ---------- 21.6 Visualizador <canvas> ----------
+    // // YouTube corre en un iframe de otro origen: la Web Audio API no puede
+    // // conectar un AnalyserNode a ese audio (el spec exige silencio).
+    // // Por eso las barras se animan según el estado de reproducción
+    // // (body.is-playing lo pone ui.setPlaying) y no según el espectro real.
+    const visualizer = (() => {
+      const canvas = $("#shunelVisualizer");
+      const fullPlayer = $("#fullPlayer");
+      const ctx = canvas?.getContext("2d", { alpha: true });
+      const BARS = 28;
+      const levels = new Float32Array(BARS).fill(0.08);
+      const seeds = Float32Array.from({ length: BARS }, (_, i) => 0.6 + ((i * 7919) % 97) / 97);
+      let enabled = readStore("shunel_visualizer_v1", "on") !== "off";
+      let frame = 0;
+      let last = 0;
+      let color = "#ffffff";
+      let width = 0;
+      let height = 0;
+
+      function resize() {
+        if (!canvas || !ctx) return;
+        const rect = canvas.getBoundingClientRect();
+        // // DPR limitado a 2: en iPhone 3x triplica píxeles sin ganancia visible
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        width = Math.max(1, Math.round(rect.width));
+        height = Math.max(1, Math.round(rect.height));
+        canvas.width = Math.round(width * dpr);
+        canvas.height = Math.round(height * dpr);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        draw();
       }
 
-      try {
-        const { initCostaRicaTop50 } = await import("/js/charts.js");
+      function refreshColor() {
+        color = getComputedStyle(root).getPropertyValue("--shunel-accent").trim() || "#ffffff";
+        draw();
+      }
 
-        if (root.querySelector(".shunel-chart__heading")) return;
+      function isVisible() {
+        return enabled && !document.hidden && fullPlayer?.classList.contains("active");
+      }
 
-        window.shunelTop50 = initCostaRicaTop50({
-          container: root,
-          onPlay: requestPlay
-        });
+      function isPlaying() {
+        return document.body.classList.contains("is-playing");
+      }
 
-      } catch (error) {
-        console.warn(
-          "[Shunel] No se pudo iniciar el Top 50:",
-          error
-        );
+      function draw() {
+        if (!ctx || !width) return;
+        ctx.clearRect(0, 0, width, height);
+        ctx.fillStyle = color;
+        const gap = 3;
+        const barWidth = (width - gap * (BARS - 1)) / BARS;
+        for (let i = 0; i < BARS; i++) {
+          const h = Math.max(2, Math.round(levels[i] * height));
+          const x = Math.round(i * (barWidth + gap));
+          ctx.globalAlpha = 0.35 + levels[i] * 0.65;
+          ctx.fillRect(x, Math.round((height - h) / 2), Math.max(1, Math.round(barWidth)), h);
+        }
+        ctx.globalAlpha = 1;
+      }
 
-        root.removeAttribute("aria-busy");
+      function tick(now) {
+        frame = 0;
+        if (!isVisible()) return;
+        const dt = Math.min(64, now - (last || now));
+        last = now;
+        const playing = isPlaying() && !reducedMotion.matches;
+        const t = now / 1000;
+        let moving = false;
+        for (let i = 0; i < BARS; i++) {
+          const target = playing
+            ? 0.18 + 0.82 * Math.abs(Math.sin(t * 2.1 * seeds[i] + i * 0.55) * Math.cos(t * 1.3 + i * 0.21))
+            : 0.08;
+          // // Suavizado basado en tiempo: igual a 60 Hz y a 120 Hz (ProMotion)
+          const next = levels[i] + (target - levels[i]) * Math.min(1, dt / 90);
+          if (Math.abs(next - levels[i]) > 0.002) moving = true;
+          levels[i] = next;
+        }
+        draw();
+        // // En pausa, cuando las barras se asientan, el bucle se detiene solo
+        if (playing || moving) frame = requestAnimationFrame(tick);
+      }
 
-        const fallback = root.querySelector(".top50-fallback");
-
-        if (fallback) {
-          fallback.textContent =
-            "No se pudo cargar el ranking en este momento.";
+      function update() {
+        root.classList.toggle("visualizer-off", !enabled);
+        if (isVisible()) {
+          if (!frame) { last = 0; frame = requestAnimationFrame(tick); }
+        } else if (frame) {
+          cancelAnimationFrame(frame);
+          frame = 0;
         }
       }
+
+      function setEnabled(value) {
+        enabled = Boolean(value);
+        writeStore("shunel_visualizer_v1", enabled ? "on" : "off");
+        update();
+      }
+
+      if (canvas && ctx) {
+        if ("ResizeObserver" in window) {
+          const resizeObserver = new ResizeObserver(resize);
+          resizeObserver.observe(canvas);
+          observers.push(resizeObserver);
+        } else {
+          window.addEventListener("resize", resize, { signal, passive: true });
+        }
+        observe(document.body, update, { attributes: true, attributeFilter: ["class"] });
+        observe(fullPlayer, update, { attributes: true, attributeFilter: ["class"] });
+        document.addEventListener("visibilitychange", update, { signal });
+        reducedMotion.addEventListener?.("change", update, { signal });
+        refreshColor();
+        update();
+      }
+
+      return {
+        refreshColor,
+        setEnabled,
+        get enabled() { return enabled; },
+        stop() { if (frame) cancelAnimationFrame(frame); frame = 0; }
+      };
+    })();
+
+    // // ---------- 21.7 Hoja de Apariencia ----------
+    const sheet = $("#appearanceSheet");
+    const storageStatus = $("#storageStatus");
+
+    function openSheet() {
+      if (!sheet) return;
+      applyAccent(readStore(ACCENT_KEY, DEFAULT_ACCENT), false);
+      const toggle = $("#visualizerToggle");
+      if (toggle) toggle.checked = visualizer.enabled;
+      refreshStorageStatus();
+      if (typeof sheet.showModal === "function") sheet.showModal();
+      else sheet.setAttribute("open", "");
     }
 
-    document.addEventListener(
-      "DOMContentLoaded",
-      () => setTimeout(bootTop50, 0),
-      { once: true }
-    );
+    $("#appearanceButton")?.addEventListener("click", openSheet, { signal });
 
-    window.addEventListener("load", bootTop50, { once: true });
+    // // Toque en el fondo oscuro cierra la hoja
+    sheet?.addEventListener("click", event => { if (event.target === sheet) sheet.close(); }, { signal });
 
-    if (document.readyState === "complete") {
-      bootTop50();
+    $("#accentSwatches")?.addEventListener("change", event => {
+      if (event.target.name === "accent") applyAccent(event.target.value);
+    }, { signal });
+
+    $("#accentCustom")?.addEventListener("input", event => applyAccent(event.target.value), { signal });
+
+    $("#visualizerToggle")?.addEventListener("change", event => visualizer.setEnabled(event.target.checked), { signal });
+
+    // // ---------- 21.8 Persistencia de datos (ITP de Safari) ----------
+    // // Safari borra localStorage tras 7 días sin uso si NO está instalada en
+    // // pantalla de inicio. persist() pide almacenamiento persistente.
+    async function refreshStorageStatus() {
+      if (!storageStatus) return;
+      const installed = root.classList.contains("is-standalone");
+      let persisted = false;
+      try { persisted = await navigator.storage?.persisted?.(); } catch {}
+      storageStatus.textContent = persisted
+        ? "Protegido: el navegador no borrará tus datos automáticamente."
+        : installed
+          ? "Instalada en pantalla de inicio: tus datos se conservan aunque no la abras por días."
+          : "En Safari, si no usas Shunel por 7 días, iOS puede borrar tus datos. Instálala en pantalla de inicio o exporta una copia.";
     }
+
+    $("#persistStorageButton")?.addEventListener("click", async () => {
+      try {
+        const granted = await navigator.storage?.persist?.();
+        if (!granted && storageStatus) storageStatus.textContent = "El navegador no concedió el permiso. Instalar Shunel en pantalla de inicio ayuda.";
+        else refreshStorageStatus();
+      } catch {
+        if (storageStatus) storageStatus.textContent = "Este navegador no permite proteger el almacenamiento.";
+      }
+    }, { signal });
+
+    // // App instalada: se pide persistencia en silencio (WebKit lo concede por heurística)
+    if (root.classList.contains("is-standalone")) navigator.storage?.persist?.().catch(() => {});
+
+    // // ---------- 21.9 Exportar / importar copia (claves shunel_*) ----------
+    function collectBackup() {
+      const data = {};
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith("shunel")) data[key] = localStorage.getItem(key);
+        }
+      } catch {}
+      return { app: "shunel", version: 1, exportedAt: new Date().toISOString(), data };
+    }
+
+    $("#exportDataButton")?.addEventListener("click", () => {
+      const backup = collectBackup();
+      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `shunel-respaldo-${backup.exportedAt.slice(0, 10)}.json`;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      // // Se libera el blob para no dejar memoria colgando
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+      if (storageStatus) storageStatus.textContent = `Copia exportada (${Object.keys(backup.data).length} grupos de datos).`;
+    }, { signal });
+
+    const importInput = $("#importDataInput");
+    $("#importDataButton")?.addEventListener("click", () => importInput?.click(), { signal });
+    importInput?.addEventListener("change", async () => {
+      const file = importInput.files?.[0];
+      importInput.value = "";
+      if (!file) return;
+      try {
+        if (file.size > 5 * 1024 * 1024) throw new Error("Archivo demasiado grande");
+        const parsed = JSON.parse(await file.text());
+        if (parsed?.app !== "shunel" || typeof parsed.data !== "object") throw new Error("No es una copia de Shunel");
+        const entries = Object.entries(parsed.data).filter(([key, value]) => key.startsWith("shunel") && typeof value === "string");
+        if (!entries.length) throw new Error("La copia está vacía");
+        if (!confirm(`¿Reemplazar tus datos actuales con esta copia (${entries.length} grupos)? Shunel se recargará.`)) return;
+        for (const [key, value] of entries) localStorage.setItem(key, value);
+        location.reload();
+      } catch (error) {
+        if (storageStatus) storageStatus.textContent = `No se pudo importar: ${error.message}.`;
+      }
+    }, { signal });
+
+    // // ---------- 21.10 Limpieza (sin fugas) ----------
+    // // pagehide en vez de unload: compatible con el bfcache de Safari
+    window.addEventListener("pagehide", event => {
+      if (event.persisted) { visualizer.stop(); return; }
+      lifecycle.abort();
+      for (const observer of observers) observer.disconnect();
+      clearTimeout(ytTimeout);
+      clearTimeout(top50Timeout);
+      visualizer.stop();
+    });
   </script>
 
 </body>

@@ -1,0 +1,152 @@
+/* ==========================================================================
+   SHUNEL — Orden visual y ritmo de secciones en vista de Inicio
+   ========================================================================== */
+
+:root {
+  --ui-card-bg: rgba(16, 20, 30, 0.88);
+  --ui-card-border: rgba(255, 255, 255, 0.08);
+  --ui-control-bg: rgba(255, 255, 255, 0.06);
+  --ui-control-hover: rgba(255, 255, 255, 0.12);
+  --ui-radius-card: 16px;
+  --ui-radius-btn: 10px;
+  --ui-gap-section: 18px;
+}
+
+/* 1. Ritmo vertical uniforme entre bloques dentro de Inicio */
+#view-home {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ui-gap-section);
+}
+
+/* 2. Tarjetas limpias para bloques dinámicos (Radio, IA, Mods) */
+#view-home > section,
+#view-home .shunel-radio-section,
+[data-shunel-ai],
+[data-shunel-mods] {
+  background: var(--ui-card-bg);
+  border: 1px solid var(--ui-card-border);
+  border-radius: var(--ui-radius-card);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+/* Evita títulos pegados a su etiqueta superior */
+#view-home h2,
+#view-home h3 {
+  margin: 2px 0 0;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+}
+
+#view-home .eyebrow {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.09em;
+  opacity: 0.72;
+}
+
+/* 3. Chips de estado de ánimo ordenados en fila limpia */
+.mood-chips,
+[class*="mood"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* 4. Botones de radio y acciones sin desbordes ni saltos raros */
+.shunel-radio-section button,
+[class*="radio"] button {
+  min-height: 40px;
+  padding: 8px 14px;
+  border-radius: var(--ui-radius-btn);
+  background: var(--ui-control-bg);
+  border: 1px solid var(--ui-card-border);
+  color: #f8fafc;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.25;
+  text-align: left;
+  max-width: 100%;
+  white-space: normal;
+}
+
+.shunel-radio-section button:hover,
+[class*="radio"] button:hover {
+  background: var(--ui-control-hover);
+}
+
+/* Oculta barras vacías sin contenido dentro de radio/recomendaciones */
+.shunel-radio-section > div:empty,
+.shunel-radio-section > p:empty,
+.shunel-radio-section span:empty {
+  display: none;
+}
+
+/* 5. Fila de chat IA: input flexible + botón compacto bien alineado */
+[class*="ai"] form,
+[class*="assistant"] form,
+#view-home form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+[class*="ai"] input[type="text"],
+[class*="ai"] input[type="search"],
+[class*="assistant"] input {
+  min-width: 0;
+  height: 42px;
+  padding: 0 14px;
+  border-radius: var(--ui-radius-btn);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--ui-card-border);
+  color: #ffffff;
+  font-size: 14px;
+}
+
+[class*="ai"] button[type="submit"],
+[class*="assistant"] button[type="submit"] {
+  height: 42px;
+  padding: 0 16px;
+  border-radius: var(--ui-radius-btn);
+  background: #ffffff;
+  color: #080808;
+  font-weight: 700;
+  font-size: 13px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* 6. Mods de Shunel: evita que el botón Aa Lyrics Studio pise el texto */
+.mods-header,
+[class*="mods"] {
+  position: relative;
+}
+
+[class*="mods"] p,
+[class*="mod"] p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: rgba(248, 250, 252, 0.76);
+  overflow-wrap: anywhere;
+}
+
+/* Si algún botón de Lyrics Studio está posicionado encima, lo integra en flujo */
+[id*="lyricsStudio"],
+[class*="lyrics-studio"] {
+  position: static !important;
+  align-self: flex-start;
+  margin-top: 4px;
+}
+
+/* 7. Margen inferior extra para que nada quede tapado por el mini player */
+.main-content {
+  padding-bottom: 148px;
+}
