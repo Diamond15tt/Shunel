@@ -4,6 +4,7 @@ import {
   searchPopularTracks,
   searchNewTracks
 } from "./search.js";
+
 import { initCostaRicaTop50 } from "./charts.js";
 import { YouTubePlayer } from "./player.js";
 import { QueueManager } from "./queue.js";
@@ -20,6 +21,7 @@ import {
    Playback + Lyrics + Smart Autoplay
    + Dynamic Player Background
    + Popular Music + New Music
+   + Spotify Costa Rica Top 50
 ========================================= */
 
 const ui = new ShunelUI();
@@ -32,6 +34,9 @@ let searchController = null;
 let isPlaying = false;
 let progressTimer = null;
 let queuePanelOpen = false;
+
+let costaRicaTop50 = null;
+let top50Initialized = false;
 
 /* =========================================
    AUDIO FANTASMA PARA iOS
@@ -47,7 +52,11 @@ silentAudio.setAttribute("playsinline", "");
 
 function triggerIOSAudioContext() {
   try {
-    silentAudio.play().catch(() => {});
+    const result = silentAudio.play();
+
+    if (result && typeof result.catch === "function") {
+      result.catch(() => {});
+    }
   } catch (error) {}
 }
 
@@ -81,6 +90,8 @@ function getTrackArtwork(track) {
     track?.thumbnailUrl ||
     track?.image ||
     "/assets/placeholder.svg";
+
+  artworkUrl = String(artworkUrl);
 
   if (artworkUrl.startsWith("//")) {
     artworkUrl = "https:" + artworkUrl;
@@ -768,21 +779,15 @@ function togglePlayback() {
    BÚSQUEDA NORMAL Y ESPECIALIZADA
 ========================================= */
 
-/**
- * Ejecuta una búsqueda y representa sus resultados.
- *
- * searchFunction puede ser:
- * - searchTracks
- * - searchPopularTracks
- * - searchNewTracks
- */
-
-async function executeSearch(query, searchFunction = searchTracks) {
+async function executeSearch(
+  query,
+  searchFunction = searchTracks
+) {
   const cleanQuery = String(query || "").trim();
 
   if (!cleanQuery) {
     ui.setStatus("Escribe el nombre de una canción.");
-    return;
+    return [];
   }
 
   searchController?.abort();
@@ -796,7 +801,7 @@ async function executeSearch(query, searchFunction = searchTracks) {
   ui.renderSearchResults([], () => ({}));
 
   try {
-    const tracks = await searchFunction(
+    const response = await searchFunction(
       cleanQuery,
       controller.signal,
       {
@@ -804,7 +809,11 @@ async function executeSearch(query, searchFunction = searchTracks) {
       }
     );
 
-    if (controller.signal.aborted) return;
+    if (controller.signal.aborted) return [];
+
+    const tracks = Array.isArray(response)
+      ? response
+      : [];
 
     ui.renderSearchResults(
       tracks,
@@ -823,12 +832,14 @@ async function executeSearch(query, searchFunction = searchTracks) {
         : "No encontramos resultados. Prueba con otra búsqueda."
     );
 
+    return tracks;
+
   } catch (error) {
     if (
-      error.name === "AbortError" ||
+      error?.name === "AbortError" ||
       controller.signal.aborted
     ) {
-      return;
+      return [];
     }
 
     console.error(
@@ -837,9 +848,11 @@ async function executeSearch(query, searchFunction = searchTracks) {
     );
 
     ui.setStatus(
-      error.message ||
+      error?.message ||
       "No se pudo completar la búsqueda."
     );
+
+    return [];
 
   } finally {
     if (searchController === controller) {
@@ -892,30 +905,30 @@ function bindDiscoverSearches() {
 
     const normalized = normalizeDiscoverQuery(query);
 
-if (
-  normalized.includes("popular") ||
-  normalized.includes("mas escuchado") ||
-  normalized.includes("mas escuchados")
-) {
-  navigateToView("home");
-  
-  const chart = document.getElementById(
-    "spotifyCostaRicaTop50"
-  );
-  
-  if (chart) {
-    chart.scrollIntoView({
-      behavior: "smooth",
-      block: "start"
-    });
-  } else {
-    ui.toastMessage(
-      "El Top 50 todavía se está cargando."
-    );
-  }
-  
-  return;
-}
+    if (
+      normalized.includes("popular") ||
+      normalized.includes("mas escuchado") ||
+      normalized.includes("mas escuchados")
+    ) {
+      navigateToView("home");
+
+      const chart = document.getElementById(
+        "spotifyCostaRicaTop50"
+      );
+
+      if (chart) {
+        chart.scrollIntoView({
+          behavior: "smooth",
+          block: "start"
+        });
+      } else {
+        ui.toastMessage(
+          "No se encontró el contenedor del Top 50."
+        );
+      }
+
+      return;
+    }
 
     if (
       normalized.includes("nueva") ||
@@ -924,7 +937,9 @@ if (
     ) {
       navigateToView("search");
 
-      ui.toastMessage("Buscando los lanzamientos más recientes...");
+      ui.toastMessage(
+        "Buscando los lanzamientos más recientes..."
+      );
 
       executeSearch(
         query,
@@ -942,55 +957,235 @@ if (
     );
   });
 }
+
 /* =========================================
    SPOTIFY TOP 50 — COSTA RICA
-   Conexión con búsqueda y reproducción
+   CONTENEDOR
+========================================= */
+
+function ensureTop50Container() {
+  let container = document.getElementById(
+    "spotifyCostaRicaTop50"
+  );
+
+  if (container) return container;
+
+  const homeView = document.getElementById("view-home");
+
+  if (!homeView) {
+    console.error(
+      "[Shunel] No existe #view-home. No se puede montar el Top 50."
+    );
+
+    return null;
+  }
+
+  container = document.createElement("section");
+
+  container.id = "spotifyCostaRicaTop50";
+  container.className = "spotify-costa-rica-top50";
+
+  const discover = homeView.querySelector(".home-discover");
+
+  if (discover?.parentNode) {
+    discover.insertAdjacentElement("afterend", container);
+  } else {
+    homeView.appendChild(container);
+  }
+
+  return container;
+}
+
+/* =========================================
+   SPOTIFY TOP 50 — COSTA RICA
+   REPRODUCCIÓN DE CANCIONES
+========================================= */
+
+function normalizeTrackText(value) {
+  return String(value || "")
+    .toLocaleLowerCase("es")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function getChartTrackMatch(results, chartTrack) {
+  if (!Array.isArray(results) || !results.length) {
+    return null;
+  }
+
+  const wantedTitle = normalizeTrackText(chartTrack.title);
+  const wantedArtist = normalizeTrackText(chartTrack.artist);
+
+  let bestTrack = null;
+  let bestScore = -1;
+
+  for (const result of results) {
+    const title = normalizeTrackText(
+      result.title || result.name
+    );
+
+    const artist = normalizeTrackText(
+      result.channel || result.artist
+    );
+
+    let score = 0;
+
+    if (title === wantedTitle) {
+      score += 10;
+    } else if (
+      title.includes(wantedTitle) ||
+      wantedTitle.includes(title)
+    ) {
+      score += 5;
+    }
+
+    if (artist === wantedArtist) {
+      score += 8;
+    } else if (
+      artist.includes(wantedArtist) ||
+      wantedArtist.includes(artist)
+    ) {
+      score += 4;
+    }
+
+    if (result.videoId) {
+      score += 2;
+    }
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestTrack = result;
+    }
+  }
+
+  return bestTrack;
+}
+
+async function playChartTrack(chartTrack) {
+  if (!chartTrack?.artist || !chartTrack?.title) {
+    ui.toastMessage(
+      "No se pudo identificar esta canción del ranking."
+    );
+
+    return;
+  }
+
+  const query = `${chartTrack.artist} ${chartTrack.title}`.trim();
+
+  navigateToView("search");
+
+  if (ui.elements.input) {
+    ui.elements.input.value = query;
+  }
+
+  ui.toastMessage(
+    `Buscando "${chartTrack.title}" en YouTube...`
+  );
+
+  const results = await executeSearch(
+    query,
+    searchTracks
+  );
+
+  if (!results.length) {
+    ui.toastMessage(
+      "No encontramos esta canción en YouTube."
+    );
+
+    return;
+  }
+
+  const selectedTrack = getChartTrackMatch(
+    results,
+    chartTrack
+  );
+
+  if (!selectedTrack?.videoId) {
+    ui.toastMessage(
+      "Encontramos resultados, pero ninguno se puede reproducir."
+    );
+
+    return;
+  }
+
+  selectAndPlayTrack(selectedTrack);
+}
+
+/* =========================================
+   SPOTIFY TOP 50 — COSTA RICA
+   INICIALIZACIÓN SEGURA
 ========================================= */
 
 function initializeCostaRicaTop50() {
+  if (top50Initialized) {
+    return costaRicaTop50;
+  }
+
+  top50Initialized = true;
+
+  const container = ensureTop50Container();
+
+  if (!container) {
+    top50Initialized = false;
+
+    console.error(
+      "[Shunel] No se pudo crear el contenedor del Top 50."
+    );
+
+    return null;
+  }
+
   try {
     const result = initCostaRicaTop50({
       searchTracks,
-      
-      onPlay: track => {
-        if (!track) return;
-        
-        const query = [
-            track.artist,
-            track.title
-          ]
-          .filter(Boolean)
-          .join(" ")
-          .trim();
-        
-        if (!query) return;
-        
-        navigateToView("search");
-        
-        if (ui.elements.input) {
-          ui.elements.input.value = query;
-        }
-        
-        executeSearch(query, searchTracks);
-      },
-      
+
+      onPlay: playChartTrack,
+
       container: "#spotifyCostaRicaTop50"
     });
-    
-    if (result && typeof result.catch === "function") {
-      result.catch(error => {
-        console.error(
-          "[Shunel] Error al cargar el Top 50:",
-          error
-        );
-      });
+
+    costaRicaTop50 = result || null;
+
+    if (
+      result &&
+      typeof result.then === "function"
+    ) {
+      result
+        .then(instance => {
+          costaRicaTop50 = instance || null;
+        })
+        .catch(error => {
+          top50Initialized = false;
+
+          console.error(
+            "[Shunel] Error al inicializar el Top 50:",
+            error
+          );
+        });
     }
-    
+
+    console.info(
+      "[Shunel] Top 50 de Costa Rica inicializado."
+    );
+
+    return costaRicaTop50;
+
   } catch (error) {
+    top50Initialized = false;
+
     console.error(
       "[Shunel] No se pudo inicializar el Top 50:",
       error
     );
+
+    ui.toastMessage(
+      "No se pudo iniciar el Top 50 de Costa Rica."
+    );
+
+    return null;
   }
 }
 
@@ -1205,9 +1400,8 @@ function bindEvents() {
 
   bindNavigation();
   bindLibraryFilters();
-  bindDiscoverSearches(
-    
-  );
+  bindDiscoverSearches();
+
   bindPlayerEvents();
   bindQueueEvents();
 
@@ -1243,6 +1437,8 @@ function startProgressUpdates() {
 ========================================= */
 
 function initializePlayer() {
+  if (player) return;
+
   player = new YouTubePlayer(
     "youtubePlayerHost",
     {
@@ -1325,7 +1521,6 @@ function initializePlayer() {
 
 function initialize() {
   bindEvents();
-  initializeCostaRicaTop50();
 
   setupMediaSession();
 
@@ -1339,7 +1534,14 @@ function initialize() {
   updateMediaPlaybackState(false);
 
   navigateToView("home");
-  
+
+  /*
+   * El contenedor se crea antes de inicializar
+   * el módulo del ranking.
+   *
+   * La inicialización se ejecuta una sola vez.
+   */
+
   initializeCostaRicaTop50();
 
   initializePlayer();
@@ -1349,10 +1551,15 @@ function initialize() {
   );
 }
 
+/* =========================================
+   DOM READY
+========================================= */
+
 if (document.readyState === "loading") {
   document.addEventListener(
     "DOMContentLoaded",
-    initialize
+    initialize,
+    { once: true }
   );
 } else {
   initialize();

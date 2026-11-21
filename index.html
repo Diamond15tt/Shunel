@@ -2,7 +2,7 @@
 
 <!--
   =====================================================================
-  SHUNEL · CÓDIGO COMPLETO CON SOPORTE DE LETRAS (NUEVO)
+  SHUNEL · HTML ADAPTADO A charts.js (Top 50 Costa Rica) + MEJORAS
   Todos los id, clases, data-* y textos originales siguen intactos.
   =====================================================================
 -->
@@ -27,12 +27,8 @@
   >
 
   <meta name="mobile-web-app-capable" content="yes">
-  <meta
-  name="viewport"
-  content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover"
->
 
-  <!-- [01-08] Metadatos adicionales -->
+  <!-- Metadatos adicionales -->
   <meta name="color-scheme" content="dark">
   <meta name="format-detection" content="telephone=no">
   <meta name="application-name" content="Shunel">
@@ -40,39 +36,46 @@
   <meta name="msapplication-TileColor" content="#080808">
   <meta name="robots" content="index, follow">
   <meta name="referrer" content="strict-origin-when-cross-origin">
-  <meta name="keywords" content="música, reproductor, YouTube, canciones, playlist, Shunel">
+  <meta name="author" content="Shunel">
+  <meta name="keywords" content="música, reproductor, YouTube, canciones, playlist, Shunel, Top 50 Costa Rica">
 
-  <!-- [09-13] Open Graph -->
+  <!-- Open Graph -->
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Shunel">
   <meta property="og:title" content="Shunel">
   <meta property="og:description" content="Shunel, tu espacio musical.">
   <meta property="og:locale" content="es_LA">
   <meta property="og:image" content="/assets/logo.png">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:alt" content="Logo de Shunel">
 
-  <!-- [15-18] Twitter / X -->
+  <!-- Twitter / X -->
   <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="Shunel">
   <meta name="twitter:description" content="Shunel, tu espacio musical.">
   <meta name="twitter:image" content="/assets/logo.png">
+  <meta name="twitter:image:alt" content="Logo de Shunel">
 
-  <!-- [28] Legado de Windows/IE -->
+  <!-- Legado de Windows/IE -->
   <meta name="msapplication-tap-highlight" content="no">
 
   <title>Shunel</title>
 
-  <link rel="manifest" href="manifest.json">
+  <link rel="manifest" href="/manifest.json">
 
-  <!-- [19-20] Iconos -->
-  <link rel="icon" href="/assets/logo.png">
+  <!-- Iconos -->
+  <link rel="icon" type="image/png" href="/assets/logo.png">
   <link rel="apple-touch-icon" href="/assets/logo.png">
 
-  <!-- [21-25] Rendimiento: conexiones y precargas anticipadas -->
+  <!-- Rendimiento: conexiones y precargas anticipadas -->
   <link rel="preconnect" href="https://www.youtube.com">
   <link rel="preconnect" href="https://i.ytimg.com">
+  <link rel="dns-prefetch" href="https://www.youtube-nocookie.com">
+  <link rel="dns-prefetch" href="https://www.gstatic.com">
   <link rel="dns-prefetch" href="https://www.googleapis.com">
-  <link rel="preload" as="image" href="/assets/logo.png">
+  <link rel="preload" as="image" href="/assets/logo.png" fetchpriority="high">
   <link rel="modulepreload" href="/js/app.js">
+  <link rel="modulepreload" href="/js/charts.js">
 
   <!-- STYLES -->
   <link rel="stylesheet" href="/css/style.css">
@@ -81,39 +84,51 @@
   <link rel="stylesheet" href="/css/animations.css">
   <link rel="stylesheet" href="/css/lyrics.css">
 
-  <!-- [27, 50] Marca que JavaScript está activo (lo antes posible) -->
+  <!-- Marca que JavaScript está activo (lo antes posible) -->
   <script>
     document.documentElement.classList.replace("no-js", "js");
+  </script>
+
+  <!-- Datos estructurados -->
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "Shunel",
+      "description": "Shunel, tu espacio musical.",
+      "applicationCategory": "MultimediaApplication",
+      "operatingSystem": "Any",
+      "inLanguage": "es",
+      "browserRequirements": "Requires JavaScript"
+    }
   </script>
 
   <!-- =====================================
        MEJORAS INLINE (Estilos + Letras)
   ====================================== -->
   <style id="shunel-enhancements">
-    /* [29] */
     :root { color-scheme: dark; }
 
-    /* [30-32] */
     html {
       -webkit-text-size-adjust: 100%;
       text-size-adjust: 100%;
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
       scroll-behavior: smooth;
+      scroll-padding-top: calc(env(safe-area-inset-top, 0px) + 72px);
       overscroll-behavior-y: contain;
     }
 
-    /* [33] */
     :focus-visible {
       outline: 2px solid #ffffff;
       outline-offset: 3px;
       border-radius: 6px;
     }
 
-    /* [34] */
     :focus:not(:focus-visible) { outline: none; }
 
-    /* [35-37] */
+    .main-content:focus { outline: none; }
+
     a, button, input, select, textarea, [role="button"] {
       -webkit-tap-highlight-color: transparent;
     }
@@ -128,27 +143,24 @@
       -webkit-touch-callout: none;
     }
 
-    /* [38] */
     img {
+      max-width: 100%;
       -webkit-user-drag: none;
       user-drag: none;
     }
 
-    /* [39] */
     ::selection {
       background: rgba(255, 255, 255, 0.25);
       color: #ffffff;
     }
 
-    /* [40] */
     [hidden] { display: none !important; }
 
-    /* [41] */
     button:disabled, input:disabled, [aria-disabled="true"] {
       cursor: not-allowed;
     }
 
-    /* [42] Enlace para saltar al contenido */
+    /* Enlace para saltar al contenido */
     .skip-link {
       position: fixed;
       top: -100px;
@@ -167,7 +179,7 @@
       top: calc(env(safe-area-inset-top, 0px) + 12px);
     }
 
-    /* [43] Solo para lectores de pantalla */
+    /* Solo para lectores de pantalla */
     .sr-only {
       position: absolute;
       width: 1px;
@@ -180,7 +192,6 @@
       border: 0;
     }
 
-    /* [44] */
     @media (prefers-reduced-motion: reduce) {
       html { scroll-behavior: auto; }
 
@@ -192,23 +203,22 @@
       }
     }
 
-    /* [45] */
     @media (forced-colors: active) {
       :focus-visible { outline: 3px solid Highlight; }
       button, input { border: 1px solid ButtonText; }
     }
 
-    /* [46] */
     @media print {
       .player-dock, .full-player, .queue-panel, .bottom-nav,
-      .topbar, .toast, .youtube-stage, .skip-link {
+      .topbar, .toast, .youtube-stage, .skip-link,
+      .shunel-chart__refresh {
         display: none !important;
       }
 
       body { background: #ffffff !important; color: #000000 !important; }
     }
 
-    /* [47] Banner sin conexión */
+    /* Banner sin conexión */
     html.is-offline body::before {
       content: "Sin conexión. Algunas funciones pueden no estar disponibles.";
       position: fixed;
@@ -224,7 +234,7 @@
       pointer-events: none;
     }
 
-    /* [48] Aviso sin JavaScript */
+    /* Aviso sin JavaScript */
     .noscript-warning {
       margin: 0;
       padding: 14px 16px;
@@ -234,13 +244,29 @@
       text-align: center;
     }
 
-    /* [49] */
     * {
       scrollbar-width: thin;
       scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
     }
 
-    /* NUEVO: Estilos para el contenedor de letras */
+    /* Top 50 Costa Rica (charts.js) */
+    #spotifyCostaRicaTop50 {
+      scroll-margin-top: calc(env(safe-area-inset-top, 0px) + 72px);
+    }
+
+    #spotifyCostaRicaTop50 .top50-fallback {
+      margin: 0;
+      padding: 18px 0;
+      color: rgba(255, 255, 255, 0.6);
+      font-size: 13px;
+    }
+
+    #spotifyCostaRicaTop50 .top50-fallback a {
+      color: inherit;
+      text-underline-offset: 3px;
+    }
+
+    /* Letras */
     .lyrics-container {
       max-width: 700px;
       margin: 20px auto 40px;
@@ -250,18 +276,30 @@
       border-radius: 16px;
       max-height: 55vh;
       overflow-y: auto;
+      overscroll-behavior: contain;
       scroll-behavior: smooth;
+      scrollbar-gutter: stable;
       font-size: 1.1rem;
       line-height: 1.8;
       text-align: center;
     }
 
+    @supports (height: 100dvh) {
+      .lyrics-container { max-height: 55dvh; }
+    }
+
+    .lyrics-container:focus-visible { outline-offset: -3px; }
+
     .lyric-line {
       padding: 8px 12px;
       border-radius: 8px;
       color: rgba(255, 255, 255, 0.4);
-      transition: all 0.2s ease;
+      transition:
+        color 0.2s ease,
+        background-color 0.2s ease,
+        transform 0.2s ease;
       cursor: pointer;
+      scroll-margin-block: 40vh;
     }
 
     .lyric-line:hover {
@@ -269,11 +307,21 @@
       background: rgba(255, 255, 255, 0.04);
     }
 
-    .lyric-line.active {
+    .lyric-line.active,
+    .lyric-line[aria-current="true"] {
       color: #ffffff;
       background: rgba(255, 255, 255, 0.1);
       font-weight: 700;
       transform: scale(1.02);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .lyric-line.active,
+      .lyric-line[aria-current="true"] { transform: none; }
+    }
+
+    @media (prefers-contrast: more) {
+      .lyric-line { color: rgba(255, 255, 255, 0.75); }
     }
   </style>
 
@@ -281,15 +329,24 @@
 
 <body>
 
-  <!-- [56] Aviso si JavaScript está desactivado -->
+  <!-- Aviso si JavaScript está desactivado -->
   <noscript>
     <p class="noscript-warning">
       Shunel necesita JavaScript para funcionar. Actívalo en tu navegador para continuar.
     </p>
   </noscript>
 
-  <!-- [57] Saltar al contenido -->
+  <!-- Saltar al contenido -->
   <a class="skip-link" href="#main-content">Saltar al contenido principal</a>
+
+  <!-- Anuncios de conexión para lectores de pantalla -->
+  <div
+    class="sr-only"
+    id="connectionStatus"
+    role="status"
+    aria-live="polite"
+    aria-atomic="true"
+  ></div>
 
   <div class="app-shell">
 
@@ -407,7 +464,7 @@
         <line x1="10" y1="14" x2="21" y2="3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       </symbol>
 
-      <!-- NUEVO: Icono para Letras -->
+      <!-- Icono para Letras -->
       <symbol id="icon-lyrics" viewBox="0 0 24 24">
         <path d="M4 6h16M4 10h16M4 14h10M4 18h6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
       </symbol>
@@ -468,7 +525,7 @@
 
       <!-- =====================================
            INICIO
-    ====================================== -->
+      ====================================== -->
 
       <section
         class="view active"
@@ -487,7 +544,7 @@
           </h1>
 
           <p class="hero-copy">
-           
+
           </p>
 
         </div>
@@ -495,7 +552,11 @@
 
         <!-- ACCESOS RÁPIDOS -->
 
-        <div class="quick-access">
+        <div
+          class="quick-access"
+          role="group"
+          aria-label="Accesos rápidos"
+        >
 
           <button
             class="quick-card"
@@ -561,6 +622,8 @@
         <div
           class="track-list"
           id="homeRecentList"
+          role="group"
+          aria-label="Escuchado recientemente"
           aria-live="polite"
         ></div>
 
@@ -576,7 +639,11 @@
 
         </div>
 
-        <div class="home-discover">
+        <div
+          class="home-discover"
+          role="group"
+          aria-label="Explorar música"
+        >
 
           <button
             class="discover-card"
@@ -615,12 +682,40 @@
 
         </div>
 
+
+        <!-- TOP 50 COSTA RICA (charts.js lo monta aquí) -->
+
+        <section
+          class="shunel-chart"
+          id="spotifyCostaRicaTop50"
+          aria-label="Top 50 de Spotify Costa Rica"
+          aria-busy="true"
+        >
+
+          <p class="eyebrow">RANKING DE COSTA RICA</p>
+
+          <h2>Top 50 de Spotify</h2>
+
+          <p class="top50-fallback" role="status">
+            Cargando ranking...
+            <noscript>
+              Activa JavaScript o consulta el ranking en
+              <a
+                href="https://kworb.net/spotify/country/cr_daily.html"
+                target="_blank"
+                rel="noopener noreferrer"
+              >Kworb</a>.
+            </noscript>
+          </p>
+
+        </section>
+
       </section>
 
 
       <!-- =====================================
            BUSCAR
-    ====================================== -->
+      ====================================== -->
 
       <section
         class="view"
@@ -649,6 +744,7 @@
           id="searchForm"
           role="search"
           aria-label="Buscar música"
+          autocomplete="off"
         >
 
           <span class="search-symbol" aria-hidden="true">
@@ -674,6 +770,7 @@
             enterkeyhint="search"
             aria-label="Buscar canciones, artistas o álbumes"
             aria-describedby="status"
+            aria-controls="results"
             aria-keyshortcuts="/"
             required
           >
@@ -683,6 +780,7 @@
             id="searchButton"
             type="submit"
             title="Buscar"
+            aria-controls="results"
           >
             Buscar
           </button>
@@ -714,6 +812,7 @@
             class="muted tiny"
             id="resultCount"
             aria-live="polite"
+            aria-atomic="true"
           ></span>
 
         </div>
@@ -721,6 +820,8 @@
         <div
           class="track-list"
           id="results"
+          role="group"
+          aria-label="Resultados de búsqueda"
           aria-live="polite"
           aria-relevant="additions text"
         ></div>
@@ -730,7 +831,7 @@
 
       <!-- =====================================
            BIBLIOTECA
-    ====================================== -->
+      ====================================== -->
 
       <section
         class="view"
@@ -765,6 +866,7 @@
             title="Mostrar todo"
             data-library-filter="all"
             aria-pressed="true"
+            aria-controls="libraryList favoritesList"
           >
             Todo
           </button>
@@ -775,6 +877,7 @@
             title="Mostrar solo favoritos"
             data-library-filter="favorites"
             aria-pressed="false"
+            aria-controls="libraryList favoritesList"
           >
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <use href="#icon-heart"/>
@@ -790,6 +893,8 @@
         <div
           class="track-list"
           id="libraryList"
+          role="group"
+          aria-label="Canciones guardadas"
           aria-live="polite"
         ></div>
 
@@ -798,6 +903,8 @@
         <div
           class="track-list"
           id="favoritesList"
+          role="group"
+          aria-label="Canciones favoritas"
           aria-live="polite"
           hidden
         ></div>
@@ -807,7 +914,7 @@
 
       <!-- =====================================
            HISTORIAL
-    ====================================== -->
+      ====================================== -->
 
       <section
         class="view"
@@ -831,6 +938,8 @@
         <div
           class="track-list"
           id="historyList"
+          role="group"
+          aria-label="Historial de reproducción"
           aria-live="polite"
         ></div>
 
@@ -838,7 +947,7 @@
 
 
       <!-- =====================================
-           LETRAS (NUEVO)
+           LETRAS
       ====================================== -->
 
       <section
@@ -854,7 +963,11 @@
 
           <h1 id="lyricsTitle">Sincronizada</h1>
 
-          <p class="hero-copy" id="lyricsSubtitle">
+          <p
+            class="hero-copy"
+            id="lyricsSubtitle"
+            aria-live="polite"
+          >
             Cargando letra...
           </p>
 
@@ -863,7 +976,10 @@
         <div
           class="lyrics-container"
           id="lyricsContainer"
+          role="region"
+          aria-label="Letra de la canción"
           aria-live="polite"
+          tabindex="0"
         >
           <p class="muted">Reproduce una canción para ver su letra aquí.</p>
         </div>
@@ -873,7 +989,7 @@
 
       <!-- =====================================
            YOUTUBE PLAYER
-    ====================================== -->
+      ====================================== -->
 
       <section
         class="youtube-stage"
@@ -895,7 +1011,7 @@
         </div>
 
         <p class="player-disclaimer">
-         
+
         </p>
 
       </section>
@@ -935,13 +1051,17 @@
           draggable="false"
         >
 
-        <div class="now-playing-text" aria-live="polite">
+        <div
+          class="now-playing-text"
+          aria-live="polite"
+          aria-atomic="true"
+        >
 
           <div
             class="current-title"
             id="currentTitle"
           >
-           
+
           </div>
 
           <div
@@ -972,7 +1092,11 @@
 
       <div class="player-center">
 
-        <div class="player-controls">
+        <div
+          class="player-controls"
+          role="group"
+          aria-label="Controles de reproducción"
+        >
 
           <button
             class="control-button"
@@ -1044,7 +1168,11 @@
       </div>
 
 
-      <div class="player-extra">
+      <div
+        class="player-extra"
+        role="group"
+        aria-label="Cola y volumen"
+      >
 
         <button
           class="queue-toggle"
@@ -1052,6 +1180,7 @@
           type="button"
           aria-label="Mostrar cola"
           aria-controls="queuePanel"
+          aria-expanded="false"
           title="Mostrar cola"
         >
 
@@ -1098,6 +1227,7 @@
       aria-modal="true"
       tabindex="-1"
       aria-label="Reproductor expandido"
+      aria-describedby="fullPlayerChannel"
       aria-hidden="true"
     >
 
@@ -1125,6 +1255,7 @@
           id="openLyricsButton"
           type="button"
           aria-label="Ver letra de la canción"
+          aria-controls="view-lyrics"
           title="Ver letra"
         >
           <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -1151,6 +1282,7 @@
           type="button"
           aria-label="Abrir cola"
           aria-controls="queuePanel"
+          aria-expanded="false"
           title="Abrir cola"
         >
 
@@ -1231,7 +1363,11 @@
         </div>
 
 
-        <div class="full-player-controls">
+        <div
+          class="full-player-controls"
+          role="group"
+          aria-label="Controles de reproducción"
+        >
 
           <button
             class="control-button"
@@ -1287,6 +1423,7 @@
             id="fullQueueToggle"
             type="button"
             aria-controls="queuePanel"
+            aria-expanded="false"
             title="Mostrar cola"
           >
 
@@ -1445,6 +1582,8 @@
       <div
         class="queue-list"
         id="queueList"
+        role="group"
+        aria-label="Canciones en la cola"
         aria-live="polite"
       ></div>
 
@@ -1480,37 +1619,145 @@
   ====================================== -->
   <script>
     (function () {
+      "use strict";
+
       var root = document.documentElement;
 
-      /* [51] Altura real del viewport en móviles */
+      /* Altura real del viewport en móviles (throttled con rAF) */
+      var heightQueued = false;
+
       function setAppHeight() {
+        heightQueued = false;
         root.style.setProperty("--app-height", window.innerHeight + "px");
       }
-      setAppHeight();
-      window.addEventListener("resize", setAppHeight, { passive: true });
-      window.addEventListener("orientationchange", setAppHeight, { passive: true });
 
-      /* [52] Detecta si la app está instalada (PWA standalone) */
+      function queueAppHeight() {
+        if (heightQueued) return;
+        heightQueued = true;
+        window.requestAnimationFrame(setAppHeight);
+      }
+
+      setAppHeight();
+      window.addEventListener("resize", queueAppHeight, { passive: true });
+      window.addEventListener("orientationchange", queueAppHeight, { passive: true });
+
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener("resize", queueAppHeight, { passive: true });
+      }
+
+      /* Detecta si la app está instalada (PWA standalone) */
       var standalone =
         (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) ||
         window.navigator.standalone === true;
       if (standalone) root.classList.add("is-standalone");
 
-      /* [53] Estado de conexión */
-      function syncOnline() {
-        root.classList.toggle("is-offline", !navigator.onLine);
+      /* Dispositivos táctiles */
+      if (window.matchMedia && window.matchMedia("(hover: none)").matches) {
+        root.classList.add("is-touch");
       }
+
+      /* Estado de conexión (visual + lectores de pantalla) */
+      var connection = document.getElementById("connectionStatus");
+      var wasOffline = !navigator.onLine;
+
+      function syncOnline() {
+        var offline = !navigator.onLine;
+
+        root.classList.toggle("is-offline", offline);
+
+        if (connection) {
+          connection.textContent = offline
+            ? "Sin conexión."
+            : wasOffline
+              ? "Conexión restablecida."
+              : "";
+        }
+
+        wasOffline = offline;
+      }
+
       syncOnline();
       window.addEventListener("online", syncOnline);
       window.addEventListener("offline", syncOnline);
 
-      /* [54] Año automático en el pie de página */
+      /* Año automático en el pie de página */
       var year = document.getElementById("footerYear");
       if (year) year.textContent = "© " + new Date().getFullYear();
 
-      /* [55] Atajos: "/" o Ctrl/Cmd+K llevan al buscador */
+      /* aria-expanded de los botones de cola sincronizado con el panel */
+      var queuePanel = document.getElementById("queuePanel");
+
+      var queueButtons = ["queueToggle", "fullQueueToggle", "fullPlayerQueue"]
+        .map(function (id) { return document.getElementById(id); })
+        .filter(Boolean);
+
+      function syncQueue() {
+        var open =
+          queuePanel.getAttribute("aria-hidden") === "false" ||
+          queuePanel.classList.contains("open") ||
+          queuePanel.classList.contains("is-open");
+
+        queueButtons.forEach(function (button) {
+          button.setAttribute("aria-expanded", String(open));
+        });
+      }
+
+      if (queuePanel && window.MutationObserver) {
+        syncQueue();
+
+        new MutationObserver(syncQueue).observe(queuePanel, {
+          attributes: true,
+          attributeFilter: ["aria-hidden", "class"]
+        });
+      }
+
+      /* Título de la pestaña según la vista activa */
+      var BASE_TITLE = "Shunel";
+
+      var VIEW_TITLES = {
+        home: "",
+        search: "Buscar",
+        library: "Biblioteca",
+        history: "Historial",
+        lyrics: "Letra"
+      };
+
+      function syncTitle() {
+        var active = document.querySelector(".view.active");
+        if (!active || !active.id) return;
+
+        var key = active.id.replace(/^view-/, "");
+        if (!Object.prototype.hasOwnProperty.call(VIEW_TITLES, key)) return;
+
+        /* No pisa títulos puestos por la app (por ejemplo, la canción actual). */
+        var current = document.title;
+        if (current !== BASE_TITLE && !/ · Shunel$/.test(current)) return;
+
+        var label = VIEW_TITLES[key];
+
+        document.title = label ? label + " · " + BASE_TITLE : BASE_TITLE;
+      }
+
+      if (window.MutationObserver) {
+        var titleObserver = new MutationObserver(syncTitle);
+
+        Array.prototype.forEach.call(
+          document.querySelectorAll(".view"),
+          function (view) {
+            titleObserver.observe(view, {
+              attributes: true,
+              attributeFilter: ["class"]
+            });
+          }
+        );
+      }
+
+      /* Atajos: "/" o Ctrl/Cmd+K llevan al buscador */
       document.addEventListener("keydown", function (event) {
+        if (event.defaultPrevented || event.isComposing) return;
+
         var target = event.target;
+
         var typing =
           target &&
           (target.tagName === "INPUT" ||
@@ -1520,6 +1767,7 @@
 
         var isSlash =
           event.key === "/" && !typing && !event.ctrlKey && !event.metaKey && !event.altKey;
+
         var isCtrlK =
           (event.ctrlKey || event.metaKey) && String(event.key).toLowerCase() === "k";
 
@@ -1531,7 +1779,7 @@
         if (searchTab) searchTab.click();
 
         setTimeout(function () {
-          var input = document.getElementById("searchInput"  );
+          var input = document.getElementById("searchInput");
           if (input) input.focus();
         }, 60);
       });
@@ -1544,6 +1792,100 @@
   ====================================== -->
 
   <script type="module" src="/js/app.js"></script>
+
+  <!-- Top 50 Costa Rica: conecta charts.js con el buscador existente -->
+  <script type="module">
+    const TOP50_ID = "spotifyCostaRicaTop50";
+
+    /*
+     * Al pulsar una canción se emite "shunel:play-request".
+     * Si app.js escucha ese evento y llama a preventDefault(), él se encarga
+     * de reproducir. Si no, se usa el buscador de Shunel con "artista título".
+     */
+    function requestPlay(track) {
+      const event = new CustomEvent("shunel:play-request", {
+        detail: track,
+        cancelable: true
+      });
+
+      if (!document.dispatchEvent(event)) return;
+
+      const input = document.getElementById("searchInput");
+      const form = document.getElementById("searchForm");
+
+      if (!input || !form) {
+        throw new Error("El buscador de Shunel no está disponible.");
+      }
+
+      document
+        .querySelector('.bottom-nav-item[data-view="search"]')
+        ?.click();
+
+      input.value = track.query;
+
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+
+      if (typeof form.requestSubmit === "function") {
+        form.requestSubmit();
+      } else {
+        form.dispatchEvent(
+          new Event("submit", { bubbles: true, cancelable: true })
+        );
+      }
+    }
+
+    let booted = false;
+
+    async function bootTop50() {
+      if (booted) return;
+
+      booted = true;
+
+      const root = document.getElementById(TOP50_ID);
+
+      if (!root || root.querySelector(".shunel-chart__heading")) {
+        return;
+      }
+
+      try {
+        const { initCostaRicaTop50 } = await import("/js/charts.js");
+
+        if (root.querySelector(".shunel-chart__heading")) return;
+
+        window.shunelTop50 = initCostaRicaTop50({
+          container: root,
+          onPlay: requestPlay
+        });
+
+      } catch (error) {
+        console.warn(
+          "[Shunel] No se pudo iniciar el Top 50:",
+          error
+        );
+
+        root.removeAttribute("aria-busy");
+
+        const fallback = root.querySelector(".top50-fallback");
+
+        if (fallback) {
+          fallback.textContent =
+            "No se pudo cargar el ranking en este momento.";
+        }
+      }
+    }
+
+    document.addEventListener(
+      "DOMContentLoaded",
+      () => setTimeout(bootTop50, 0),
+      { once: true }
+    );
+
+    window.addEventListener("load", bootTop50, { once: true });
+
+    if (document.readyState === "complete") {
+      bootTop50();
+    }
+  </script>
 
 </body>
 </html>
