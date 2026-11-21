@@ -1,2464 +1,1585 @@
-
 /* ==========================================================================
-   SHUNEL — COMPONENTS
-   COMPONENT SYSTEM 3.0
-   MOBILE FIRST · SVG ICON SYSTEM · ACCESSIBLE · RESPONSIVE
-   100 CSS IMPROVEMENTS
+   SHUNEL — COMPONENT SYSTEM 4.0
+   Mobile first · Container queries · Fluid tokens · Accesible (WCAG 2.2)
+   Compatible 1:1 con las clases y estados de la v3.0
+
+   ORDEN DE CAPAS (de menor a mayor prioridad):
+     shunel.tokens → shunel.base → shunel.components → shunel.states
+     → shunel.responsive → shunel.a11y
+   Tu CSS sin capa (unlayered) SIEMPRE gana sobre este archivo, así que
+   puedes sobrescribir cualquier cosa sin !important ni selectores largos.
    ========================================================================== */
 
-
-/* ==========================================================================
-   01. DESIGN TOKENS
-   ========================================================================== */
-
-:root {
-  color-scheme: dark;
-
-  --component-bg: #080808;
-  --component-surface: #111111;
-  --component-surface-raised: #191919;
-
-  --component-glass: rgba(255, 255, 255, .055);
-  --component-glass-hover: rgba(255, 255, 255, .09);
-
-  --component-border: rgba(255, 255, 255, .075);
-  --component-border-light: rgba(255, 255, 255, .13);
-
-  --component-text: #f5f5f5;
-  --component-muted: #929292;
-  --component-subtle: #686868;
-
-  --component-radius: 12px;
-  --component-radius-small: 9px;
-
-  --component-blur: 22px;
-
-  --component-transition:
-    .22s cubic-bezier(.2, .8, .2, 1);
-
-  /* Additional design tokens */
-
-  --component-bg-hover: rgba(255, 255, 255, .045);
-  --component-bg-active: rgba(255, 255, 255, .085);
-
-  --component-focus-color: #b7d2ff;
-  --component-focus-ring: 0 0 0 3px rgba(150, 190, 255, .3);
-
-  --component-success: #76c99b;
-  --component-warning: #e7bd78;
-  --component-danger: #e58a8a;
-  --component-info: #91b8ed;
-
-  --component-row-height: 66px;
-  --component-art-size: 46px;
-  --component-action-size: 44px;
-
-  --component-menu-width: 210px;
-  --component-toast-max-width: 420px;
-
-  --component-shadow-menu:
-    0 12px 35px rgba(0, 0, 0, .4);
-
-  --component-shadow-toast:
-    0 9px 30px rgba(0, 0, 0, .4);
-
-  --component-skeleton-base: #191919;
-  --component-skeleton-highlight: #292929;
-
-  --component-safe-bottom:
-    env(safe-area-inset-bottom, 0px);
-
-  --component-safe-top:
-    env(safe-area-inset-top, 0px);
-}
+@layer shunel.tokens, shunel.base, shunel.components, shunel.states,
+       shunel.responsive, shunel.a11y;
 
 
 /* ==========================================================================
-   02. COMPONENT RESET
+   01. TOKENS
+   Todos los nombres de la v3.0 se conservan (--component-*).
+   Nuevos tokens marcados con [v4].
    ========================================================================== */
 
-.track-list,
-.track-list *,
-.track-row,
-.track-row *,
-.track-art,
-.track-main,
-.track-actions,
-.icon-button,
-.track-action,
-.text-button,
-.empty-state,
-.empty-state *,
-.toast,
-.toast *,
-.track-playing-indicator,
-.track-context-menu,
-.track-context-menu *,
-.track-skeleton,
-.track-skeleton * {
-  box-sizing: border-box;
-}
-
-.icon-button,
-.track-action,
-.text-button {
-  -webkit-tap-highlight-color: transparent;
-  font-family: inherit;
-}
-
-.track-list {
-  min-width: 0;
-}
-
-.track-row img {
-  max-width: 100%;
-}
-
-.track-row button {
-  font-family: inherit;
-}
-
-.track-row button:focus {
-  outline: none;
-}
-
-.track-row button:focus-visible {
-  outline: 2px solid var(--component-focus-color);
-  outline-offset: 2px;
-}
-
-
-/* ==========================================================================
-   03. SVG ICON SYSTEM
-   ========================================================================== */
-
-.icon-button svg,
-.track-action svg,
-.text-button svg {
-  width: 19px;
-  height: 19px;
-
-  display: block;
-  flex-shrink: 0;
-
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-
-  pointer-events: none;
-
-  transition:
-    transform var(--component-transition),
-    opacity var(--component-transition),
-    color var(--component-transition);
-}
-
-.track-action svg {
-  width: 18px;
-  height: 18px;
-}
-
-.icon-button svg,
-.track-action svg,
-.text-button svg {
-  overflow: visible;
-}
-
-.icon-button svg *,
-.track-action svg *,
-.text-button svg * {
-  pointer-events: none;
-}
-
-.icon-button svg[fill="currentColor"],
-.track-action svg[fill="currentColor"] {
-  fill: currentColor;
-}
-
-.icon-button svg[stroke="none"],
-.track-action svg[stroke="none"] {
-  stroke: none;
-}
-
-
-/* ==========================================================================
-   04. TRACK LIST
-   ========================================================================== */
-
-.track-list {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 6px;
-
-  width: 100%;
-  min-width: 0;
-
-  margin: 0;
-  padding: 0;
-
-  list-style: none;
-}
-
-.track-list > * {
-  min-width: 0;
-}
-
-.track-list:empty {
-  display: block;
-}
-
-.track-list img {
-  display: block;
-}
-
-.track-list button {
-  font: inherit;
-}
-
-.track-list > .track-row:last-child {
-  margin-bottom: 0;
-}
-
-
-/* ==========================================================================
-   05. TRACK ROW
-   ========================================================================== */
-
-.track-row {
-  position: relative;
-
-  width: 100%;
-  min-width: 0;
-  min-height: var(--component-row-height);
-
-  display: grid;
-  grid-template-columns:
-    var(--component-art-size)
-    minmax(0, 1fr)
-    auto;
-
-  align-items: center;
-  gap: 12px;
-
-  padding: 8px;
-
-  border: 1px solid transparent;
-  border-radius: var(--component-radius);
-
-  background: rgba(255, 255, 255, .035);
-
-  isolation: isolate;
-
-  transition:
-    background var(--component-transition),
-    border-color var(--component-transition),
-    transform var(--component-transition),
-    opacity var(--component-transition);
-
-  -webkit-tap-highlight-color: transparent;
-}
-
-.track-row::before {
-  content: "";
-
-  position: absolute;
-  inset: 0;
-
-  z-index: -1;
-
-  border-radius: inherit;
-
-  background:
-    linear-gradient(
-      125deg,
-      rgba(255, 255, 255, .035),
-      transparent 45%
-    );
-
-  opacity: 0;
-
-  pointer-events: none;
-
-  transition: opacity var(--component-transition);
-}
-
-.track-row.active,
-.track-row.is-playing {
-  background: rgba(255, 255, 255, .085);
-  border-color: rgba(255, 255, 255, .12);
-}
-
-.track-row.active .track-name,
-.track-row.is-playing .track-name {
-  color: #fff;
-}
-
-.track-row:active {
-  transform: scale(.992);
-}
-
-.track-row:last-child {
-  margin-bottom: 0;
-}
-
-
-/* ==========================================================================
-   06. TRACK ROW STATES
-   ========================================================================== */
-
-.track-row[aria-current="true"] {
-  background: rgba(255, 255, 255, .085);
-  border-color: var(--component-border-light);
-}
-
-.track-row[aria-selected="true"] {
-  background: rgba(255, 255, 255, .075);
-  border-color: rgba(255, 255, 255, .16);
-}
-
-.track-row[aria-disabled="true"] {
-  opacity: .45;
-  pointer-events: none;
-}
-
-.track-row.is-disabled {
-  opacity: .45;
-  cursor: not-allowed;
-}
-
-.track-row.is-selected {
-  background: rgba(255, 255, 255, .075);
-  border-color: rgba(255, 255, 255, .16);
-}
-
-.track-row.is-playing {
-  border-color: rgba(255, 255, 255, .16);
-}
-
-.track-row.active.is-playing {
-  background: rgba(255, 255, 255, .105);
-}
-
-
-/* ==========================================================================
-   07. TRACK ROW INTERACTION
-   ========================================================================== */
-
-@media (hover: hover) and (pointer: fine) {
-  .track-row:hover {
-    background: rgba(255, 255, 255, .065);
-    border-color: var(--component-border);
+@layer shunel.tokens {
+  :root {
+    color-scheme: dark;
+
+    /* Superficies */
+    --component-bg: #080808;
+    --component-surface: #111111;
+    --component-surface-raised: #191919;
+    --component-surface-overlay: rgb(28 28 28 / .96);          /* [v4] */
+
+    --component-glass: rgb(255 255 255 / .055);
+    --component-glass-hover: rgb(255 255 255 / .09);
+
+    --component-row-bg: rgb(255 255 255 / .035);                /* [v4] */
+    --component-bg-hover: rgb(255 255 255 / .065);
+    --component-bg-active: rgb(255 255 255 / .085);
+    --component-bg-selected: rgb(255 255 255 / .075);           /* [v4] */
+    --component-bg-pressed: rgb(255 255 255 / .1);              /* [v4] */
+
+    --component-border: rgb(255 255 255 / .075);
+    --component-border-light: rgb(255 255 255 / .13);
+    --component-border-strong: rgb(255 255 255 / .2);           /* [v4] */
+
+    /* Texto — contraste verificado sobre #111 (WCAG AA ≥ 4.5:1) */
+    --component-text: #f5f5f5;      /* 17.9:1 */
+    --component-text-strong: #ffffff;                           /* [v4] */
+    --component-muted: #a3a3a3;     /* 7.9:1  (antes #929292) */
+    --component-subtle: #8a8a8a;    /* 5.6:1  (antes #686868 = 3.4:1, fallaba AA) */
+
+    /* Acento y semánticos */
+    --component-accent: #ffffff;                                /* [v4] */
+    --component-accent-contrast: #0b0b0b;                       /* [v4] */
+    --component-favorite: var(--component-accent);              /* [v4] */
+    --component-success: #76c99b;
+    --component-warning: #e7bd78;
+    --component-danger: #e58a8a;
+    --component-info: #91b8ed;
+
+    /* Foco */
+    --component-focus-color: #b7d2ff;
+    --component-focus-width: 2px;                               /* [v4] */
+    --component-focus-offset: 2px;                              /* [v4] */
+    --component-focus-ring: 0 0 0 3px rgb(150 190 255 / .3);
+
+    /* Radios */
+    --component-radius: 12px;
+    --component-radius-small: 9px;
+    --component-radius-large: 16px;                             /* [v4] */
+    --component-radius-pill: 999px;                             /* [v4] */
+
+    /* Tipografía fluida (mín. 12px para metadatos, 14px para títulos) */
+    --component-font-2xs: .75rem;                                            /* 12px */
+    --component-font-xs: clamp(.75rem, .72rem + .15vi, .8125rem);            /* 12–13 */
+    --component-font-sm: clamp(.8125rem, .78rem + .2vi, .875rem);            /* 13–14 */
+    --component-font-md: clamp(.875rem, .84rem + .25vi, 1rem);               /* 14–16 */
+    --component-font-lg: clamp(1rem, .95rem + .4vi, 1.25rem);                /* 16–20 */
+    --component-leading: 1.4;
+    --component-tracking-tight: -.01em;
+
+    /* Espaciado fluido (escala estilo Utopia) */
+    --component-space-3xs: clamp(.125rem, .11rem + .08vi, .1875rem);
+    --component-space-2xs: clamp(.25rem, .23rem + .1vi, .3125rem);
+    --component-space-xs: clamp(.375rem, .35rem + .15vi, .5rem);
+    --component-space-sm: clamp(.5rem, .46rem + .2vi, .6875rem);
+    --component-space-md: clamp(.75rem, .7rem + .25vi, 1rem);
+    --component-space-lg: clamp(1rem, .9rem + .5vi, 1.5rem);
+    --component-space-xl: clamp(1.5rem, 1.3rem + 1vi, 2.75rem);
+
+    /* Tamaños */
+    --component-row-height: 4rem;              /* 64px */
+    --component-art-size: clamp(2.625rem, 2.5rem + .6vi, 3rem); /* 42–48 */
+    --component-action-size: 2.75rem;          /* 44px — Apple HIG / WCAG 2.5.5 AAA */
+    --component-icon-size: 1.125rem;           /* 18px */             /* [v4] */
+    --component-hit-min: 2.75rem;              /* 44px */             /* [v4] */
+
+    --component-menu-width: 13.125rem;         /* 210px */
+    --component-menu-max-width: min(17.5rem, calc(100vw - 1.5rem));  /* [v4] */
+    --component-toast-max-width: 26.25rem;     /* 420px */
+
+    /* Distancia del toast al borde inferior: altura de tu mini‑player + nav.
+       Antes estaba fija (65px + 76px). Cámbiala en tu app sin tocar este archivo. */
+    --component-toast-offset: calc(65px + 76px);                    /* [v4] */
+
+    /* Movimiento */
+    --component-ease: cubic-bezier(.2, .8, .2, 1);                  /* [v4] */
+    --component-ease-out: cubic-bezier(.16, 1, .3, 1);              /* [v4] */
+    --component-duration: .22s;                                     /* [v4] */
+    --component-duration-fast: .14s;                                /* [v4] */
+    --component-transition: var(--component-duration) var(--component-ease);
+
+    /* Sombras y efectos */
+    --component-blur: 22px;
+    --component-shadow-menu: 0 12px 35px rgb(0 0 0 / .4);
+    --component-shadow-toast: 0 9px 30px rgb(0 0 0 / .4);
+    --component-shadow-art: 0 3px 10px rgb(0 0 0 / .25);            /* [v4] */
+
+    --component-skeleton-base: #191919;
+    --component-skeleton-highlight: #292929;
+
+    /* Áreas seguras (notch, barra home) — requiere viewport-fit=cover */
+    --component-safe-top: env(safe-area-inset-top, 0px);
+    --component-safe-bottom: env(safe-area-inset-bottom, 0px);
+    --component-safe-left: env(safe-area-inset-left, 0px);          /* [v4] */
+    --component-safe-right: env(safe-area-inset-right, 0px);        /* [v4] */
+
+    /* Capas z-index centralizadas */
+    --component-z-row-drag: 5;                                      /* [v4] */
+    --component-z-menu: 1000;                                       /* [v4] */
+    --component-z-toast: 10000;                                     /* [v4] */
   }
 
-  .track-row:hover::before {
-    opacity: 1;
+  /* Mezclas derivadas del acento cuando el navegador soporta color-mix() */
+  @supports (color: color-mix(in oklch, white, black)) {
+    :root {
+      --component-focus-ring: 0 0 0 3px color-mix(in oklch, var(--component-focus-color) 35%, transparent);
+    }
   }
-}
 
-.track-row:focus {
-  outline: none;
-}
+  /* ---------- Tema claro (opt‑in) ----------
+     <html data-theme="light">  → claro siempre
+     <html data-theme="auto">   → sigue al sistema operativo
+     Sin atributo               → oscuro (comportamiento v3.0)            */
+  [data-theme="light"] {
+    color-scheme: light;
+    --component-bg: #fafafa;
+    --component-surface: #ffffff;
+    --component-surface-raised: #f4f4f5;
+    --component-surface-overlay: rgb(255 255 255 / .97);
+    --component-glass: rgb(0 0 0 / .04);
+    --component-glass-hover: rgb(0 0 0 / .07);
+    --component-row-bg: rgb(0 0 0 / .025);
+    --component-bg-hover: rgb(0 0 0 / .05);
+    --component-bg-active: rgb(0 0 0 / .075);
+    --component-bg-selected: rgb(0 0 0 / .065);
+    --component-bg-pressed: rgb(0 0 0 / .09);
+    --component-border: rgb(0 0 0 / .08);
+    --component-border-light: rgb(0 0 0 / .12);
+    --component-border-strong: rgb(0 0 0 / .22);
+    --component-text: #171717;
+    --component-text-strong: #000000;
+    --component-muted: #525252;
+    --component-subtle: #6b6b6b;
+    --component-accent: #111111;
+    --component-accent-contrast: #ffffff;
+    --component-success: #1f7a4c;
+    --component-warning: #8a5a00;
+    --component-danger: #b42318;
+    --component-info: #1d5fbf;
+    --component-focus-color: #1d5fbf;
+    --component-shadow-menu: 0 12px 35px rgb(0 0 0 / .14);
+    --component-shadow-toast: 0 9px 30px rgb(0 0 0 / .14);
+    --component-shadow-art: 0 2px 8px rgb(0 0 0 / .12);
+    --component-skeleton-base: #ececec;
+    --component-skeleton-highlight: #f7f7f7;
+  }
 
-.track-row:focus-visible {
-  outline: 2px solid var(--component-focus-color);
-  outline-offset: 2px;
-}
+  @media (prefers-color-scheme: light) {
+    [data-theme="auto"] {
+      color-scheme: light;
+      --component-bg: #fafafa;
+      --component-surface: #ffffff;
+      --component-surface-raised: #f4f4f5;
+      --component-surface-overlay: rgb(255 255 255 / .97);
+      --component-glass: rgb(0 0 0 / .04);
+      --component-glass-hover: rgb(0 0 0 / .07);
+      --component-row-bg: rgb(0 0 0 / .025);
+      --component-bg-hover: rgb(0 0 0 / .05);
+      --component-bg-active: rgb(0 0 0 / .075);
+      --component-bg-selected: rgb(0 0 0 / .065);
+      --component-bg-pressed: rgb(0 0 0 / .09);
+      --component-border: rgb(0 0 0 / .08);
+      --component-border-light: rgb(0 0 0 / .12);
+      --component-border-strong: rgb(0 0 0 / .22);
+      --component-text: #171717;
+      --component-text-strong: #000000;
+      --component-muted: #525252;
+      --component-subtle: #6b6b6b;
+      --component-accent: #111111;
+      --component-accent-contrast: #ffffff;
+      --component-success: #1f7a4c;
+      --component-warning: #8a5a00;
+      --component-danger: #b42318;
+      --component-info: #1d5fbf;
+      --component-focus-color: #1d5fbf;
+      --component-shadow-menu: 0 12px 35px rgb(0 0 0 / .14);
+      --component-shadow-toast: 0 9px 30px rgb(0 0 0 / .14);
+      --component-shadow-art: 0 2px 8px rgb(0 0 0 / .12);
+      --component-skeleton-base: #ececec;
+      --component-skeleton-highlight: #f7f7f7;
+    }
+  }
 
-.track-row:focus-within {
-  border-color: rgba(183, 210, 255, .35);
-}
-
-.track-row:active::before {
-  opacity: 1;
-}
-
-
-/* ==========================================================================
-   08. TRACK ROW ACTIVE INDICATOR
-   ========================================================================== */
-
-.track-row.active::after,
-.track-row.is-playing::after {
-  content: "";
-
-  position: absolute;
-
-  inset-block: 14px;
-  inset-inline-start: 0;
-
-  width: 2px;
-
-  border-radius: 2px;
-  background: #d5d5d5;
-
-  pointer-events: none;
-}
-
-.track-row.active.is-playing::after {
-  background: #fff;
-}
-
-.track-row:not(.active):not(.is-playing)::after {
-  content: none;
-}
-
-
-/* ==========================================================================
-   09. TRACK ART
-   ========================================================================== */
-
-.track-art {
-  width: var(--component-art-size);
-  height: var(--component-art-size);
-
-  display: block;
-  flex-shrink: 0;
-
-  aspect-ratio: 1 / 1;
-  object-fit: cover;
-  object-position: center;
-
-  overflow: hidden;
-
-  border-radius: 9px;
-
-  background: #222;
-
-  border: 1px solid rgba(255, 255, 255, .055);
-
-  box-shadow:
-    0 3px 10px rgba(0, 0, 0, .25);
-
-  transition:
-    transform var(--component-transition),
-    border-radius var(--component-transition),
-    filter var(--component-transition),
-    opacity var(--component-transition);
-}
-
-.track-row:active .track-art {
-  transform: scale(.96);
-}
-
-.track-row.active .track-art,
-.track-row.is-playing .track-art {
-  filter: brightness(1.08);
-}
-
-.track-art.is-loading {
-  opacity: .55;
-}
-
-.track-art.is-loaded {
-  opacity: 1;
-}
-
-.track-art:not([src]),
-.track-art[src=""] {
-  background: #202020;
-}
-
-.track-art[loading="lazy"] {
-  content-visibility: auto;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .track-row:hover .track-art {
-    filter: brightness(1.06);
+  /* Pantallas táctiles: objetivos un poco más grandes (Material 48dp) */
+  @media (pointer: coarse) {
+    :root {
+      --component-action-size: 3rem;   /* 48px */
+      --component-hit-min: 3rem;
+    }
   }
 }
 
 
 /* ==========================================================================
-   10. TRACK ART FALLBACK
+   02. BASE / RESET ACOTADO
+   Solo afecta a los componentes Shunel, nunca a elementos globales.
    ========================================================================== */
 
-.track-art:not([src]),
-.track-art[src=""],
-.track-art[src*="undefined"],
-.track-art[src*="null"] {
-  object-fit: contain;
-  background:
-    linear-gradient(
-      145deg,
-      #242424,
-      #151515
-    );
-}
-
-.track-art:focus-visible {
-  outline: 2px solid var(--component-focus-color);
-  outline-offset: 3px;
-}
-
-
-/* ==========================================================================
-   11. TRACK INFORMATION
-   ========================================================================== */
-
-.track-main {
-  min-width: 0;
-  width: 100%;
-
-  overflow: hidden;
-
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 4px;
-}
-
-.track-name {
-  display: block;
-
-  min-width: 0;
-  max-width: 100%;
-
-  overflow: hidden;
-
-  color: var(--component-text);
-
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1.4;
-  letter-spacing: -.12px;
-
-  text-overflow: ellipsis;
-  white-space: nowrap;
-
-  transition: color var(--component-transition);
-}
-
-.track-channel {
-  display: block;
-
-  min-width: 0;
-  max-width: 100%;
-
-  overflow: hidden;
-
-  margin: 0;
-
-  color: var(--component-muted);
-
-  font-size: 10px;
-  font-weight: 400;
-  line-height: 1.4;
-
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-
-/* ==========================================================================
-   12. TRACK TEXT STATES
-   ========================================================================== */
-
-.track-row.active .track-name,
-.track-row.is-playing .track-name {
-  color: #fff;
-}
-
-.track-row.active .track-channel,
-.track-row.is-playing .track-channel {
-  color: #bdbdbd;
-}
-
-.track-name a,
-.track-channel a {
-  color: inherit;
-  text-decoration: none;
-}
-
-.track-name a:focus-visible,
-.track-channel a:focus-visible {
-  outline: 1px solid var(--component-focus-color);
-  outline-offset: 2px;
-}
-
-.track-name,
-.track-channel {
-  overflow-wrap: anywhere;
-}
-
-.track-main > * {
-  min-width: 0;
-}
-
-
-/* ==========================================================================
-   13. TRACK ACTIONS
-   ========================================================================== */
-
-.track-actions {
-  min-width: 0;
-  min-height: var(--component-action-size);
-
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-
-  gap: 3px;
-
-  flex-shrink: 0;
-}
-
-.track-actions > * {
-  flex-shrink: 0;
-}
-
-.track-actions:empty {
-  display: none;
-}
-
-
-/* ==========================================================================
-   14. ICON BUTTON
-   ========================================================================== */
-
-.icon-button,
-.track-action {
-  width: var(--component-action-size);
-  height: var(--component-action-size);
-
-  min-width: var(--component-action-size);
-  min-height: var(--component-action-size);
-
-  padding: 0;
-
-  display: grid;
-  place-items: center;
-
-  border: 1px solid transparent;
-  border-radius: 10px;
-
-  background: transparent;
-  color: var(--component-muted);
-
-  cursor: pointer;
-
-  transition:
-    background var(--component-transition),
-    color var(--component-transition),
-    border-color var(--component-transition),
-    transform var(--component-transition),
-    opacity var(--component-transition);
-
-  -webkit-tap-highlight-color: transparent;
-}
-
-.icon-button:hover,
-.track-action:hover {
-  background: var(--component-glass-hover);
-  color: #fff;
-  border-color: var(--component-border);
-}
-
-.icon-button:active,
-.track-action:active {
-  transform: scale(.94);
-  background: rgba(255, 255, 255, .12);
-}
-
-.icon-button:disabled,
-.track-action:disabled {
-  opacity: .35;
-  cursor: not-allowed;
-  transform: none;
-  pointer-events: none;
-}
-
-
-/* ==========================================================================
-   15. BUTTON FOCUS
-   ========================================================================== */
-
-.icon-button:focus,
-.track-action:focus,
-.text-button:focus {
-  outline: none;
-}
-
-.icon-button:focus-visible,
-.track-action:focus-visible,
-.text-button:focus-visible {
-  outline: 2px solid var(--component-focus-color);
-  outline-offset: 2px;
-  box-shadow: var(--component-focus-ring);
-}
-
-.icon-button[aria-pressed="true"],
-.track-action[aria-pressed="true"] {
-  color: #fff;
-}
-
-.icon-button[aria-expanded="true"],
-.track-action[aria-expanded="true"] {
-  background: var(--component-glass-hover);
-  border-color: var(--component-border-light);
-}
-
-
-/* ==========================================================================
-   16. BUTTON HOVER
-   ========================================================================== */
-
-@media (hover: hover) and (pointer: fine) {
-  .icon-button:hover,
-  .track-action:hover {
-    color: #fff;
-    background: var(--component-glass-hover);
+@layer shunel.base {
+  :where(.track-list, .track-row, .track-art, .track-main, .track-actions,
+         .icon-button, .track-action, .text-button, .empty-state, .toast,
+         .toast-container, .track-playing-indicator, .track-context-menu,
+         .track-skeleton, .drag-handle, .shunel-chip, .shunel-badge,
+         .shunel-now-playing),
+  :where(.track-list, .track-row, .empty-state, .toast, .track-context-menu,
+         .track-skeleton, .shunel-now-playing) *,
+  :where(.track-list, .track-row, .empty-state, .toast, .track-context-menu,
+         .track-skeleton, .shunel-now-playing) *::before,
+  :where(.track-list, .track-row, .empty-state, .toast, .track-context-menu,
+         .track-skeleton, .shunel-now-playing) *::after {
+    box-sizing: border-box;
   }
 
-  .text-button:hover {
-    color: #fff;
-  }
-}
-
-@media (hover: none) {
-  .icon-button:hover,
-  .track-action:hover,
-  .text-button:hover {
-    background: transparent;
-  }
-}
-
-
-/* ==========================================================================
-   17. FAVORITES
-   ========================================================================== */
-
-.track-action.is-favorite,
-.favorite-current.is-favorite,
-.full-player-info .icon-button.is-favorite {
-  color: #fff;
-}
-
-.track-action.is-favorite svg,
-.favorite-current.is-favorite svg,
-.full-player-info .icon-button.is-favorite svg {
-  fill: #fff;
-  stroke: #fff;
-}
-
-.track-action.is-favorite {
-  background: rgba(255, 255, 255, .07);
-}
-
-.track-action.is-favorite:hover {
-  background: rgba(255, 255, 255, .12);
-}
-
-.track-action[aria-pressed="true"] svg {
-  fill: currentColor;
-}
-
-.track-action[aria-pressed="false"] svg {
-  fill: none;
-}
-
-
-/* ==========================================================================
-   18. FAVORITE FEEDBACK
-   ========================================================================== */
-
-.track-action.is-favorite:active svg {
-  transform: scale(.88);
-}
-
-.favorite-current.is-favorite svg {
-  transform: scale(1);
-}
-
-.track-row.is-favorite .track-name {
-  color: #fff;
-}
-
-.track-action.is-favorite:focus-visible {
-  outline-color: #fff;
-}
-
-
-/* ==========================================================================
-   19. TEXT BUTTON
-   ========================================================================== */
-
-.text-button {
-  min-height: 44px;
-
-  padding: 8px 10px;
-
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-
-  gap: 7px;
-
-  border: 1px solid transparent;
-  border-radius: 8px;
-
-  background: transparent;
-
-  color: #b5b5b5;
-
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1.4;
-
-  text-decoration: none;
-
-  cursor: pointer;
-
-  transition:
-    color var(--component-transition),
-    opacity var(--component-transition),
-    background var(--component-transition),
-    border-color var(--component-transition);
-}
-
-.text-button:hover {
-  color: #fff;
-}
-
-.text-button:active {
-  opacity: .65;
-}
-
-.text-button svg {
-  width: 16px;
-  height: 16px;
-}
-
-.text-button:disabled {
-  opacity: .4;
-  cursor: not-allowed;
-}
-
-
-/* ==========================================================================
-   20. TEXT BUTTON STATES
-   ========================================================================== */
-
-.text-button[aria-pressed="true"] {
-  color: #fff;
-  background: rgba(255, 255, 255, .07);
-}
-
-.text-button[aria-expanded="true"] {
-  color: #fff;
-  background: rgba(255, 255, 255, .08);
-}
-
-.text-button svg {
-  flex-shrink: 0;
-}
-
-.text-button > span {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-
-/* ==========================================================================
-   21. EMPTY STATE
-   ========================================================================== */
-
-.empty-state {
-  width: 100%;
-  max-width: 520px;
-
-  margin-inline: auto;
-
-  padding: 42px 22px;
-
-  border: 1px solid var(--component-border);
-  border-radius: 15px;
-
-  background:
-    linear-gradient(
-      145deg,
-      rgba(255, 255, 255, .045),
-      rgba(255, 255, 255, .018)
-    );
-
-  color: var(--component-muted);
-
-  text-align: center;
-  font-size: 12px;
-  line-height: 1.7;
-}
-
-.empty-state > * {
-  max-width: 100%;
-}
-
-.empty-state p {
-  max-width: 360px;
-  margin-inline: auto;
-  overflow-wrap: anywhere;
-}
-
-
-/* ==========================================================================
-   22. EMPTY STATE ICON
-   ========================================================================== */
-
-.empty-state svg {
-  width: 30px;
-  height: 30px;
-
-  display: block;
-
-  margin: 0 auto 13px;
-
-  color: #858585;
-
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.5;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.empty-state svg * {
-  vector-effect: non-scaling-stroke;
-}
-
-
-/* ==========================================================================
-   23. EMPTY STATE TYPOGRAPHY
-   ========================================================================== */
-
-.empty-state h2,
-.empty-state h3,
-.empty-state strong {
-  display: block;
-
-  margin: 0;
-
-  color: var(--component-text);
-
-  font-size: 15px;
-  font-weight: 650;
-  line-height: 1.45;
-}
-
-.empty-state p {
-  margin-top: 8px;
-
-  color: var(--component-muted);
-
-  font-size: 12px;
-  line-height: 1.7;
-}
-
-
-/* ==========================================================================
-   24. EMPTY STATE ACTIONS
-   ========================================================================== */
-
-.empty-state .text-button {
-  margin-top: 15px;
-}
-
-.empty-state button {
-  max-width: 100%;
-}
-
-.empty-state:empty {
-  display: none;
-}
-
-
-/* ==========================================================================
-   25. TOAST
-   ========================================================================== */
-
-.toast {
-  position: fixed;
-
-  z-index: 10000;
-
-  left: 50%;
-
-  bottom:
-    calc(
-      65px + 76px +
-      var(--component-safe-bottom) +
-      18px
-    );
-
-  width: max-content;
-
-  max-width:
-    min(
-      var(--component-toast-max-width),
-      calc(100vw - 35px)
-    );
-
-  min-height: 44px;
-
-  padding: 12px 17px;
-
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
-  gap: 9px;
-
-  border: 1px solid rgba(255, 255, 255, .13);
-  border-radius: 13px;
-
-  background: rgba(32, 32, 32, .94);
-  color: #fff;
-
-  -webkit-backdrop-filter: blur(24px) saturate(150%);
-  backdrop-filter: blur(24px) saturate(150%);
-
-  font-size: 11px;
-  line-height: 1.5;
-  text-align: center;
-
-  overflow-wrap: anywhere;
-
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-
-  transform: translate(-50%, 12px) scale(.97);
-
-  transition:
-    opacity .22s ease,
-    visibility .22s ease,
-    transform .25s cubic-bezier(.2, .8, .2, 1);
-
-  box-shadow: var(--component-shadow-toast);
-}
-
-.toast.visible,
-.toast.show {
-  opacity: 1;
-  visibility: visible;
-
-  transform: translate(-50%, 0) scale(1);
-}
-
-
-/* ==========================================================================
-   26. TOAST ICON
-   ========================================================================== */
-
-.toast svg {
-  width: 16px;
-  height: 16px;
-
-  display: inline-block;
-  flex: 0 0 auto;
-
-  vertical-align: middle;
-
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-
-/* ==========================================================================
-   27. TOAST TYPES
-   ========================================================================== */
-
-.toast[data-type="success"] {
-  border-color: rgba(118, 201, 155, .35);
-}
-
-.toast[data-type="success"] svg {
-  color: var(--component-success);
-}
-
-.toast[data-type="warning"] {
-  border-color: rgba(231, 189, 120, .35);
-}
-
-.toast[data-type="warning"] svg {
-  color: var(--component-warning);
-}
-
-.toast[data-type="error"] {
-  border-color: rgba(229, 138, 138, .35);
-}
-
-.toast[data-type="error"] svg {
-  color: var(--component-danger);
-}
-
-.toast[data-type="info"] {
-  border-color: rgba(145, 184, 237, .35);
-}
-
-.toast[data-type="info"] svg {
-  color: var(--component-info);
-}
-
-
-/* ==========================================================================
-   28. TOAST TEXT
-   ========================================================================== */
-
-.toast > span,
-.toast > p {
-  min-width: 0;
-  margin: 0;
-  overflow-wrap: anywhere;
-}
-
-.toast strong {
-  color: #fff;
-  font-weight: 650;
-}
-
-
-/* ==========================================================================
-   29. TOAST SAFE AREA
-   ========================================================================== */
-
-@supports (padding: max(0px)) {
-  .toast {
-    bottom:
-      max(
-        18px,
-        calc(
-          65px + 76px +
-          env(safe-area-inset-bottom, 0px) +
-          18px
-        )
-      );
-  }
-}
-
-
-/* ==========================================================================
-   30. PLAYING INDICATOR
-   ========================================================================== */
-
-.track-playing-indicator {
-  width: 20px;
-  height: 20px;
-
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
-  gap: 3px;
-
-  flex: 0 0 auto;
-
-  color: #fff;
-}
-
-.track-playing-indicator span {
-  width: 3px;
-  height: 6px;
-
-  display: block;
-
-  border-radius: 3px;
-  background: currentColor;
-}
-
-
-/* ==========================================================================
-   31. PLAYING ANIMATION
-   ========================================================================== */
-
-.track-playing-indicator.active span {
-  animation: track-bars .65s ease-in-out infinite alternate;
-}
-
-.track-playing-indicator span:nth-child(2) {
-  animation-delay: .2s;
-}
-
-.track-playing-indicator span:nth-child(3) {
-  animation-delay: .35s;
-}
-
-.track-playing-indicator span:nth-child(4) {
-  animation-delay: .12s;
-}
-
-@keyframes track-bars {
-  from {
-    height: 5px;
-    opacity: .5;
+  :where(.icon-button, .track-action, .text-button, .drag-handle,
+         .track-context-menu button, .shunel-chip) {
+    appearance: none;
+    -webkit-appearance: none;
+    margin: 0;
+    font: inherit;
+    color: inherit;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
   }
 
-  to {
-    height: 16px;
-    opacity: 1;
-  }
-}
-
-
-/* ==========================================================================
-   32. PLAYING INDICATOR PAUSED
-   ========================================================================== */
-
-.track-playing-indicator:not(.active) span {
-  animation: none;
-  height: 5px;
-}
-
-.track-row:not(.is-playing) .track-playing-indicator span {
-  animation-play-state: paused;
-}
-
-
-/* ==========================================================================
-   33. OPTIONAL TRACK LOADING
-   ========================================================================== */
-
-.track-row.loading {
-  overflow: hidden;
-}
-
-.track-row.loading::after {
-  content: "";
-
-  position: absolute;
-  inset: 0;
-
-  background:
-    linear-gradient(
-      90deg,
-      transparent,
-      rgba(255, 255, 255, .055),
-      transparent
-    );
-
-  transform: translateX(-100%);
-
-  animation: track-shimmer 1.4s infinite;
-
-  pointer-events: none;
-}
-
-@keyframes track-shimmer {
-  to {
-    transform: translateX(100%);
-  }
-}
-
-
-/* ==========================================================================
-   34. SKELETON BASE
-   ========================================================================== */
-
-.track-skeleton {
-  width: 100%;
-  min-height: var(--component-row-height);
-
-  display: grid;
-
-  grid-template-columns:
-    var(--component-art-size)
-    minmax(0, 1fr)
-    auto;
-
-  align-items: center;
-
-  gap: 12px;
-
-  padding: 8px;
-
-  overflow: hidden;
-
-  border: 1px solid var(--component-border);
-  border-radius: var(--component-radius);
-
-  background: var(--component-skeleton-base);
-}
-
-
-/* ==========================================================================
-   35. SKELETON SHAPES
-   ========================================================================== */
-
-.track-skeleton-art,
-.track-skeleton-line,
-.track-skeleton-action {
-  position: relative;
-
-  overflow: hidden;
-
-  background: var(--component-skeleton-highlight);
-
-  border-radius: 7px;
-}
-
-.track-skeleton-art {
-  width: var(--component-art-size);
-  height: var(--component-art-size);
-}
-
-.track-skeleton-line {
-  width: 78%;
-  height: 11px;
-}
-
-.track-skeleton-line:last-child {
-  width: 48%;
-  height: 9px;
-}
-
-.track-skeleton-action {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-}
-
-
-/* ==========================================================================
-   36. SKELETON SHIMMER
-   ========================================================================== */
-
-.track-skeleton-art::after,
-.track-skeleton-line::after,
-.track-skeleton-action::after {
-  content: "";
-
-  position: absolute;
-  inset: 0;
-
-  background:
-    linear-gradient(
-      100deg,
-      transparent 15%,
-      rgba(255, 255, 255, .075) 50%,
-      transparent 85%
-    );
-
-  transform: translateX(-100%);
-
-  animation: skeleton-loading 1.5s ease-in-out infinite;
-}
-
-@keyframes skeleton-loading {
-  to {
-    transform: translateX(100%);
-  }
-}
-
-
-/* ==========================================================================
-   37. SKELETON CONTENT
-   ========================================================================== */
-
-.track-skeleton-main {
-  display: flex;
-  flex-direction: column;
-
-  gap: 9px;
-
-  min-width: 0;
-}
-
-.track-skeleton > * {
-  flex-shrink: 0;
-}
-
-
-/* ==========================================================================
-   38. SKELETON REDUCED MOTION
-   ========================================================================== */
-
-@media (prefers-reduced-motion: reduce) {
-  .track-skeleton,
-  .track-skeleton::after,
-  .track-skeleton-art::after,
-  .track-skeleton-line::after,
-  .track-skeleton-action::after {
-    animation: none !important;
-  }
-}
-
-
-/* ==========================================================================
-   39. CONTEXT MENU
-   ========================================================================== */
-
-.track-context-menu {
-  position: absolute;
-
-  z-index: 1000;
-
-  width: max-content;
-  min-width: var(--component-menu-width);
-  max-width: min(280px, calc(100vw - 24px));
-
-  padding: 6px;
-
-  border: 1px solid var(--component-border-light);
-  border-radius: 14px;
-
-  background: rgba(28, 28, 28, .96);
-
-  -webkit-backdrop-filter: blur(25px) saturate(150%);
-  backdrop-filter: blur(25px) saturate(150%);
-
-  box-shadow: var(--component-shadow-menu);
-}
-
-
-/* ==========================================================================
-   40. CONTEXT MENU BUTTONS
-   ========================================================================== */
-
-.track-context-menu button {
-  width: 100%;
-  min-height: 44px;
-
-  display: flex;
-  align-items: center;
-
-  gap: 10px;
-
-  padding: 9px 11px;
-
-  border: 0;
-  border-radius: 8px;
-
-  background: transparent;
-  color: #eee;
-
-  text-align: left;
-
-  font: inherit;
-  font-size: 12px;
-
-  cursor: pointer;
-
-  transition:
-    background var(--component-transition),
-    color var(--component-transition);
-}
-
-.track-context-menu button:active {
-  background: rgba(255, 255, 255, .09);
-}
-
-
-/* ==========================================================================
-   41. CONTEXT MENU HOVER
-   ========================================================================== */
-
-@media (hover: hover) and (pointer: fine) {
-  .track-context-menu button:hover {
-    background: rgba(255, 255, 255, .08);
-    color: #fff;
-  }
-}
-
-
-/* ==========================================================================
-   42. CONTEXT MENU ICONS
-   ========================================================================== */
-
-.track-context-menu button svg {
-  width: 17px;
-  height: 17px;
-
-  flex: 0 0 auto;
-
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.8;
-
-  pointer-events: none;
-}
-
-
-/* ==========================================================================
-   43. CONTEXT MENU DANGEROUS ACTION
-   ========================================================================== */
-
-.track-context-menu button[data-danger="true"] {
-  color: var(--component-danger);
-}
-
-.track-context-menu button[data-danger="true"]:hover {
-  background: rgba(229, 138, 138, .1);
-}
-
-
-/* ==========================================================================
-   44. CONTEXT MENU FOCUS
-   ========================================================================== */
-
-.track-context-menu button:focus-visible {
-  outline: 2px solid var(--component-focus-color);
-  outline-offset: -2px;
-}
-
-
-/* ==========================================================================
-   45. DRAGGING
-   ========================================================================== */
-
-.track-row.dragging {
-  opacity: .5;
-  transform: scale(.98);
-
-  background: rgba(255, 255, 255, .09);
-
-  z-index: 5;
-}
-
-
-/* ==========================================================================
-   46. DRAG OVER
-   ========================================================================== */
-
-.track-row.drag-over {
-  border-color: rgba(255, 255, 255, .4);
-  background: rgba(255, 255, 255, .09);
-
-  outline: 1px dashed rgba(255, 255, 255, .4);
-  outline-offset: -3px;
-}
-
-
-/* ==========================================================================
-   47. DRAG HANDLE
-   Optional when the HTML contains a .drag-handle element.
-   ========================================================================== */
-
-.drag-handle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-
-  width: 36px;
-  height: 44px;
-
-  color: var(--component-subtle);
-
-  cursor: grab;
-  touch-action: none;
-}
-
-.drag-handle:active {
-  cursor: grabbing;
-}
-
-.drag-handle svg {
-  width: 17px;
-  height: 17px;
-}
-
-
-/* ==========================================================================
-   48. DRAG HANDLE FOCUS
-   ========================================================================== */
-
-.drag-handle:focus-visible {
-  outline: 2px solid var(--component-focus-color);
-  outline-offset: 2px;
-  border-radius: 6px;
-}
-
-
-/* ==========================================================================
-   49. TRACK ROW TRANSITIONS
-   ========================================================================== */
-
-.track-row,
-.track-row::before,
-.track-row::after {
-  transition:
-    background-color var(--component-transition),
-    border-color var(--component-transition),
-    opacity var(--component-transition);
-}
-
-
-/* ==========================================================================
-   50. TRACK ROW PERFORMANCE
-   ========================================================================== */
-
-.track-row {
-  backface-visibility: hidden;
-}
-
-.track-row img {
-  content-visibility: auto;
-}
-
-
-/* ==========================================================================
-   51. MOBILE BASE
-   ========================================================================== */
-
-@media (max-width: 650px) {
-  .track-list {
-    gap: 6px;
+  /* SVG de iconos: heredan color y tamaño, nunca capturan clics */
+  :where(.track-row, .icon-button, .track-action, .text-button, .toast,
+         .empty-state, .track-context-menu, .drag-handle, .shunel-chip,
+         .shunel-now-playing) svg {
+    flex: 0 0 auto;
+    inline-size: var(--component-icon-size);
+    block-size: var(--component-icon-size);
+    pointer-events: none;
+    overflow: visible;
   }
 
-  .track-row {
-    min-height: 63px;
-
-    grid-template-columns:
-      43px
-      minmax(0, 1fr)
-      auto;
-
-    gap: 10px;
-
-    padding: 7px;
+  /* Iconos de línea (Lucide/Tabler) por defecto. Si el SVG trae
+     fill="currentColor" (icono relleno) se respeta su atributo. */
+  :where(.icon-button, .track-action, .text-button, .toast, .empty-state,
+         .track-context-menu, .drag-handle, .shunel-chip,
+         .shunel-now-playing) svg:not([fill]) {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
   }
 
-  .track-art {
-    width: 43px;
-    height: 43px;
+  .track-row img,
+  .track-row svg {
+    max-inline-size: 100%;
   }
 
-  .track-name {
-    font-size: 11px;
+  /* Icono genérico para usar fuera de los componentes:
+     <svg class="icon" aria-hidden="true"><use href="shunel-icons.svg#icon-play"/></svg> */
+  svg.icon {
+    inline-size: var(--icon-size, 1.25em);
+    block-size: var(--icon-size, 1.25em);
+    flex: 0 0 auto;
+    vertical-align: -.25em;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: var(--icon-stroke, 2);
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    pointer-events: none;
   }
+  svg.icon.is-filled { fill: currentColor; }
 
-  .track-channel {
-    font-size: 10px;
-  }
-
-  .track-actions {
-    gap: 0;
-  }
-}
-
-
-/* ==========================================================================
-   52. MOBILE BUTTON SIZES
-   ========================================================================== */
-
-@media (max-width: 650px) {
-  .track-action,
-  .icon-button {
-    width: 40px;
-    height: 40px;
-
-    min-width: 40px;
-    min-height: 40px;
-  }
-
-  .track-action svg,
-  .icon-button svg {
-    width: 18px;
-    height: 18px;
-  }
-}
-
-
-/* ==========================================================================
-   53. SMALL PHONES
-   ========================================================================== */
-
-@media (max-width: 380px) {
-  .track-row {
-    grid-template-columns:
-      40px
-      minmax(0, 1fr)
-      auto;
-
-    gap: 8px;
-  }
-
-  .track-art {
-    width: 40px;
-    height: 40px;
-  }
-
-  .track-name {
-    font-size: 11px;
-  }
-
-  .track-channel {
-    font-size: 9px;
-  }
-}
-
-
-/* ==========================================================================
-   54. VERY SMALL PHONES
-   ========================================================================== */
-
-@media (max-width: 350px) {
-  .track-row {
-    gap: 6px;
-    padding: 6px;
-  }
-
-  .track-art {
-    width: 38px;
-    height: 38px;
-  }
-
-  .track-row {
-    grid-template-columns:
-      38px
-      minmax(0, 1fr)
-      auto;
-  }
-
-  .track-actions {
-    gap: 0;
-  }
-}
-
-
-/* ==========================================================================
-   55. LANDSCAPE MOBILE
-   ========================================================================== */
-
-@media (max-width: 900px) and (orientation: landscape) {
-  .track-row {
-    min-height: 58px;
-  }
-
-  .track-art {
-    width: 40px;
-    height: 40px;
-  }
-
-  .empty-state {
-    padding-block: 25px;
-  }
-}
-
-
-/* ==========================================================================
-   56. TABLET
-   ========================================================================== */
-
-@media (min-width: 651px) and (max-width: 899px) {
-  .track-row {
-    grid-template-columns:
-      48px
-      minmax(0, 1fr)
-      auto;
-
-    min-height: 68px;
-  }
-
-  .track-art {
-    width: 48px;
-    height: 48px;
-  }
-
-  .track-name {
-    font-size: 13px;
-  }
-
-  .track-channel {
-    font-size: 11px;
-  }
-}
-
-
-/* ==========================================================================
-   57. DESKTOP
-   ========================================================================== */
-
-@media (min-width: 900px) {
-  .track-list {
-    gap: 5px;
-  }
-
-  .track-row {
-    padding: 9px 11px;
-  }
-
-  .track-name {
-    font-size: 13px;
-  }
-
-  .track-channel {
-    font-size: 11px;
-  }
-}
-
-
-/* ==========================================================================
-   58. DESKTOP ROW INTERACTION
-   ========================================================================== */
-
-@media (min-width: 900px) and (hover: hover) {
-  .track-row:hover {
-    transform: translateX(2px);
-  }
-
-  .track-row:active {
-    transform: translateX(1px) scale(.995);
-  }
-}
-
-
-/* ==========================================================================
-   59. LARGE DESKTOP
-   ========================================================================== */
-
-@media (min-width: 1400px) {
-  .track-row {
-    min-height: 72px;
-    padding-inline: 13px;
-  }
-
-  .track-art {
-    width: 50px;
-    height: 50px;
-  }
-
-  .track-row {
-    grid-template-columns:
-      50px
-      minmax(0, 1fr)
-      auto;
-  }
-}
-
-
-/* ==========================================================================
-   60. TOAST MOBILE
-   ========================================================================== */
-
-@media (max-width: 650px) {
-  .toast {
-    max-width: calc(100vw - 28px);
-
-    bottom:
-      calc(
-        65px + 76px +
-        var(--component-safe-bottom) +
-        14px
-      );
-
-    padding: 11px 14px;
-
-    font-size: 11px;
-  }
-}
-
-
-/* ==========================================================================
-   61. TOAST LANDSCAPE
-   ========================================================================== */
-
-@media (max-width: 900px) and (orientation: landscape) {
-  .toast {
-    bottom:
-      calc(
-        12px +
-        var(--component-safe-bottom)
-      );
-  }
-}
-
-
-/* ==========================================================================
-   62. TOAST STACK SUPPORT
-   Optional class for a wrapper containing multiple notifications.
-   ========================================================================== */
-
-.toast-container {
-  position: fixed;
-
-  z-index: 10000;
-
-  left: 50%;
-  bottom: calc(20px + var(--component-safe-bottom));
-
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-
-  gap: 8px;
-
-  width: min(100%, 460px);
-
-  padding-inline: 14px;
-
-  transform: translateX(-50%);
-
-  pointer-events: none;
-}
-
-.toast-container .toast {
-  position: relative;
-
-  inset: auto;
-
-  transform: none;
-
-  width: 100%;
-  max-width: 100%;
-
-  pointer-events: auto;
-}
-
-
-/* ==========================================================================
-   63. ACCESSIBILITY FOCUS
-   ========================================================================== */
-
-.icon-button:focus-visible,
-.track-action:focus-visible,
-.text-button:focus-visible,
-.track-row:focus-visible,
-.track-context-menu button:focus-visible {
-  outline: 2px solid var(--component-focus-color);
-  outline-offset: 3px;
-}
-
-
-/* ==========================================================================
-   64. HIGH CONTRAST FOCUS
-   ========================================================================== */
-
-@media (forced-colors: active) {
-  .icon-button:focus-visible,
-  .track-action:focus-visible,
-  .text-button:focus-visible,
-  .track-row:focus-visible {
-    outline: 2px solid Highlight;
-  }
-}
-
-
-/* ==========================================================================
-   65. HIGH CONTRAST COMPONENTS
-   ========================================================================== */
-
-@media (forced-colors: active) {
-  .track-row,
-  .empty-state,
-  .toast,
-  .track-context-menu {
-    border: 1px solid CanvasText;
-  }
-
-  .track-action,
-  .icon-button,
-  .text-button {
-    color: ButtonText;
-  }
-}
-
-
-/* ==========================================================================
-   66. REDUCED MOTION
-   ========================================================================== */
-
-@media (prefers-reduced-motion: reduce) {
-  .track-row,
-  .track-row *,
-  .track-art,
-  .icon-button,
-  .track-action,
-  .text-button,
-  .toast,
-  .track-playing-indicator,
-  .track-playing-indicator span,
-  .track-skeleton,
-  .track-skeleton *,
-  .track-context-menu {
-    animation: none !important;
-    transition-duration: .01ms !important;
-    scroll-behavior: auto !important;
-  }
-}
-
-
-/* ==========================================================================
-   67. REDUCED MOTION PLAYING INDICATOR
-   ========================================================================== */
-
-@media (prefers-reduced-motion: reduce) {
-  .track-playing-indicator span {
-    height: 7px;
-    opacity: 1;
-  }
-}
-
-
-/* ==========================================================================
-   68. REDUCED MOTION LOADING
-   ========================================================================== */
-
-@media (prefers-reduced-motion: reduce) {
-  .track-row.loading::after,
-  .track-skeleton-art::after,
-  .track-skeleton-line::after,
-  .track-skeleton-action::after {
-    display: none;
-  }
-}
-
-
-/* ==========================================================================
-   69. COLOR CONTRAST
-   ========================================================================== */
-
-.track-name {
-  color: #f5f5f5;
-}
-
-.track-channel {
-  color: #a5a5a5;
-}
-
-.text-button {
-  color: #c2c2c2;
-}
-
-.empty-state {
-  color: #b0b0b0;
-}
-
-
-/* ==========================================================================
-   70. TEXT WRAPPING
-   ========================================================================== */
-
-.track-name,
-.track-channel,
-.empty-state p,
-.toast {
-  overflow-wrap: anywhere;
-  word-break: normal;
-}
-
-
-/* ==========================================================================
-   71. LONG TRACK TITLES
-   ========================================================================== */
-
-.track-main {
-  overflow: hidden;
-  min-width: 0;
-}
-
-.track-name {
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-
-/* ==========================================================================
-   72. LONG ARTIST NAMES
-   ========================================================================== */
-
-.track-channel {
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-
-/* ==========================================================================
-   73. BUTTON LABELS
-   ========================================================================== */
-
-.icon-button[aria-label],
-.track-action[aria-label] {
-  position: relative;
-}
-
-.icon-button[aria-label]:empty,
-.track-action[aria-label]:empty {
-  overflow: hidden;
-}
-
-
-/* ==========================================================================
-   74. DISABLED STATES
-   ========================================================================== */
-
-.icon-button:disabled,
-.track-action:disabled,
-.text-button:disabled,
-button[aria-disabled="true"] {
-  opacity: .4;
-  cursor: not-allowed;
-  pointer-events: none;
-}
-
-
-/* ==========================================================================
-   75. LOADING BUTTON STATES
-   Optional when the HTML adds aria-busy.
-   ========================================================================== */
-
-.icon-button[aria-busy="true"],
-.track-action[aria-busy="true"],
-.text-button[aria-busy="true"] {
-  cursor: progress;
-  opacity: .7;
-}
-
-
-/* ==========================================================================
-   76. SELECTED BUTTON STATES
-   ========================================================================== */
-
-.icon-button[aria-pressed="true"],
-.track-action[aria-pressed="true"] {
-  color: #fff;
-  background: rgba(255, 255, 255, .08);
-}
-
-
-/* ==========================================================================
-   77. EXPANDED BUTTON STATES
-   ========================================================================== */
-
-.icon-button[aria-expanded="true"],
-.track-action[aria-expanded="true"],
-.text-button[aria-expanded="true"] {
-  color: #fff;
-  background: rgba(255, 255, 255, .08);
-}
-
-
-/* ==========================================================================
-   78. BUTTON ACTIVE FEEDBACK
-   ========================================================================== */
-
-.icon-button:not(:disabled):active,
-.track-action:not(:disabled):active,
-.text-button:not(:disabled):active {
-  opacity: .8;
-}
-
-
-/* ==========================================================================
-   79. ICON ALIGNMENT
-   ========================================================================== */
-
-.icon-button svg,
-.track-action svg,
-.text-button svg {
-  vertical-align: middle;
-}
-
-
-/* ==========================================================================
-   80. SVG STROKE CONSISTENCY
-   ========================================================================== */
-
-.icon-button svg,
-.track-action svg,
-.text-button svg {
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-
-/* ==========================================================================
-   81. IMAGE LAYOUT STABILITY
-   ========================================================================== */
-
-.track-art {
-  aspect-ratio: 1 / 1;
-  object-fit: cover;
-}
-
-
-/* ==========================================================================
-   82. IMAGE LOADING STATES
-   ========================================================================== */
-
-.track-art.is-loading {
-  background-color: #222;
-  opacity: .6;
-}
-
-.track-art.is-loaded {
-  opacity: 1;
-}
-
-
-/* ==========================================================================
-   83. IMAGE ERROR STATE
-   Optional when JavaScript adds .is-error.
-   ========================================================================== */
-
-.track-art.is-error {
-  object-fit: contain;
-
-  background:
-    linear-gradient(
-      145deg,
-      #262626,
-      #171717
-    );
-
-  opacity: .8;
-}
-
-
-/* ==========================================================================
-   84. TRACK LIST EMPTY
-   ========================================================================== */
-
-.track-list:empty {
-  min-height: 0;
-  padding: 0;
-}
-
-
-/* ==========================================================================
-   85. TRACK LIST OVERFLOW
-   ========================================================================== */
-
-.track-list,
-.track-row,
-.track-main {
-  max-width: 100%;
-}
-
-
-/* ==========================================================================
-   86. TRACK ROW STABILITY
-   ========================================================================== */
-
-.track-row {
-  contain: layout;
-}
-
-
-/* ==========================================================================
-   87. CONTEXT MENU VIEWPORT
-   ========================================================================== */
-
-.track-context-menu {
-  max-height: min(70vh, 420px);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-
-
-/* ==========================================================================
-   88. CONTEXT MENU SCROLLBAR
-   ========================================================================== */
-
-.track-context-menu {
-  scrollbar-width: thin;
-  scrollbar-color: #555 transparent;
-}
-
-.track-context-menu::-webkit-scrollbar {
-  width: 5px;
-}
-
-.track-context-menu::-webkit-scrollbar-thumb {
-  background: #555;
-  border-radius: 5px;
-}
-
-
-/* ==========================================================================
-   89. CONTEXT MENU TOUCH
-   ========================================================================== */
-
-.track-context-menu button {
-  min-height: 44px;
-  touch-action: manipulation;
-}
-
-
-/* ==========================================================================
-   90. DRAG AND DROP TOUCH
-   ========================================================================== */
-
-.track-row[draggable="true"] {
-  -webkit-user-select: none;
-  user-select: none;
-}
-
-.drag-handle {
-  touch-action: none;
-}
-
-
-/* ==========================================================================
-   91. CONTAINER WIDTH ADAPTATION
-   Optional: enable on a dedicated wrapper, not on the entire app.
-   ========================================================================== */
-
-.track-component-container {
-  width: 100%;
-  min-width: 0;
-  container-type: inline-size;
-}
-
-
-/* ==========================================================================
-   92. CONTAINER QUERY COMPACT
-   ========================================================================== */
-
-@container (max-width: 360px) {
-  .track-component-container .track-row {
-    gap: 7px;
-    padding-inline: 6px;
-  }
-
-  .track-component-container .track-name {
-    font-size: 11px;
-  }
-}
-
-
-/* ==========================================================================
-   93. CONTAINER QUERY WIDE
-   ========================================================================== */
-
-@container (min-width: 600px) {
-  .track-component-container .track-row {
-    padding-inline: 12px;
-  }
-
-  .track-component-container .track-name {
-    font-size: 13px;
-  }
-}
-
-
-/* ==========================================================================
-   94. BACKDROP FILTER FALLBACK
-   ========================================================================== */
-
-@supports not (
-  (backdrop-filter: blur(1px)) or
-  (-webkit-backdrop-filter: blur(1px))
-) {
-  .toast,
-  .track-context-menu {
-    background: #202020;
-  }
-}
-
-
-/* ==========================================================================
-   95. BACKDROP FILTER SUPPORT
-   ========================================================================== */
-
-@supports (
-  (backdrop-filter: blur(1px)) or
-  (-webkit-backdrop-filter: blur(1px))
-) {
-  .toast,
-  .track-context-menu {
-    -webkit-backdrop-filter:
-      blur(var(--component-blur)) saturate(150%);
-
-    backdrop-filter:
-      blur(var(--component-blur)) saturate(150%);
-  }
-}
-
-
-/* ==========================================================================
-   96. SAFARI BUTTON RESET
-   ========================================================================== */
-
-.icon-button,
-.track-action,
-.text-button {
-  appearance: none;
-  -webkit-appearance: none;
-}
-
-
-/* ==========================================================================
-   97. SAFARI IMAGE RENDERING
-   ========================================================================== */
-
-.track-art {
-  -webkit-user-drag: none;
-}
-
-
-/* ==========================================================================
-   98. TOUCH ACTION OPTIMIZATION
-   ========================================================================== */
-
-.icon-button,
-.track-action,
-.text-button,
-.track-context-menu button {
-  touch-action: manipulation;
-}
-
-
-/* ==========================================================================
-   99. PRINT FALLBACK
-   ========================================================================== */
-
-@media print {
-  .track-actions,
-  .track-context-menu,
-  .toast,
-  .track-playing-indicator {
+  [hidden]:where(.track-context-menu, .toast, .empty-state, .track-playing-indicator) {
     display: none !important;
   }
+}
 
+
+/* ==========================================================================
+   03. COMPONENTES
+   ========================================================================== */
+
+@layer shunel.components {
+
+  /* ---------- Contenedor opcional ---------- */
+  .track-component-container {
+    inline-size: 100%;
+    min-inline-size: 0;
+    container: shunel-tracks / inline-size;
+  }
+
+  /* ---------- Lista ---------- */
+  .track-list {
+    inline-size: 100%;
+    min-inline-size: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--component-space-2xs);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    container: shunel-list / inline-size;
+  }
+
+  .track-list:empty {
+    display: none;
+  }
+
+  /* ---------- Fila ----------
+     Columnas: [handle] [arte] [texto] [acciones]
+     El handle solo ocupa columna si existe (:has).                    */
   .track-row {
-    color: #000;
-    background: #fff;
-    border-color: #ddd;
-    break-inside: avoid;
+    position: relative;
+    inline-size: 100%;
+    min-inline-size: 0;
+    min-block-size: var(--component-row-height);
+
+    display: grid;
+    grid-template-columns: var(--component-art-size) minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--component-space-sm);
+    padding: var(--component-space-xs);
+
+    border: 1px solid transparent;
+    border-radius: var(--component-radius);
+    background-color: var(--component-row-bg);
+    color: var(--component-text);
+
+    isolation: isolate;
+    -webkit-tap-highlight-color: transparent;
+
+    transition:
+      background-color var(--component-transition),
+      border-color var(--component-transition),
+      box-shadow var(--component-transition),
+      transform var(--component-transition),
+      opacity var(--component-transition);
+  }
+
+  .track-row:has(> .drag-handle) {
+    grid-template-columns: auto var(--component-art-size) minmax(0, 1fr) auto;
+  }
+
+  .track-row:has(> .track-playing-indicator):not(:has(> .track-art)) {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .track-row[draggable="true"] {
+    -webkit-user-drag: element;
+  }
+
+  /* Capa de brillo para hover (::before). ::after queda reservado
+     para el indicador de pista activa — sin conflictos con .loading. */
+  .track-row::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: linear-gradient(125deg, var(--component-glass), transparent 45%);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--component-transition);
+  }
+
+  .track-row::after {
+    content: "";
+    position: absolute;
+    inset-block: 14px;
+    inset-inline-start: 0;
+    inline-size: 3px;
+    border-radius: 3px;
+    background: var(--component-accent);
+    opacity: 0;
+    transform: scaleY(.4);
+    pointer-events: none;
+    transition:
+      opacity var(--component-transition),
+      transform var(--component-transition),
+      background-color var(--component-transition);
+  }
+
+  /* ---------- Arte ---------- */
+  .track-art {
+    inline-size: var(--component-art-size);
+    block-size: var(--component-art-size);
+    display: block;
+    flex-shrink: 0;
+    aspect-ratio: 1;
+    object-fit: cover;
+    object-position: center;
+    overflow: hidden;
+    border: 1px solid var(--component-border);
+    border-radius: var(--component-radius-small);
+    background-color: var(--component-surface-raised);
+    box-shadow: var(--component-shadow-art);
+    -webkit-user-drag: none;
+    user-select: none;
+    transition:
+      transform var(--component-transition),
+      filter var(--component-transition),
+      opacity var(--component-transition);
+  }
+
+  .track-art.is-loading {
+    opacity: .55;
+    background-image: linear-gradient(90deg,
+      var(--component-skeleton-base) 0%,
+      var(--component-skeleton-highlight) 50%,
+      var(--component-skeleton-base) 100%);
+    background-size: 200% 100%;
+    animation: shunel-shimmer-bg 1.4s linear infinite;
+  }
+
+  .track-art.is-loaded { opacity: 1; }
+
+  .track-art.is-error,
+  .track-art:not([src]),
+  .track-art[src=""] {
+    background-color: var(--component-surface-raised);
+    opacity: .7;
+  }
+
+  .track-art:focus-visible {
+    outline: var(--component-focus-width) solid var(--component-focus-color);
+    outline-offset: var(--component-focus-offset);
+  }
+
+  /* ---------- Texto ---------- */
+  .track-main {
+    min-inline-size: 0;
+    inline-size: 100%;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: var(--component-space-3xs);
+  }
+
+  .track-name,
+  .track-channel {
+    display: block;
+    min-inline-size: 0;
+    max-inline-size: 100%;
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    line-height: var(--component-leading);
   }
 
   .track-name {
-    color: #000;
+    color: var(--component-text);
+    font-size: var(--component-font-sm);
+    font-weight: 650;
+    letter-spacing: var(--component-tracking-tight);
+    transition: color var(--component-transition);
   }
 
   .track-channel {
-    color: #444;
+    color: var(--component-muted);
+    font-size: var(--component-font-xs);
+    font-weight: 400;
+  }
+
+  .track-channel a {
+    color: inherit;
+    text-decoration: none;
+    border-radius: 4px;
+  }
+
+  .track-channel a:focus-visible {
+    outline: var(--component-focus-width) solid var(--component-focus-color);
+    outline-offset: 1px;
+  }
+
+  /* ---------- Acciones ---------- */
+  .track-actions {
+    min-inline-size: 0;
+    min-block-size: var(--component-hit-min);
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--component-space-3xs);
+    flex-shrink: 0;
+  }
+
+  .track-actions:empty { display: none; }
+
+  .icon-button,
+  .track-action {
+    position: relative;
+    inline-size: var(--component-action-size);
+    block-size: var(--component-action-size);
+    min-inline-size: var(--component-action-size);
+    min-block-size: var(--component-action-size);
+    padding: 0;
+    display: inline-grid;
+    place-items: center;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    background-color: transparent;
+    color: var(--component-muted);
+    cursor: pointer;
+    transition:
+      background-color var(--component-transition),
+      color var(--component-transition),
+      border-color var(--component-transition),
+      transform var(--component-duration-fast) var(--component-ease),
+      opacity var(--component-transition);
+  }
+
+  .icon-button:active:not(:disabled, [aria-disabled="true"]),
+  .track-action:active:not(:disabled, [aria-disabled="true"]) {
+    transform: scale(.92);
+    background-color: var(--component-bg-pressed);
+  }
+
+  /* ---------- Botón de texto ---------- */
+  .text-button {
+    min-block-size: var(--component-hit-min);
+    padding: var(--component-space-xs) var(--component-space-sm);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--component-space-xs);
+    border: 1px solid transparent;
+    border-radius: var(--component-radius-small);
+    background-color: transparent;
+    color: var(--component-text);
+    opacity: .82;
+    font-size: var(--component-font-sm);
+    font-weight: 600;
+    line-height: var(--component-leading);
+    text-decoration: none;
+    cursor: pointer;
+    transition:
+      color var(--component-transition),
+      opacity var(--component-transition),
+      background-color var(--component-transition),
+      border-color var(--component-transition),
+      transform var(--component-duration-fast) var(--component-ease);
+  }
+
+  .text-button > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .text-button:not(:disabled, [aria-disabled="true"]):active {
+    transform: scale(.97);
+    background-color: var(--component-bg-pressed);
+  }
+
+  .text-button[aria-busy="true"] {
+    cursor: progress;
+    opacity: .6;
+  }
+
+  /* ---------- Drag handle ---------- */
+  .drag-handle {
+    inline-size: 2.25rem;
+    min-block-size: var(--component-hit-min);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    border-radius: var(--component-radius-small);
+    background: transparent;
+    color: var(--component-subtle);
+    cursor: grab;
+    touch-action: none; /* necesario para arrastre táctil */
+  }
+
+  .drag-handle:active { cursor: grabbing; color: var(--component-text); }
+
+  /* ---------- Indicador de reproducción ---------- */
+  .track-playing-indicator {
+    inline-size: 1.25rem;
+    block-size: 1.25rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    flex: 0 0 auto;
+    color: var(--component-accent);
+  }
+
+  .track-playing-indicator span {
+    inline-size: 3px;
+    block-size: 16px;
+    display: block;
+    border-radius: 3px;
+    background: currentColor;
+    transform: scaleY(.32);
+    transform-origin: center bottom;
+    opacity: .6;
+  }
+
+  /* Animación con transform (compositor) en vez de height (layout) */
+  .track-playing-indicator.active span {
+    animation: shunel-bars .65s ease-in-out infinite alternate;
+  }
+  .track-playing-indicator span:nth-child(2) { animation-delay: .2s; }
+  .track-playing-indicator span:nth-child(3) { animation-delay: .35s; }
+  .track-playing-indicator span:nth-child(4) { animation-delay: .12s; }
+
+  .track-row:not(.is-playing) .track-playing-indicator.active span {
+    animation-play-state: paused;
+  }
+
+  /* ---------- Skeleton ---------- */
+  .track-skeleton {
+    inline-size: 100%;
+    min-block-size: var(--component-row-height);
+    display: grid;
+    grid-template-columns: var(--component-art-size) minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--component-space-sm);
+    padding: var(--component-space-xs);
+    overflow: hidden;
+    border: 1px solid var(--component-border);
+    border-radius: var(--component-radius);
+    background-color: var(--component-row-bg);
+  }
+
+  .track-skeleton-main {
+    display: flex;
+    flex-direction: column;
+    gap: var(--component-space-xs);
+    min-inline-size: 0;
+  }
+
+  .track-skeleton-art,
+  .track-skeleton-line,
+  .track-skeleton-action {
+    display: block;
+    border-radius: 6px;
+    background-color: var(--component-skeleton-base);
+    background-image: linear-gradient(90deg,
+      var(--component-skeleton-base) 0%,
+      var(--component-skeleton-highlight) 50%,
+      var(--component-skeleton-base) 100%);
+    background-size: 200% 100%;
+    animation: shunel-shimmer-bg 1.4s linear infinite;
+  }
+
+  .track-skeleton-art {
+    inline-size: var(--component-art-size);
+    block-size: var(--component-art-size);
+    border-radius: var(--component-radius-small);
+  }
+
+  .track-skeleton-line { inline-size: 78%; block-size: .75rem; }
+  .track-skeleton-line:last-child { inline-size: 48%; block-size: .625rem; }
+
+  .track-skeleton-action {
+    inline-size: 1.5rem;
+    block-size: 1.5rem;
+    margin-inline: var(--component-space-xs);
+    border-radius: 50%;
+  }
+
+  /* ---------- Empty state ---------- */
+  .empty-state {
+    inline-size: 100%;
+    max-inline-size: 32.5rem;
+    margin-inline: auto;
+    padding: var(--component-space-xl) var(--component-space-lg);
+    display: grid;
+    justify-items: center;
+    gap: var(--component-space-sm);
+    border: 1px solid var(--component-border);
+    border-radius: var(--component-radius-large);
+    background: linear-gradient(145deg, var(--component-glass), transparent);
+    color: var(--component-muted);
+    text-align: center;
+    font-size: var(--component-font-sm);
+    line-height: 1.6;
+    text-wrap: balance;
+  }
+
+  .empty-state:empty { display: none; }
+  .empty-state > * { margin: 0; max-inline-size: 42ch; }
+
+  .empty-state > svg {
+    inline-size: 2.5rem;
+    block-size: 2.5rem;
+    color: var(--component-subtle);
+    stroke-width: 1.5;
+  }
+
+  .empty-state strong {
+    color: var(--component-text);
+    font-size: var(--component-font-md);
+    font-weight: 650;
+  }
+
+  .empty-state p { text-wrap: pretty; }
+
+  .empty-state .text-button,
+  .empty-state button {
+    margin-block-start: var(--component-space-2xs);
+    border-color: var(--component-border-light);
+    background-color: var(--component-glass);
+    opacity: 1;
+  }
+
+  /* ---------- Menú contextual ---------- */
+  .track-context-menu {
+    position: absolute;
+    z-index: var(--component-z-menu);
+    inline-size: max-content;
+    min-inline-size: var(--component-menu-width);
+    max-inline-size: var(--component-menu-max-width);
+    max-block-size: min(70dvh, 26.25rem);
+    margin: 0;
+    padding: 6px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: var(--component-border-strong) transparent;
+    border: 1px solid var(--component-border-light);
+    border-radius: 14px;
+    background-color: var(--component-surface-overlay);
+    color: var(--component-text);
+    box-shadow: var(--component-shadow-menu);
+    -webkit-backdrop-filter: blur(var(--component-blur)) saturate(150%);
+    backdrop-filter: blur(var(--component-blur)) saturate(150%);
+    transform-origin: top right;
+  }
+
+  .track-context-menu button,
+  .track-context-menu [role="menuitem"] {
+    inline-size: 100%;
+    min-block-size: var(--component-hit-min);
+    display: flex;
+    align-items: center;
+    gap: var(--component-space-sm);
+    padding: var(--component-space-xs) var(--component-space-sm);
+    border: 0;
+    border-radius: 8px;
+    background-color: transparent;
+    color: var(--component-text);
+    text-align: start;
+    font-size: var(--component-font-sm);
+    cursor: pointer;
+    user-select: none;
+    transition:
+      background-color var(--component-duration-fast) var(--component-ease),
+      color var(--component-duration-fast) var(--component-ease);
+  }
+
+  .track-context-menu button svg { color: var(--component-muted); }
+  .track-context-menu button:active { background-color: var(--component-bg-pressed); }
+
+  .track-context-menu button[data-danger="true"],
+  .track-context-menu button[data-danger="true"] svg {
+    color: var(--component-danger);
+  }
+
+  .track-context-menu hr,
+  .track-context-menu [role="separator"] {
+    block-size: 1px;
+    margin: 4px 6px;
+    border: 0;
+    background: var(--component-border);
+  }
+
+  /* Popover API nativa (opcional): <div class="track-context-menu" popover> */
+  .track-context-menu[popover] {
+    inset: auto;
+    opacity: 1;
+    transform: none;
+    transition:
+      opacity var(--component-duration-fast) var(--component-ease),
+      transform var(--component-duration-fast) var(--component-ease-out),
+      overlay var(--component-duration-fast) allow-discrete,
+      display var(--component-duration-fast) allow-discrete;
+  }
+  .track-context-menu[popover]:not(:popover-open) {
+    opacity: 0;
+    transform: scale(.96);
+  }
+  @starting-style {
+    .track-context-menu[popover]:popover-open {
+      opacity: 0;
+      transform: scale(.96);
+    }
+  }
+
+  /* Anchor positioning (Chrome/Edge 125+, Safari 26+): sin JS para posicionar.
+     Botón: style="anchor-name: --menu-1"  Menú: style="position-anchor: --menu-1" */
+  @supports (position-area: block-end) {
+    .track-context-menu[popover][style*="position-anchor"] {
+      position: fixed;
+      position-area: block-end span-inline-start;
+      position-try-fallbacks: flip-block, flip-inline, flip-block flip-inline;
+      margin-block: 4px;
+    }
+  }
+
+  /* ---------- Toasts ---------- */
+  .toast-container {
+    position: fixed;
+    z-index: var(--component-z-toast);
+    inset-inline: 0;
+    inset-block-end: calc(var(--component-toast-offset) + var(--component-safe-bottom) + 18px);
+    margin-inline: auto;
+    inline-size: min(100%, calc(var(--component-toast-max-width) + 2.5rem));
+    padding-inline: max(.875rem, var(--component-safe-left)) max(.875rem, var(--component-safe-right));
+    display: flex;
+    flex-direction: column-reverse;
+    align-items: center;
+    gap: var(--component-space-xs);
+    pointer-events: none;
+  }
+
+  .toast {
+    position: fixed;
+    z-index: var(--component-z-toast);
+    inset-inline: 0;
+    inset-block-end: calc(var(--component-toast-offset) + var(--component-safe-bottom) + 18px);
+    margin-inline: auto;
+    inline-size: max-content;
+    max-inline-size: min(var(--component-toast-max-width), calc(100vw - 2.25rem));
+    min-block-size: var(--component-hit-min);
+    padding: var(--component-space-sm) var(--component-space-md);
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--component-space-xs);
+
+    border: 1px solid var(--component-border-light);
+    border-radius: 13px;
+    background-color: var(--component-surface-overlay);
+    color: var(--component-text-strong);
+    box-shadow: var(--component-shadow-toast);
+    -webkit-backdrop-filter: blur(24px) saturate(150%);
+    backdrop-filter: blur(24px) saturate(150%);
+
+    font-size: var(--component-font-sm);
+    line-height: 1.45;
+    text-align: start;
+    overflow-wrap: anywhere;
+
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateY(12px) scale(.97);
+    transition:
+      opacity var(--component-duration) ease,
+      visibility var(--component-duration) ease,
+      transform .25s var(--component-ease-out);
+  }
+
+  /* Dentro de un contenedor el toast fluye normal y CONSERVA su animación
+     (la v3.0 ponía transform:none y mataba la transición). */
+  .toast-container .toast {
+    position: relative;
+    inset: auto;
+    margin: 0;
+    inline-size: 100%;
+    max-inline-size: 100%;
+  }
+
+  .toast > p { margin: 0; }
+  .toast strong { font-weight: 650; }
+  .toast svg { inline-size: 1.125rem; block-size: 1.125rem; }
+
+  .toast[data-type="success"] { border-color: color-mix(in srgb, var(--component-success) 40%, transparent); }
+  .toast[data-type="warning"] { border-color: color-mix(in srgb, var(--component-warning) 40%, transparent); }
+  .toast[data-type="error"]   { border-color: color-mix(in srgb, var(--component-danger) 40%, transparent); }
+  .toast[data-type="info"]    { border-color: color-mix(in srgb, var(--component-info) 40%, transparent); }
+  .toast[data-type="success"] svg { color: var(--component-success); }
+  .toast[data-type="warning"] svg { color: var(--component-warning); }
+  .toast[data-type="error"]   svg { color: var(--component-danger); }
+  .toast[data-type="info"]    svg { color: var(--component-info); }
+
+  /* ---------- Favoritos del reproductor completo ---------- */
+  .favorite-current.is-favorite,
+  .full-player-info .icon-button.is-favorite {
+    color: var(--component-favorite);
+  }
+
+  .favorite-current.is-favorite svg,
+  .full-player-info .icon-button.is-favorite svg {
+    fill: currentColor;
+    stroke: currentColor;
+    animation: shunel-pop .32s var(--component-ease-out);
+  }
+
+  /* ==========================================================
+     NUEVOS COMPONENTES [v4] — prefijo shunel- (no chocan)
+     ========================================================== */
+
+  /* Chip / filtro: <button class="shunel-chip" aria-pressed="false"> */
+  .shunel-chip {
+    min-block-size: 2rem;
+    padding: 0 var(--component-space-sm);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--component-space-2xs);
+    border: 1px solid var(--component-border-light);
+    border-radius: var(--component-radius-pill);
+    background-color: var(--component-glass);
+    color: var(--component-text);
+    font-size: var(--component-font-xs);
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+    position: relative;
+    transition: background-color var(--component-transition), color var(--component-transition), border-color var(--component-transition);
+  }
+  /* Área táctil de 44px aunque el chip mida 32px */
+  .shunel-chip::after {
+    content: "";
+    position: absolute;
+    inset: -6px 0;
+  }
+  .shunel-chip svg { inline-size: 1rem; block-size: 1rem; }
+  .shunel-chip[aria-pressed="true"],
+  .shunel-chip[aria-selected="true"] {
+    border-color: transparent;
+    background-color: var(--component-accent);
+    color: var(--component-accent-contrast);
+  }
+
+  .shunel-chip-group {
+    display: flex;
+    gap: var(--component-space-xs);
+    overflow-x: auto;
+    padding-block: 6px;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+    mask-image: linear-gradient(90deg, #000 calc(100% - 2rem), transparent);
+  }
+  .shunel-chip-group > * { scroll-snap-align: start; flex: 0 0 auto; }
+
+  /* Badge: <span class="shunel-badge">Nuevo</span> */
+  .shunel-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 6px;
+    border-radius: var(--component-radius-pill);
+    background-color: var(--component-glass-hover);
+    color: var(--component-text);
+    font-size: var(--component-font-2xs);
+    font-weight: 650;
+    line-height: 1.5;
+    white-space: nowrap;
+    vertical-align: middle;
+  }
+  .shunel-badge[data-type="explicit"] {
+    padding-inline: 4px;
+    border-radius: 3px;
+    background-color: var(--component-muted);
+    color: var(--component-surface);
+  }
+
+  /* Duración opcional: <span class="track-duration">3:42</span> en .track-actions */
+  .track-duration {
+    display: none;
+    min-inline-size: 3.5ch;
+    color: var(--component-muted);
+    font-size: var(--component-font-xs);
+    font-variant-numeric: tabular-nums;
+    text-align: end;
+  }
+
+  /* Tooltip CSS‑only: <button aria-label="Me gusta" data-tooltip="Me gusta"> */
+  @media (hover: hover) and (pointer: fine) {
+    [data-tooltip] { position: relative; }
+    [data-tooltip]::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      inset-block-end: calc(100% + 6px);
+      inset-inline-start: 50%;
+      z-index: var(--component-z-menu);
+      padding: 4px 8px;
+      border-radius: 6px;
+      background-color: var(--component-text);
+      color: var(--component-surface);
+      font-size: var(--component-font-2xs);
+      font-weight: 600;
+      white-space: nowrap;
+      opacity: 0;
+      transform: translate(-50%, 4px);
+      pointer-events: none;
+      transition: opacity var(--component-duration-fast) ease, transform var(--component-duration-fast) ease;
+      transition-delay: 0s;
+    }
+    [data-tooltip]:hover::after,
+    [data-tooltip]:focus-visible::after {
+      opacity: 1;
+      transform: translate(-50%, 0);
+      transition-delay: .4s;
+    }
+  }
+
+  /* Barra "reproduciendo ahora" (mini‑player) */
+  .shunel-now-playing {
+    position: fixed;
+    z-index: calc(var(--component-z-menu) - 1);
+    inset-inline: max(.5rem, var(--component-safe-left)) max(.5rem, var(--component-safe-right));
+    inset-block-end: calc(.5rem + var(--component-safe-bottom));
+    display: grid;
+    grid-template-columns: var(--component-art-size) minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--component-space-sm);
+    padding: var(--component-space-xs);
+    border: 1px solid var(--component-border-light);
+    border-radius: var(--component-radius-large);
+    background-color: var(--component-surface-overlay);
+    box-shadow: var(--component-shadow-menu);
+    -webkit-backdrop-filter: blur(var(--component-blur)) saturate(150%);
+    backdrop-filter: blur(var(--component-blur)) saturate(150%);
+    container: shunel-player / inline-size;
+  }
+
+  .shunel-progress {
+    position: absolute;
+    inset-inline: 12px;
+    inset-block-end: 0;
+    block-size: 2px;
+    border-radius: 2px;
+    background: var(--component-border-light);
+    overflow: hidden;
+  }
+  .shunel-progress::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: var(--component-accent);
+    transform-origin: left;
+    transform: scaleX(var(--progress, 0));
+  }
+  .shunel-progress:dir(rtl)::before { transform-origin: right; }
+
+  /* Clase utilitaria para texto solo para lectores de pantalla */
+  .shunel-sr-only {
+    position: absolute !important;
+    inline-size: 1px; block-size: 1px;
+    padding: 0; margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
   }
 }
 
 
 /* ==========================================================================
-   100. FINAL COMPONENT SAFETY
+   04. ESTADOS
+   Una sola definición por estado (la v3.0 tenía duplicados que se pisaban).
    ========================================================================== */
 
-.track-row *,
-.track-actions *,
-.track-main *,
-.track-context-menu * {
-  min-width: 0;
-}
+@layer shunel.states {
 
-.track-row img,
-.track-row svg {
-  max-width: 100%;
-}
+  /* ---------- Fila: actual / reproduciendo ---------- */
+  .track-row.active,
+  .track-row.is-playing,
+  .track-row[aria-current="true"] {
+    background-color: var(--component-bg-active);
+    border-color: var(--component-border-light);
+  }
 
-.track-row button,
-.track-context-menu button {
-  -webkit-user-select: none;
-  user-select: none;
-}
+  .track-row.active.is-playing {
+    background-color: var(--component-bg-pressed);
+    border-color: var(--component-border-strong);
+  }
 
-.track-row,
-.track-actions,
-.track-main {
-  min-width: 0;
+  .track-row.active .track-name,
+  .track-row.is-playing .track-name,
+  .track-row[aria-current="true"] .track-name {
+    color: var(--component-text-strong);
+  }
+
+  .track-row.is-playing .track-channel { color: var(--component-text); opacity: .8; }
+
+  .track-row.active .track-art,
+  .track-row.is-playing .track-art {
+    filter: brightness(1.08);
+  }
+
+  .track-row.active::after,
+  .track-row.is-playing::after,
+  .track-row[aria-current="true"]::after {
+    opacity: .75;
+    transform: scaleY(1);
+  }
+  .track-row.active.is-playing::after { opacity: 1; }
+
+  /* ---------- Selección ---------- */
+  .track-row.is-selected,
+  .track-row[aria-selected="true"] {
+    background-color: var(--component-bg-selected);
+    border-color: var(--component-border-strong);
+  }
+
+  /* ---------- Favorita ---------- */
+  .track-row.is-favorite .track-name::after {
+    content: "";
+    display: inline-block;
+    inline-size: 6px;
+    block-size: 6px;
+    margin-inline-start: 6px;
+    border-radius: 50%;
+    background: var(--component-favorite);
+    vertical-align: middle;
+    opacity: .8;
+  }
+
+  /* ---------- Deshabilitada ----------
+     aria-disabled conserva el foco (lectores de pantalla pueden anunciarla);
+     solo se bloquean clics en los botones internos. */
+  .track-row.is-disabled,
+  .track-row[aria-disabled="true"] {
+    opacity: .45;
+    cursor: not-allowed;
+  }
+  .track-row.is-disabled :is(button, a),
+  .track-row[aria-disabled="true"] :is(button, a) {
+    pointer-events: none;
+  }
+
+  /* ---------- Cargando (shimmer en el fondo, ya no choca con ::after) ---------- */
+  .track-row.loading {
+    background-image: linear-gradient(90deg,
+      transparent 0%, var(--component-glass) 50%, transparent 100%);
+    background-size: 200% 100%;
+    background-repeat: no-repeat;
+    animation: shunel-shimmer-bg 1.4s linear infinite;
+    cursor: progress;
+  }
+
+  /* ---------- Arrastre ---------- */
+  .track-row.dragging {
+    z-index: var(--component-z-row-drag);
+    opacity: .55;
+    transform: scale(.98);
+    background-color: var(--component-bg-pressed);
+    box-shadow: var(--component-shadow-menu);
+    cursor: grabbing;
+  }
+
+  .track-row.drag-over {
+    border-color: var(--component-border-strong);
+    background-color: var(--component-bg-pressed);
+    box-shadow: inset 0 2px 0 0 var(--component-accent);
+  }
+
+  /* ---------- Presión táctil ---------- */
+  .track-row:active:not(.dragging, .is-disabled, [aria-disabled="true"]) {
+    transform: scale(.992);
+  }
+  .track-row:active:not(.dragging) .track-art { transform: scale(.96); }
+
+  /* ---------- Botones: favorito / pressed / expanded ---------- */
+  .track-action.is-favorite,
+  .icon-button.is-favorite,
+  .track-action[aria-pressed="true"],
+  .icon-button[aria-pressed="true"] {
+    color: var(--component-favorite);
+    background-color: var(--component-glass);
+  }
+
+  .track-action.is-favorite svg,
+  .track-action[aria-pressed="true"] svg,
+  .icon-button[aria-pressed="true"] svg {
+    fill: currentColor;
+  }
+
+  .track-action.is-favorite:active svg { transform: scale(.85); }
+
+  .track-action[aria-expanded="true"],
+  .icon-button[aria-expanded="true"],
+  .text-button[aria-expanded="true"],
+  .text-button[aria-pressed="true"] {
+    color: var(--component-text-strong);
+    background-color: var(--component-bg-active);
+    border-color: var(--component-border-light);
+    opacity: 1;
+  }
+
+  /* ---------- Deshabilitados ---------- */
+  :is(.icon-button, .track-action, .text-button, .track-context-menu button):is(:disabled, [aria-disabled="true"]) {
+    opacity: .4;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  /* ---------- Toast visible ---------- */
+  .toast.visible,
+  .toast.show {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: translateY(0) scale(1);
+  }
+
+  /* ---------- Foco: un solo sistema, sin overrides posteriores ---------- */
+  :is(.icon-button, .track-action, .text-button, .drag-handle, .shunel-chip,
+      .track-context-menu button, .track-context-menu [role="menuitem"]):focus-visible {
+    outline: var(--component-focus-width) solid var(--component-focus-color);
+    outline-offset: var(--component-focus-offset);
+  }
+  .track-row:focus-visible {
+    outline: var(--component-focus-width) solid var(--component-focus-color);
+    outline-offset: var(--component-focus-offset);
+  }
+  .track-context-menu button:focus-visible { outline-offset: -2px; }
+  .track-row:focus-within:not(:focus-visible) {
+    border-color: color-mix(in srgb, var(--component-focus-color) 35%, transparent);
+  }
+  :is(.track-row, .icon-button, .track-action, .text-button):focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  /* ---------- Hover: SOLO en dispositivos con puntero real ----------
+     Así no queda "pegado" el hover en pantallas táctiles y no hace
+     falta resetear fondos (la v3.0 borraba el fondo de favoritos). */
+  @media (hover: hover) and (pointer: fine) {
+    .track-row:hover:not(.dragging) {
+      background-color: var(--component-bg-hover);
+      border-color: var(--component-border);
+    }
+    .track-row:is(.active, .is-playing, .is-selected, [aria-selected="true"]):hover {
+      background-color: var(--component-bg-pressed);
+    }
+    .track-row:hover::before { opacity: 1; }
+    .track-row:hover .track-art { filter: brightness(1.06); }
+
+    :is(.icon-button, .track-action):hover:not(:disabled, [aria-disabled="true"]) {
+      color: var(--component-text-strong);
+      background-color: var(--component-glass-hover);
+    }
+    .text-button:hover:not(:disabled, [aria-disabled="true"]) {
+      opacity: 1;
+      background-color: var(--component-glass);
+    }
+    .track-channel a:hover { color: var(--component-text); text-decoration: underline; text-underline-offset: 2px; }
+    .track-context-menu button:hover:not(:disabled) {
+      background-color: var(--component-glass-hover);
+    }
+    .track-context-menu button[data-danger="true"]:hover {
+      background-color: color-mix(in srgb, var(--component-danger) 14%, transparent);
+    }
+    .drag-handle:hover { color: var(--component-text); }
+    .shunel-chip:hover:not([aria-pressed="true"]) { background-color: var(--component-glass-hover); }
+  }
 }
 
 
 /* ==========================================================================
-   END — SHUNEL COMPONENT SYSTEM 3.0
+   05. RESPONSIVE
+   Primero CONTAINER QUERIES (la fila se adapta al ancho de su columna,
+   no de la pantalla: funciona igual en sidebar, modal o página completa).
+   Breakpoints unificados: 22.5rem (360) · 30rem (480) · 45rem (720) · 70rem (1120)
+   ========================================================================== */
+
+@layer shunel.responsive {
+
+  /* --- Lista muy estrecha (< 360px): sidebar, widgets, teléfonos pequeños --- */
+  @container shunel-list (max-width: 22.4rem) {
+    .track-row,
+    .track-skeleton {
+      --component-art-size: 2.5rem;
+      gap: var(--component-space-xs);
+      padding: 6px;
+      min-block-size: 3.5rem;
+    }
+    .track-row:has(> .drag-handle) .drag-handle { inline-size: 1.5rem; }
+    .track-actions { gap: 0; }
+    /* Oculta acciones secundarias marcadas, deja el botón "más" */
+    .track-actions > [data-priority="low"] { display: none; }
+  }
+
+  /* --- Normal (≥ 480px) --- */
+  @container shunel-list (min-width: 30rem) {
+    .track-row { padding: var(--component-space-xs) var(--component-space-sm); }
+    .track-name { font-size: var(--component-font-md); }
+    .track-channel { font-size: var(--component-font-sm); }
+  }
+
+  /* --- Amplio (≥ 720px): aparece la duración, más aire --- */
+  @container shunel-list (min-width: 45rem) {
+    .track-row,
+    .track-skeleton {
+      --component-art-size: 3rem;
+      min-block-size: 4.25rem;
+      gap: var(--component-space-md);
+    }
+    .track-duration { display: inline-block; margin-inline-end: var(--component-space-xs); }
+    .track-actions { gap: var(--component-space-2xs); }
+  }
+
+  /* --- Muy amplio (≥ 1120px): dos columnas de lista --- */
+  @container shunel-list (min-width: 70rem) {
+    .track-list[data-columns="auto"] {
+      grid-template-columns: repeat(auto-fill, minmax(min(100%, 32rem), 1fr));
+    }
+  }
+
+  /* Contenedor opcional .track-component-container (compatibilidad v3.0) */
+  @container shunel-tracks (max-width: 22.4rem) {
+    .track-name { font-size: var(--component-font-sm); }
+  }
+
+  /* Mini‑player: oculta controles secundarios si es estrecho */
+  @container shunel-player (max-width: 20rem) {
+    .shunel-now-playing [data-priority="low"] { display: none; }
+  }
+
+  /* --- Media queries de VIEWPORT solo para elementos fijos (toast, menú) --- */
+
+  /* Teléfono: toast a lo ancho, menú como hoja inferior opcional */
+  @media (max-width: 40rem) {
+    .toast:not(.toast-container *) {
+      inline-size: auto;
+      inset-inline: max(.875rem, var(--component-safe-left)) max(.875rem, var(--component-safe-right));
+      max-inline-size: none;
+      justify-content: flex-start;
+    }
+    .track-context-menu[data-sheet="true"] {
+      position: fixed;
+      inset: auto 0 0 0;
+      inline-size: 100%;
+      max-inline-size: none;
+      max-block-size: 70dvh;
+      padding-block-end: calc(6px + var(--component-safe-bottom));
+      border-radius: 18px 18px 0 0;
+      transform-origin: bottom center;
+    }
+  }
+
+  /* Teléfono horizontal: menos altura disponible */
+  @media (max-height: 30rem) and (orientation: landscape) {
+    :root { --component-row-height: 3.5rem; }
+    .empty-state { padding-block: var(--component-space-md); }
+    .toast:not(.toast-container *) { inset-block-end: calc(var(--component-space-md) + var(--component-safe-bottom)); }
+    .toast-container { inset-block-end: calc(var(--component-space-md) + var(--component-safe-bottom)); }
+    .track-context-menu { max-block-size: 85dvh; }
+  }
+
+  /* Escritorio: toast arriba‑derecha si el usuario lo pide */
+  @media (min-width: 64rem) {
+    .toast-container[data-position="top-end"] {
+      inset-block: calc(1rem + var(--component-safe-top)) auto;
+      inset-inline: auto calc(1rem + var(--component-safe-right));
+      margin: 0;
+      flex-direction: column;
+      align-items: flex-end;
+    }
+    .shunel-now-playing {
+      inset-inline: auto;
+      inset-inline-end: 1rem;
+      inline-size: min(26rem, calc(100vw - 2rem));
+    }
+  }
+
+  /* Desplazamiento sutil en hover solo con ratón y pantalla amplia */
+  @media (min-width: 64rem) and (hover: hover) and (pointer: fine) {
+    .track-row:hover:not(.dragging, .is-disabled) { transform: translateX(2px); }
+    .track-row:hover:not(.dragging):dir(rtl) { transform: translateX(-2px); }
+  }
+
+  /* Fallback para navegadores sin container queries (< 2023) */
+  @supports not (container-type: inline-size) {
+    @media (min-width: 45rem) {
+      .track-duration { display: inline-block; }
+      .track-name { font-size: var(--component-font-md); }
+    }
+  }
+}
+
+
+/* ==========================================================================
+   06. ACCESIBILIDAD Y PREFERENCIAS DEL USUARIO
+   ========================================================================== */
+
+@layer shunel.a11y {
+
+  /* Movimiento reducido: se quitan animaciones pero NO la información
+     (el indicador de reproducción queda estático y visible). */
+  @media (prefers-reduced-motion: reduce) {
+    .track-row,
+    .track-row::before,
+    .track-row::after,
+    .track-art,
+    .icon-button,
+    .track-action,
+    .text-button,
+    .toast,
+    .track-context-menu,
+    .track-context-menu button,
+    .shunel-chip {
+      transition-duration: .01ms !important;
+      animation-duration: .01ms !important;
+      animation-iteration-count: 1 !important;
+    }
+    .track-row:active,
+    .track-row:hover,
+    .icon-button:active,
+    .track-action:active,
+    .text-button:active,
+    .track-row.dragging {
+      transform: none !important;
+    }
+    .track-playing-indicator span,
+    .track-playing-indicator.active span {
+      animation: none !important;
+    }
+    .track-playing-indicator.active span { transform: scaleY(.6); opacity: 1; }
+    .track-playing-indicator.active span:nth-child(2) { transform: scaleY(1); }
+    .track-playing-indicator.active span:nth-child(3) { transform: scaleY(.8); }
+    .track-row.loading,
+    .track-art.is-loading,
+    .track-skeleton-art,
+    .track-skeleton-line,
+    .track-skeleton-action {
+      animation: none !important;
+      background-image: none;
+    }
+  }
+
+  /* Más contraste solicitado por el sistema */
+  @media (prefers-contrast: more) {
+    :root,
+    [data-theme] {
+      --component-border: rgb(255 255 255 / .3);
+      --component-border-light: rgb(255 255 255 / .45);
+      --component-muted: #cfcfcf;
+      --component-subtle: #b5b5b5;
+      --component-focus-width: 3px;
+    }
+    [data-theme="light"] {
+      --component-border: rgb(0 0 0 / .4);
+      --component-border-light: rgb(0 0 0 / .55);
+      --component-muted: #2e2e2e;
+      --component-subtle: #3d3d3d;
+    }
+    .toast,
+    .track-context-menu,
+    .shunel-now-playing {
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+      background-color: var(--component-surface);
+    }
+  }
+
+  /* Transparencia reducida (Safari/macOS/iOS) */
+  @media (prefers-reduced-transparency: reduce) {
+    .toast,
+    .track-context-menu,
+    .shunel-now-playing {
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+      background-color: var(--component-surface-raised);
+    }
+  }
+
+  /* Modo de colores forzados (Windows Alto Contraste) */
+  @media (forced-colors: active) {
+    .track-row,
+    .track-skeleton,
+    .toast,
+    .track-context-menu,
+    .empty-state,
+    .shunel-now-playing {
+      border: 1px solid CanvasText;
+    }
+    .track-row.active,
+    .track-row.is-playing,
+    .track-row.is-selected,
+    .track-row[aria-current="true"],
+    .track-row[aria-selected="true"] {
+      border: 2px solid Highlight;
+    }
+    .track-row::after { background: Highlight; forced-color-adjust: none; }
+    .track-playing-indicator span { background: CanvasText; }
+    :is(.icon-button, .track-action, .text-button, .shunel-chip) {
+      border: 1px solid ButtonText;
+    }
+    :is(.track-action, .icon-button)[aria-pressed="true"],
+    .shunel-chip[aria-pressed="true"] {
+      border-color: Highlight;
+      color: Highlight;
+    }
+    :is(.icon-button, .track-action, .text-button, .track-row, .shunel-chip,
+        .track-context-menu button):focus-visible {
+      outline: 3px solid Highlight;
+    }
+    :is(.icon-button, .track-action, .text-button):disabled {
+      color: GrayText;
+      border-color: GrayText;
+    }
+  }
+
+  /* Impresión */
+  @media print {
+    .track-actions,
+    .track-context-menu,
+    .toast,
+    .toast-container,
+    .track-playing-indicator,
+    .drag-handle,
+    .shunel-now-playing {
+      display: none !important;
+    }
+    .track-row {
+      color: #000;
+      background: #fff;
+      border-color: #ccc;
+      break-inside: avoid;
+      box-shadow: none;
+    }
+    .track-row::before,
+    .track-row::after { display: none; }
+    .track-name { color: #000; }
+    .track-channel { color: #444; }
+  }
+}
+
+
+/* ==========================================================================
+   07. KEYFRAMES (fuera de capas: nombres con prefijo shunel-)
+   Se mantienen alias con los nombres v3.0 por si tu JS los referencia.
+   ========================================================================== */
+
+@keyframes shunel-bars {
+  from { transform: scaleY(.3); opacity: .5; }
+  to   { transform: scaleY(1);  opacity: 1; }
+}
+
+@keyframes shunel-shimmer-bg {
+  from { background-position: 100% 0; }
+  to   { background-position: -100% 0; }
+}
+
+@keyframes shunel-pop {
+  0%   { transform: scale(1); }
+  45%  { transform: scale(1.22); }
+  100% { transform: scale(1); }
+}
+
+/* Alias v3.0 */
+@keyframes track-bars       { from { transform: scaleY(.3); opacity: .5; } to { transform: scaleY(1); opacity: 1; } }
+@keyframes track-shimmer    { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+@keyframes skeleton-loading { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+
+/* ==========================================================================
+   FIN — SHUNEL COMPONENT SYSTEM 4.0
    ========================================================================== */
