@@ -611,7 +611,9 @@
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
-  transform: translateY(0);
+  /* none (no translateY(0)): así el fondo fixed de artwork.css
+     se ancla a la pantalla y no se mueve con el scroll */
+  transform: none;
 }
 
 .full-player[hidden] { display: none !important; }
