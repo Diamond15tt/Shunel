@@ -1,1454 +1,2360 @@
-/* ==========================================================================
-   SHUNEL — Artwork Manager (v4.1)
-   Portadas por canción, validación de coincidencias, respaldo de carátula de álbum,
-   --song-color con <canvas>, estados de carga/reproducción, gestos táctiles, a11y
-   y gestión limpia de ciclo de vida.
-   ========================================================================== */
+
+/* =========================================================
+   SHUNEL — ARTWORK ENGINE v4.2
+   Frontend ES Module
+   Compatible con iOS Safari / PWA
+
+   Fuentes:
+   - Mods del usuario
+   - MusicBrainz / Cover Art Archive
+   - iTunes Search API
+   - Deezer Artist API
+   - YouTube thumbnail
+   - Fallback local
+
+   Integraciones:
+   - ./metadata.js
+   - ./mods.js
+
+   Exports:
+   - applyArtwork
+   - loadArtwork
+   - preloadArtwork
+   - resetArtwork
+   - destroyArtwork
+   - initArtwork
+   - setArtworkPlaybackState
+   ========================================================= */
 
 import { getTrackMetadata } from './metadata.js';
+
 import {
   applyModToTrack,
   getArtistArtworkEntry
 } from './mods.js';
 
-const FALLBACK = '/assets/logo.png';
-const DEEZER_PROXY = 'https://proxy.cors.dev/https://api.deezer.com';
-const ITUNES_SEARCH_URL = 'https://itunes.apple.com/search';
-const CACHE_KEY = 'shunel_artist_artwork_v3';
-const CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 10; // 10 días
-const MAX_CACHE_ENTRIES = 90;
-const MAX_COLOR_CACHE_ENTRIES = 120;
-const FETCH_TIMEOUT_MS = 7000;
-const COLOR_SYNC_TIMEOUT_MS = 450;
-const DEFAULT_SONG_COLOR = '#242424';
-const DEFAULT_SECONDARY_COLOR = '#141414';
+/* =========================================================
+   CONFIGURACIÓN
+   ========================================================= */
 
-const CLASS_LOADING = 'shunel-artwork-loading';
-const CLASS_READY = 'shunel-artwork-ready';
-const CLASS_ERROR = 'shunel-artwork-error';
+const VERSION = '4.2';
 
-let activeTrackKey = '';
-let activeArtwork = FALLBACK;
-let activeSongColor = DEFAULT_SONG_COLOR;
+const FALLBACK_ARTWORK = '/assets/logo.png';
+
+const ARTIST_CACHE_KEY = 'shunel_artist_artwork_v4';
+
+const ARTIST_CACHE_TTL =
+  10 * 24 * 60 * 60 * 1000;
+
+const ARTIST_CACHE_LIMIT = 90;
+
+const ARTWORK_TIMEOUT = 6500;
+
+const COLOR_TIMEOUT = 450;
+
+const ITUNES_ENDPOINT =
+  'https://itunes.apple.com/search';
+
+const DEEZER_ENDPOINT =
+  'https://proxy.cors.dev/https://api.deezer.com';
+
+const IMAGE_SOURCE_PRIORITY = {
+  mod: 100,
+  'musicbrainz-cover-art-archive': 90,
+  itunes: 80,
+  artist: 60,
+  'youtube-thumbnail': 20,
+  fallback: 0
+};
+
+/* =========================================================
+   ESTADO
+   ========================================================= */
+
 let activeTrack = null;
-let requestController = null;
-let requestCounter = 0;
+
+let activeArtwork = '';
+
+let activeArtworkSource = 'fallback';
+
+let activeRequestId = 0;
+
+let activeRequestKey = '';
+
+let activeController = null;
+
+let activeColorKey = '';
+
+let activeSongColor = null;
+
+let activeSecondaryColor = null;
+
+let isPlaying = false;
+
 let initialized = false;
-let isPlayingState = false;
-let isLoadingState = false;
-let rafScheduled = false;
-let pendingVisualSync = null;
 
-const artistRequests = new Map();
-const albumRequests = new Map();
-const colorCache = new Map();
-const preloadedUrls = new Set();
-const cleanupCallbacks = [];
-const gestureState = new WeakMap();
+let destroyed = false;
 
-let colorCanvas = null;
-let colorCtx = null;
+let visualRafId = 0;
 
-/* --------------------------------------------------------------------------
-   01. UTILIDADES DE IDENTIDAD, NORMALIZACIÓN Y VALIDACIÓN DE URLs
-   -------------------------------------------------------------------------- */
+let visualSyncPending = false;
 
-function isDebugEnabled() {
+let activePointer = null;
+
+let pointerStartX = 0;
+
+let pointerStartY = 0;
+
+let pointerMoved = false;
+
+let gestureScale = 1;
+
+let songColorCache = new Map();
+
+let albumRequests = new Map();
+
+let artistRequests = new Map();
+
+let preloadRequests = new Map();
+
+let imageListeners = new WeakMap();
+
+let boundEvents = [];
+
+let visualElements = new Set();
+
+/* =========================================================
+   UTILIDADES
+   ========================================================= */
+
+function clean(value, max = 220) {
+  if (
+    value === null ||
+    value === undefined ||
+    typeof value === 'object'
+  ) {
+    return '';
+  }
+
+  return String(value)
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, max);
+}
+
+function normalizeText(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\$/g, 's')
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizeArtist(value) {
+  return normalizeText(value)
+    .replace(
+      /\b(?:official|topic|vevo|music|records?|tv|channel|hd|hq)\b/g,
+      ' '
+    )
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function isObject(value) {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    !Array.isArray(value)
+  );
+}
+
+function isValidImageUrl(value) {
+  if (typeof value !== 'string' || !value.trim()) {
+    return false;
+  }
+
   try {
-    return Boolean(
-      window?.__SHUNEL_DEBUG__ === true ||
-      window?.localStorage?.getItem('shunel_debug') === '1'
+    const url = new URL(value, location.origin);
+
+    return (
+      url.protocol === 'https:' ||
+      url.origin === location.origin
     );
   } catch {
     return false;
   }
 }
 
-function logDebug(...args) {
-  if (isDebugEnabled()) {
-    console.debug('[Shunel Artwork]', ...args);
-  }
+function createAbortError() {
+  const error = new Error('Artwork request cancelled.');
+
+  error.name = 'AbortError';
+
+  return error;
 }
 
-function prefersReducedMotion() {
-  try {
-    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  } catch {
-    return false;
-  }
-}
-
-function isDataSaverEnabled() {
-  try {
-    return Boolean(navigator?.connection?.saveData);
-  } catch {
-    return false;
-  }
-}
-
-function extractTrackFromEvent(event) {
-  const detail = event?.detail;
-  if (!detail) return null;
-  if (detail.track && typeof detail.track === 'object') return detail.track;
-  if (typeof detail === 'object') return detail;
-  return null;
-}
-
-function getTrackTitle(track) {
-  return String(track?.title || track?.name || '').trim();
-}
-
-function getTrackArtist(track) {
-  return String(
-    track?.artist ||
-    track?.channelTitle ||
-    track?.artistName ||
-    track?.metadata?.artist ||
-    ''
-  ).trim();
-}
-
-function trackKey(track) {
-  if (!track || typeof track !== 'object') return '';
-  const idPart = String(track.videoId || track.id || track.uuid || '').trim();
-  const titlePart = getTrackTitle(track).toLowerCase();
-  const artistPart = normaliseArtist(getTrackArtist(track));
-  return `${idPart}|${titlePart}|${artistPart}`;
-}
-
-function normaliseText(value) {
-  return String(value || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/&/g, ' and ')
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim();
-}
-
-function normaliseArtist(value) {
-  return normaliseText(value)
-    .replace(/\b(official|topic|vevo|music|records|tv)\b/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function splitCollaborators(artistName) {
-  const raw = String(artistName || '').trim();
-  if (!raw) return [];
-  const parts = raw
-    .split(/\s*(?:,|&|\+|\/|\bfeat\.?\b|\bft\.?\b|\bwith\b|\bx\b|\band\b|\by\b)\s*/i)
-    .map(normaliseArtist)
-    .filter(Boolean);
-  return [...new Set(parts)];
-}
-
-function artistMatchesCandidate(expectedArtist, candidateArtist) {
-  const expectedNorm = normaliseArtist(expectedArtist);
-  const candidateNorm = normaliseArtist(candidateArtist);
-  if (!expectedNorm || !candidateNorm) return false;
-  if (expectedNorm === candidateNorm) return true;
-
-  const expectedParts = splitCollaborators(expectedArtist);
-  const candidateParts = splitCollaborators(candidateArtist);
-
-  if (expectedParts.some(p => candidateParts.includes(p))) return true;
-  if (expectedNorm.length >= 4 && candidateNorm.includes(expectedNorm)) return true;
-  if (candidateNorm.length >= 4 && expectedNorm.includes(candidateNorm)) return true;
-
-  return false;
-}
-
-function cleanQueryTitle(title, artist = '') {
-  let cleaned = String(title || '').trim();
-  if (!cleaned) return '';
-
-  const artistClean = String(artist || '').trim();
-  if (artistClean) {
-    const escapedArtist = artistClean.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    cleaned = cleaned.replace(new RegExp(`^${escapedArtist}\\s*[-–—:|/]+\\s*`, 'i'), '');
-  }
-
-  cleaned = cleaned
-    .replace(/\s*[\[(](?:[^[\]()]{0,80}\b(?:official|video|audio|lyric\s*video|visualizer|lyrics?|hd|4k|remaster(?:ed)?|explicit|clean|prod\.?)\b[^[\]()]{0,80})[\])]\s*/gi, ' ')
-    .replace(/\s+(?:official\s*(?:video|audio|lyrics?)|lyrics?|video\s*oficial|audio\s*oficial|visualizer)\s*$/i, '')
-    .replace(/\s+[|｜]\s+.*$/, '')
-    .replace(/\s{2,}/g, ' ')
-    .trim();
-
-  return cleaned || String(title || '').trim();
-}
-
-function titleMatchesCandidate(expectedTitle, candidateTitle) {
-  const expNorm = normaliseText(expectedTitle);
-  const candNorm = normaliseText(candidateTitle);
-  if (!expNorm || !candNorm) return false;
-  if (expNorm === candNorm) return true;
-  if (expNorm.length >= 3 && candNorm.includes(expNorm)) return true;
-  if (candNorm.length >= 3 && expNorm.includes(candNorm)) return true;
-
-  const expTokens = expNorm.split(' ').filter(t => t.length >= 2);
-  const candSet = new Set(candNorm.split(' ').filter(t => t.length >= 2));
-  if (!expTokens.length || !candSet.size) return false;
-
-  let hits = 0;
-  for (const token of expTokens) {
-    if (candSet.has(token)) hits += 1;
-  }
-  return hits / expTokens.length >= 0.6;
-}
-
-function normaliseUrl(value) {
-  if (typeof value !== 'string') return '';
-  const trimmed = value.trim();
-  if (!trimmed || trimmed === 'null' || trimmed === 'undefined') return '';
-  return trimmed;
-}
-
-function validImageUrl(value) {
-  const normalized = normaliseUrl(value);
-  if (!normalized) return false;
-
-  if (/^https:\/\//i.test(normalized)) {
-    try {
-      const parsed = new URL(normalized);
-      return parsed.protocol === 'https:';
-    } catch {
-      return false;
-    }
-  }
-
-  if (/^\/assets\/[a-z0-9_./-]+$/i.test(normalized)) {
-    return !normalized.includes('..');
-  }
-
-  if (/^data:image\/(?:png|jpeg|jpg|webp|gif);base64,[a-z0-9+/=]+$/i.test(normalized)) {
-    return normalized.length <= 250000;
-  }
-
-  if (/^blob:/i.test(normalized)) {
-    return true;
-  }
-
-  return false;
-}
-
-function isPersistableUrl(url) {
-  const normalized = normaliseUrl(url);
-  return /^https:\/\//i.test(normalized) || /^\/assets\//i.test(normalized);
-}
-
-function resolveAbsoluteUrl(url) {
-  try {
-    return new URL(url, window.location.origin).href;
-  } catch {
-    return url;
-  }
-}
-
-/* --------------------------------------------------------------------------
-   02. OBJETIVOS DEL DOM Y SINCRONIZACIÓN DE ESTADO / ESTILO
-   -------------------------------------------------------------------------- */
-
-function getCurrentThumbnailEl() {
-  return document.getElementById('currentThumbnail');
-}
-
-function getFullThumbnailEl() {
-  return document.getElementById('fullPlayerThumbnail');
-}
-
-function getFullPlayerEl() {
-  return document.getElementById('fullPlayer') || document.querySelector('.full-player');
-}
-
-function isPrimaryArtworkTarget(el) {
-  if (!el) return false;
-  const current = getCurrentThumbnailEl();
-  const full = getFullThumbnailEl();
-  return el === current || el === full;
-}
-
-function imageTargets() {
-  const targets = [
-    getCurrentThumbnailEl(),
-    getFullThumbnailEl(),
-    ...document.querySelectorAll('[data-shunel-artwork]')
-  ];
-  const unique = [];
-  const seen = new Set();
-
-  for (const el of targets) {
-    if (el && !seen.has(el)) {
-      seen.add(el);
-      unique.push(el);
-    }
-  }
-
-  return unique;
-}
-
-function setLifecycleClass(el, state) {
-  if (!el || !el.classList) return;
-  el.classList.remove(CLASS_LOADING, CLASS_READY, CLASS_ERROR);
-  if (state === 'loading') {
-    el.classList.add(CLASS_LOADING);
-  } else if (state === 'ready') {
-    el.classList.add(CLASS_READY);
-  } else if (state === 'error') {
-    el.classList.add(CLASS_ERROR);
-  }
-}
-
-function updateTargetsLifecycle(targets, state) {
-  for (const el of targets) {
-    setLifecycleClass(el, state);
-  }
-}
-
-function setGestureScale(el, scaleValue) {
-  if (!el || !el.style) return;
-  const nextScale = prefersReducedMotion() ? 1 : Number(scaleValue) || 1;
-  el.style.setProperty('--shunel-art-gesture-scale', String(nextScale));
-}
-
-function flushVisualSync() {
-  rafScheduled = false;
-  const payload = pendingVisualSync;
-  pendingVisualSync = null;
-  if (!payload) return;
-
-  const root = document.documentElement;
-
-  if (typeof payload.artworkCss === 'string') {
-    if (payload.artworkCss && payload.artworkCss !== 'none') {
-      root.style.setProperty('--shunel-artwork', `url("${payload.artworkCss}")`);
-    } else {
-      root.style.setProperty('--shunel-artwork', 'none');
-    }
-  }
-
-  if (typeof payload.songColor === 'string' && payload.songColor) {
-    root.style.setProperty('--song-color', payload.songColor);
-  }
-
-  if (typeof payload.secondaryColor === 'string' && payload.secondaryColor) {
-    root.style.setProperty('--shunel-song-secondary', payload.secondaryColor);
-  }
-
-  if (typeof payload.isPlaying === 'boolean') {
-    const fullPlayer = getFullPlayerEl();
-    if (fullPlayer) {
-      fullPlayer.classList.toggle('is-playing', payload.isPlaying);
-      fullPlayer.classList.toggle('is-paused', !payload.isPlaying);
-      fullPlayer.setAttribute(
-        'data-shunel-player-state',
-        payload.isPlaying ? 'playing' : 'paused'
-      );
-    }
-  }
-}
-
-function scheduleVisualSync(partial = {}) {
-  pendingVisualSync = {
-    ...(pendingVisualSync || {}),
-    ...partial
-  };
-
-  if (!rafScheduled) {
-    rafScheduled = true;
-    requestAnimationFrame(flushVisualSync);
-  }
-}
-
-function setImage(image, url, alt, options = {}) {
-  if (!image) return;
-
-  const isImg = image instanceof HTMLImageElement;
-  const safeUrl = validImageUrl(url) ? normaliseUrl(url) : FALLBACK;
-  const isPrimary = Boolean(options.isPrimary ?? isPrimaryArtworkTarget(image));
-  const label = alt || 'Portada de la canción';
-
-  if (isImg) {
-    image.loading = isPrimary ? 'eager' : 'lazy';
-    image.decoding = 'async';
-    if (image.alt !== label) {
-      image.alt = label;
-    }
-  } else if (image.getAttribute('role') === 'img' && image.getAttribute('aria-label') !== label) {
-    image.setAttribute('aria-label', label);
-  }
-
-  if (!isImg) {
-    const escaped = safeUrl.replace(/["\\\n\r]/g, '');
-    image.style.backgroundImage = `url("${escaped}")`;
-    setLifecycleClass(image, safeUrl === FALLBACK ? 'error' : 'ready');
-    return;
-  }
-
-  const currentAttr = normaliseUrl(image.getAttribute('src'));
-
-  if (currentAttr === safeUrl && image.complete && image.naturalWidth > 0) {
-    setLifecycleClass(image, 'ready');
-    return;
-  }
-
-  setLifecycleClass(image, 'loading');
-
-  const loadToken = (Number(image.dataset.shunelLoadToken || 0) + 1);
-  image.dataset.shunelLoadToken = String(loadToken);
-
-  image.onload = async () => {
-    if (Number(image.dataset.shunelLoadToken || 0) !== loadToken) return;
-    image.onload = null;
-    image.onerror = null;
-
-    if (typeof image.decode === 'function') {
-      try {
-        await image.decode();
-      } catch {
-        /* Ignora error de decode si ya está pintada. */
-      }
-    }
-
-    if (Number(image.dataset.shunelLoadToken || 0) !== loadToken) return;
-    setLifecycleClass(image, 'ready');
-  };
-
-  image.onerror = () => {
-    if (Number(image.dataset.shunelLoadToken || 0) !== loadToken) return;
-    image.onload = null;
-    image.onerror = null;
-
-    setLifecycleClass(image, 'error');
-
-    const fallbackAbs = resolveAbsoluteUrl(FALLBACK);
-    if (image.src !== fallbackAbs) {
-      image.src = FALLBACK;
-    }
-  };
-
-  if (currentAttr !== safeUrl) {
-    image.src = safeUrl;
-  } else {
-    image.src = '';
-    image.src = safeUrl;
-  }
-
-  if (image.complete && image.naturalWidth > 0) {
-    image.onload = null;
-    image.onerror = null;
-    setLifecycleClass(image, 'ready');
-  }
-}
-
-/* --------------------------------------------------------------------------
-   03. EXTRACCIÓN DE COLOR DOMINANTE (--song-color) CON <canvas>
-   -------------------------------------------------------------------------- */
-
-function ensureColorCanvas() {
-  if (colorCanvas && colorCtx) return true;
-  try {
-    colorCanvas = document.createElement('canvas');
-    colorCanvas.width = 24;
-    colorCanvas.height = 24;
-    colorCtx = colorCanvas.getContext('2d', { willReadFrequently: true });
-    return Boolean(colorCtx);
-  } catch {
-    colorCanvas = null;
-    colorCtx = null;
-    return false;
-  }
-}
-
-function rgbToHex(r, g, b) {
-  const clamp = v => Math.max(0, Math.min(255, Math.round(v)));
+function isAbortError(error) {
   return (
-    '#' +
-    [clamp(r), clamp(g), clamp(b)]
-      .map(n => n.toString(16).padStart(2, '0'))
-      .join('')
+    error?.name === 'AbortError' ||
+    error?.code === 'ABORT_ERR'
   );
 }
 
-function tuneColorForDarkBackdrop(r, g, b) {
-  const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
-  const maxC = Math.max(r, g, b);
-  const minC = Math.min(r, g, b);
-  const saturation = maxC === 0 ? 0 : (maxC - minC) / maxC;
-
-  let nr = r;
-  let ng = g;
-  let nb = b;
-
-  if (luminance < 0.055 && saturation < 0.18) {
-    return DEFAULT_SONG_COLOR;
-  }
-
-  if (luminance < 0.09) {
-    const lift = 1.45;
-    nr = Math.min(255, nr * lift + 10);
-    ng = Math.min(255, ng * lift + 10);
-    nb = Math.min(255, nb * lift + 10);
-  }
-
-  const tunedLum = (0.2126 * nr + 0.7152 * ng + 0.0722 * nb) / 255;
-  if (tunedLum > 0.58) {
-    const scale = 0.58 / tunedLum;
-    nr *= scale;
-    ng *= scale;
-    nb *= scale;
-  }
-
-  return rgbToHex(nr, ng, nb);
-}
-
-function cacheSongColor(key, color) {
-  if (!key || !color) return;
-  if (colorCache.has(key)) {
-    colorCache.delete(key);
-  }
-  colorCache.set(key, color);
-
-  while (colorCache.size > MAX_COLOR_CACHE_ENTRIES) {
-    const oldestKey = colorCache.keys().next().value;
-    colorCache.delete(oldestKey);
-  }
-}
-
-async function extractDominantSongColor(imageUrl, cacheKeyHint = '', signal = null) {
-  const safeUrl = normaliseUrl(imageUrl);
-  if (!validImageUrl(safeUrl) || safeUrl === FALLBACK) {
-    return DEFAULT_SONG_COLOR;
-  }
-
-  const cacheKey = cacheKeyHint || safeUrl;
-  if (colorCache.has(cacheKey)) {
-    return colorCache.get(cacheKey);
-  }
-
-  if (!ensureColorCanvas()) {
-    return DEFAULT_SONG_COLOR;
-  }
-
-  return new Promise(resolve => {
-    if (signal?.aborted) {
-      resolve(DEFAULT_SONG_COLOR);
-      return;
-    }
-
-    const probe = new Image();
-    let settled = false;
-
-    const finish = color => {
-      if (settled) return;
-      settled = true;
-      probe.onload = null;
-      probe.onerror = null;
-      if (signal && onAbort) {
-        signal.removeEventListener('abort', onAbort);
-      }
-      const finalColor = color || DEFAULT_SONG_COLOR;
-      cacheSongColor(cacheKey, finalColor);
-      resolve(finalColor);
-    };
-
-    const onAbort = () => finish(activeSongColor || DEFAULT_SONG_COLOR);
-    signal?.addEventListener('abort', onAbort, { once: true });
-
-    if (/^https:\/\//i.test(safeUrl)) {
-      probe.crossOrigin = 'anonymous';
-    }
-
-    probe.onload = () => {
-      try {
-        const w = colorCanvas.width;
-        const h = colorCanvas.height;
-        colorCtx.clearRect(0, 0, w, h);
-
-        const natW = probe.naturalWidth || w;
-        const natH = probe.naturalHeight || h;
-        let sx = 0;
-        let sy = 0;
-        let sw = natW;
-        let sh = natH;
-
-        if (natW > natH * 1.45) {
-          sh = Math.round(natH * 0.72);
-          sy = Math.round((natH - sh) / 2);
-        }
-
-        colorCtx.drawImage(probe, sx, sy, sw, sh, 0, 0, w, h);
-        const imageData = colorCtx.getImageData(0, 0, w, h).data;
-
-        const buckets = new Map();
-
-        for (let i = 0; i < imageData.length; i += 4) {
-          const r = imageData[i];
-          const g = imageData[i + 1];
-          const b = imageData[i + 2];
-          const a = imageData[i + 3];
-
-          if (a < 128) continue;
-
-          const maxC = Math.max(r, g, b);
-          const minC = Math.min(r, g, b);
-          const lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
-
-          if (lum < 0.04 || lum > 0.94) continue;
-
-          const sat = maxC === 0 ? 0 : (maxC - minC) / maxC;
-          const weight = 1 + sat * 2.2;
-
-          const qr = Math.floor(r / 24) * 24;
-          const qg = Math.floor(g / 24) * 24;
-          const qb = Math.floor(b / 24) * 24;
-          const bucketKey = `${qr},${qg},${qb}`;
-
-          const entry = buckets.get(bucketKey) || {
-            weight: 0,
-            rSum: 0,
-            gSum: 0,
-            bSum: 0
-          };
-
-          entry.weight += weight;
-          entry.rSum += r * weight;
-          entry.gSum += g * weight;
-          entry.bSum += b * weight;
-          buckets.set(bucketKey, entry);
-        }
-
-        if (!buckets.size) {
-          finish(DEFAULT_SONG_COLOR);
-          return;
-        }
-
-        let best = null;
-        for (const entry of buckets.values()) {
-          if (!best || entry.weight > best.weight) {
-            best = entry;
-          }
-        }
-
-        const avgR = best.rSum / best.weight;
-        const avgG = best.gSum / best.weight;
-        const avgB = best.bSum / best.weight;
-
-        finish(tuneColorForDarkBackdrop(avgR, avgG, avgB));
-      } catch (err) {
-        logDebug('No se pudo leer píxeles de portada (posible CORS):', err?.message);
-        finish(DEFAULT_SONG_COLOR);
-      }
-    };
-
-    probe.onerror = () => {
-      finish(DEFAULT_SONG_COLOR);
-    };
-
-    probe.src = safeUrl;
-  });
-}
-
-function resolveSongColorWithBudget(imageUrl, cacheKeyHint, signal, budgetMs = COLOR_SYNC_TIMEOUT_MS) {
-  const safeUrl = normaliseUrl(imageUrl);
-  if (!validImageUrl(safeUrl) || safeUrl === FALLBACK) {
-    return Promise.resolve(DEFAULT_SONG_COLOR);
-  }
-
-  const cacheKey = cacheKeyHint || safeUrl;
-  if (colorCache.has(cacheKey)) {
-    return Promise.resolve(colorCache.get(cacheKey));
-  }
-
-  const extraction = extractDominantSongColor(safeUrl, cacheKey, signal);
-  return Promise.race([
-    extraction,
-    new Promise(resolve => {
-      window.setTimeout(() => resolve(activeSongColor || DEFAULT_SONG_COLOR), budgetMs);
-    })
-  ]);
-}
-
-/* --------------------------------------------------------------------------
-   04. CACHÉ PERSISTENTE CON TTL Y LÍMITE DE TAMAÑO
-   -------------------------------------------------------------------------- */
-
-function readArtworkCache() {
+function safeDispatch(name, detail = {}) {
   try {
-    const raw = JSON.parse(localStorage.getItem(CACHE_KEY) || '{}');
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    window.dispatchEvent(
+      new CustomEvent(name, {
+        detail: {
+          version: VERSION,
+          ...detail
+        }
+      })
+    );
+  } catch {
+    // No interrumpir el reproductor.
+  }
+}
+
+function getArtist(track) {
+  return clean(
+    track?.artist ||
+    track?.artistName ||
+    track?.channelTitle ||
+    track?.metadata?.artist ||
+    '',
+    200
+  );
+}
+
+function getTitle(track) {
+  return clean(
+    track?.title ||
+    track?.name ||
+    track?.trackName ||
+    track?.videoTitle ||
+    '',
+    240
+  );
+}
+
+function getAlbum(track) {
+  return clean(
+    track?.album ||
+    track?.metadata?.album ||
+    '',
+    180
+  );
+}
+
+/* =========================================================
+   NORMALIZACIÓN DE TÍTULOS
+   ========================================================= */
+
+export function cleanQueryTitle(rawTitle, rawArtist = '') {
+  const original = clean(rawTitle, 260);
+
+  let title = original;
+
+  const artist = clean(rawArtist, 200);
+
+  /*
+   * Eliminar artista al principio.
+   */
+
+  if (artist) {
+    const variants = [
+      artist,
+      ...artist.split(
+        /\s*(?:,|&|\+|\/|\bfeat\.?\b|\bft\.?\b|\bwith\b|\bx\b|\band\b|\by\b)\s*/i
+      )
+    ]
+      .map(value => clean(value, 120))
+      .filter(Boolean)
+      .sort((a, b) => b.length - a.length);
+
+    for (const variant of variants) {
+      const escaped = variant.replace(
+        /[.*+?^${}()|[\]\\]/g,
+        '\\$&'
+      );
+
+      const expression = new RegExp(
+        '^' + escaped + '\\s*[-–—:|/]+\\s*',
+        'i'
+      );
+
+      if (expression.test(title)) {
+        title = title.replace(expression, '').trim();
+        break;
+      }
+    }
+  }
+
+  /*
+   * Separar el álbum:
+   *
+   * TURiSTA (Visualizer) I DeBÍ TiRAR MáS FOToS
+   */
+
+  const separator = title.match(
+    /\s+(?:\||｜|I)\s+(?=[A-ZÁÉÍÓÚÑ0-9])/
+  );
+
+  let album = '';
+
+  if (separator) {
+    album = title
+      .slice(
+        separator.index + separator[0].length
+      )
+      .trim();
+
+    title = title
+      .slice(0, separator.index)
+      .trim();
+  }
+
+  const decorations = [
+    'official',
+    'video',
+    'video oficial',
+    'audio',
+    'audio oficial',
+    'lyrics?',
+    'lyric video',
+    'visualizer',
+    'official visualizer',
+    'official audio',
+    'official video',
+    'remastered',
+    'remaster',
+    'live',
+    'acoustic',
+    'instrumental',
+    'explicit',
+    'clean',
+    'version',
+    'edit',
+    'radio edit',
+    'mix',
+    'hd',
+    '4k'
+  ].join('|');
+
+  const bracketRegex = new RegExp(
+    '\\s*[\\[(][^\\])]*\\b(?:' +
+    decorations +
+    ')\\b[^\\])]*[\\])]',
+    'gi'
+  );
+
+  title = title.replace(bracketRegex, ' ');
+
+  title = title.replace(
+    /\s+(?:official\s*(?:video|audio|visualizer|lyric\s*video)|video\s*oficial|audio\s*oficial|visualizer|lyrics?|letra\s*oficial)\s*$/i,
+    ''
+  );
+
+  title = title
+    .replace(/\s+/g, ' ')
+    .replace(/^[\s\-–—:|]+|[\s\-–—:|]+$/g, '')
+    .trim();
+
+  return {
+    title: title || original,
+    album,
+    originalTitle: original
+  };
+}
+
+/* =========================================================
+   CLAVE DE PISTA
+   ========================================================= */
+
+function getTrackKey(track) {
+  const identity = cleanQueryTitle(
+    getTitle(track),
+    getArtist(track)
+  );
+
+  return [
+    normalizeText(identity.title),
+    normalizeArtist(getArtist(track)),
+    normalizeText(identity.album || getAlbum(track))
+  ].join('::');
+}
+
+/* =========================================================
+   SELECTORES
+   ========================================================= */
+
+function getArtworkElements() {
+  return [
+    ...document.querySelectorAll(
+      '#currentThumbnail, #fullPlayerThumbnail, [data-shunel-artwork]'
+    )
+  ];
+}
+
+function getPrimaryArtworkElement() {
+  return (
+    document.querySelector('#currentThumbnail') ||
+    document.querySelector('#fullPlayerThumbnail') ||
+    document.querySelector('[data-shunel-artwork]')
+  );
+}
+
+/* =========================================================
+   CACHE DE PORTADAS DE ARTISTA
+   ========================================================= */
+
+function getStorage() {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+function readArtistCache() {
+  const storage = getStorage();
+
+  if (!storage) {
+    return {};
+  }
+
+  try {
+    const raw = storage.getItem(ARTIST_CACHE_KEY);
+
+    if (!raw) {
+      return {};
+    }
+
+    const data = JSON.parse(raw);
+
+    if (!isObject(data)) {
       return {};
     }
 
     const now = Date.now();
-    const cleaned = {};
-    let mutated = false;
+    const valid = {};
 
-    for (const [k, entry] of Object.entries(raw)) {
-      if (typeof entry === 'string') {
-        mutated = true;
+    for (const [key, entry] of Object.entries(data)) {
+      if (
+        !isObject(entry) ||
+        !isValidImageUrl(entry.url) ||
+        !Number.isFinite(entry.expiresAt) ||
+        entry.expiresAt <= now
+      ) {
         continue;
       }
 
-      if (
-        entry &&
-        typeof entry === 'object' &&
-        validImageUrl(entry.url) &&
-        isPersistableUrl(entry.url) &&
-        typeof entry.ts === 'number' &&
-        now - entry.ts <= CACHE_TTL_MS
-      ) {
-        cleaned[k] = { url: entry.url.trim(), ts: entry.ts };
-      } else {
-        mutated = true;
-      }
+      valid[key] = entry;
     }
 
-    if (mutated) {
-      writeArtworkCache(cleaned);
-    }
-
-    return cleaned;
+    return valid;
   } catch {
     return {};
   }
 }
 
-function writeArtworkCache(cache) {
+function writeArtistCache(data) {
+  const storage = getStorage();
+
+  if (!storage) {
+    return;
+  }
+
   try {
-    const entries = Object.entries(cache).filter(
-      ([, v]) => v && typeof v === 'object' && validImageUrl(v.url) && isPersistableUrl(v.url)
+    const entries = Object.entries(data)
+      .sort(
+        (a, b) =>
+          (b[1]?.savedAt || 0) -
+          (a[1]?.savedAt || 0)
+      )
+      .slice(0, ARTIST_CACHE_LIMIT);
+
+    storage.setItem(
+      ARTIST_CACHE_KEY,
+      JSON.stringify(
+        Object.fromEntries(entries)
+      )
     );
-
-    entries.sort((a, b) => (a[1].ts || 0) - (b[1].ts || 0));
-
-    const trimmed =
-      entries.length > MAX_CACHE_ENTRIES
-        ? Object.fromEntries(entries.slice(entries.length - MAX_CACHE_ENTRIES))
-        : Object.fromEntries(entries);
-
-    localStorage.setItem(CACHE_KEY, JSON.stringify(trimmed));
   } catch {
-    /* Caché opcional. */
+    // La caché es opcional.
   }
 }
 
-function getCachedArtistArtwork(normalizedArtistKey) {
-  if (!normalizedArtistKey) return '';
-  const cache = readArtworkCache();
-  const entry = cache[normalizedArtistKey];
-  if (entry && validImageUrl(entry.url)) {
-    return entry.url;
+function getCachedArtistArtwork(artist) {
+  const key = normalizeArtist(artist);
+
+  if (!key) {
+    return '';
   }
+
+  const cache = readArtistCache();
+
+  return cache[key]?.url || '';
+}
+
+function saveArtistArtwork(artist, url) {
+  const key = normalizeArtist(artist);
+
+  if (!key || !isValidImageUrl(url)) {
+    return;
+  }
+
+  const cache = readArtistCache();
+
+  cache[key] = {
+    url,
+    savedAt: Date.now(),
+    expiresAt: Date.now() + ARTIST_CACHE_TTL
+  };
+
+  writeArtistCache(cache);
+}
+
+/* =========================================================
+   CACHÉ DE COLOR POR SESIÓN
+   ========================================================= */
+
+function getCachedSongColor(key) {
+  return songColorCache.get(key) || null;
+}
+
+function saveSongColor(key, color) {
+  if (!key || !color) {
+    return;
+  }
+
+  songColorCache.set(key, color);
+
+  if (songColorCache.size > 100) {
+    const first = songColorCache.keys().next().value;
+
+    songColorCache.delete(first);
+  }
+}
+
+/* =========================================================
+   MODS
+   ========================================================= */
+
+function getTrackMod(track) {
+  try {
+    const result = applyModToTrack(track);
+
+    if (!isObject(result)) {
+      return null;
+    }
+
+    const artwork = clean(
+      result.artwork ||
+      result.cover ||
+      result.thumbnail ||
+      result.image ||
+      result.metadata?.artwork ||
+      '',
+      1000
+    );
+
+    if (!isValidImageUrl(artwork)) {
+      return null;
+    }
+
+    return {
+      artwork,
+      track: result
+    };
+  } catch {
+    return null;
+  }
+}
+
+function getExplicitModArtwork(track) {
+  const mod = getTrackMod(track);
+
+  if (!mod) {
+    return '';
+  }
+
+  return mod.artwork;
+}
+
+function getArtistModArtwork(artist) {
+  if (!artist) {
+    return '';
+  }
+
+  try {
+    const entry = getArtistArtworkEntry(artist);
+
+    if (!isObject(entry)) {
+      return '';
+    }
+
+    const url = clean(
+      entry.artwork ||
+      entry.cover ||
+      entry.thumbnail ||
+      entry.image ||
+      entry.url ||
+      '',
+      1000
+    );
+
+    return isValidImageUrl(url) ? url : '';
+  } catch {
+    return '';
+  }
+}
+
+/* =========================================================
+   CARGA DE IMAGEN
+   ========================================================= */
+
+function loadImage(url, options = {}) {
+  return new Promise((resolve, reject) => {
+    if (!isValidImageUrl(url)) {
+      reject(new Error('Invalid artwork URL.'));
+      return;
+    }
+
+    const image = new Image();
+
+    image.decoding = 'async';
+
+    if (options.crossOrigin !== false) {
+      image.crossOrigin = 'anonymous';
+    }
+
+    let finished = false;
+
+    const timeout = setTimeout(() => {
+      if (finished) return;
+
+      finished = true;
+
+      image.onload = null;
+      image.onerror = null;
+
+      reject(new Error('Artwork image timeout.'));
+    }, options.timeout || ARTWORK_TIMEOUT);
+
+    image.onload = async () => {
+      if (finished) return;
+
+      finished = true;
+
+      clearTimeout(timeout);
+
+      try {
+        if (image.decode) {
+          await image.decode().catch(() => {});
+        }
+      } catch {
+        // Safari puede rechazar decode aunque la imagen cargue.
+      }
+
+      resolve(image);
+    };
+
+    image.onerror = () => {
+      if (finished) return;
+
+      finished = true;
+
+      clearTimeout(timeout);
+
+      reject(new Error('Artwork image failed.'));
+    };
+
+    image.src = url;
+  });
+}
+
+/* =========================================================
+   APLICAR PORTADA AL DOM
+   ========================================================= */
+
+function updateArtworkAttributes(element, source) {
+  if (!element) {
+    return;
+  }
+
+  element.dataset.shunelArtworkSource = source;
+
+  element.setAttribute(
+    'aria-label',
+    'Portada del contenido musical'
+  );
+
+  element.setAttribute(
+    'role',
+    element.getAttribute('role') || 'img'
+  );
+}
+
+function setArtworkImage(element, url) {
+  if (!element || !url) {
+    return;
+  }
+
+  const tag = element.tagName?.toLowerCase();
+
+  if (tag === 'img') {
+    element.src = url;
+
+    element.alt =
+      element.alt || 'Portada de la canción';
+
+    element.loading = 'eager';
+
+    element.decoding = 'async';
+
+    return;
+  }
+
+  element.style.backgroundImage =
+    `url("${url.replace(/["\\]/g, '\\$&')}")`;
+}
+
+function updateArtworkCss(url) {
+  const value = url
+    ? `url("${url.replace(/["\\]/g, '\\$&')}")`
+    : 'none';
+
+  document.documentElement.style.setProperty(
+    '--shunel-artwork',
+    value
+  );
+}
+
+function applyArtworkToElements(url, source) {
+  for (const element of getArtworkElements()) {
+    setArtworkImage(element, url);
+
+    updateArtworkAttributes(
+      element,
+      source
+    );
+
+    element.classList.add('has-artwork');
+
+    element.classList.remove(
+      'artwork-loading',
+      'artwork-failed'
+    );
+  }
+
+  updateArtworkCss(url);
+}
+
+function getSourcePriority(source) {
+  return IMAGE_SOURCE_PRIORITY[source] ?? -1;
+}
+
+/* =========================================================
+   APLICAR PORTADA
+   ========================================================= */
+
+export function applyArtwork(
+  url,
+  options = {}
+) {
+  const source = clean(
+    options.source || 'fallback',
+    80
+  );
+
+  if (!isValidImageUrl(url)) {
+    return false;
+  }
+
+  const force = Boolean(options.force);
+
+  const newPriority = getSourcePriority(source);
+
+  const currentPriority = getSourcePriority(
+    activeArtworkSource
+  );
+
+  /*
+   * Un mod explícito siempre tiene prioridad.
+   */
+
+  if (
+    activeArtworkSource === 'mod' &&
+    source !== 'mod' &&
+    !force
+  ) {
+    return false;
+  }
+
+  /*
+   * Evitar que una miniatura de YouTube
+   * reemplace una portada de mejor calidad.
+   */
+
+  if (
+    !force &&
+    newPriority < currentPriority
+  ) {
+    return false;
+  }
+
+  if (
+    activeArtwork === url &&
+    activeArtworkSource === source
+  ) {
+    return true;
+  }
+
+  activeArtwork = url;
+
+  activeArtworkSource = source;
+
+  applyArtworkToElements(
+    url,
+    source
+  );
+
+  safeDispatch(
+    'shunel:artwork-updated',
+    {
+      artwork: url,
+      source,
+      track: activeTrack
+    }
+  );
+
+  if (options.extractColor !== false) {
+    resolveSongColorWithBudget(
+      url,
+      activeRequestKey,
+      activeRequestId
+    );
+  }
+
+  return true;
+}
+
+/* =========================================================
+   FALLBACK Y MINIATURA DE YOUTUBE
+   ========================================================= */
+
+function getYouTubeThumbnail(track) {
+  const explicit = clean(
+    track?.thumbnail ||
+    track?.thumbnails?.high?.url ||
+    track?.thumbnails?.medium?.url ||
+    track?.snippet?.thumbnails?.high?.url ||
+    '',
+    1000
+  );
+
+  if (isValidImageUrl(explicit)) {
+    return explicit;
+  }
+
+  const videoId = clean(
+    track?.videoId ||
+    track?.id?.videoId ||
+    track?.youtubeId ||
+    '',
+    100
+  );
+
+  if (
+    videoId &&
+    /^[a-zA-Z0-9_-]{11}$/.test(videoId)
+  ) {
+    return (
+      'https://i.ytimg.com/vi/' +
+      videoId +
+      '/hqdefault.jpg'
+    );
+  }
+
   return '';
 }
 
-function setCachedArtistArtwork(normalizedArtistKey, url) {
-  if (!normalizedArtistKey || !validImageUrl(url) || !isPersistableUrl(url)) return;
-  const cache = readArtworkCache();
-  cache[normalizedArtistKey] = {
-    url: url.trim(),
-    ts: Date.now()
-  };
-  writeArtworkCache(cache);
+function applyFallback(track) {
+  const youtube = getYouTubeThumbnail(track);
+
+  if (youtube) {
+    return applyArtwork(
+      youtube,
+      {
+        source: 'youtube-thumbnail',
+        force: false,
+        extractColor: true
+      }
+    );
+  }
+
+  return applyArtwork(
+    FALLBACK_ARTWORK,
+    {
+      source: 'fallback',
+      force: false,
+      extractColor: false
+    }
+  );
 }
 
-/* --------------------------------------------------------------------------
-   05. BÚSQUEDA DE CARÁTULA DE ÁLBUM Y ARTISTA CON VALIDACIÓN
-   -------------------------------------------------------------------------- */
+/* =========================================================
+   BÚSQUEDA DE iTUNES
+   ========================================================= */
 
-async function fetchAlbumArtwork(track, signal) {
-  const rawTitle = getTrackTitle(track);
-  const rawArtist = getTrackArtist(track);
-  const cleanedTitle = cleanQueryTitle(rawTitle, rawArtist);
-  const queryText = [cleanedTitle, rawArtist].filter(Boolean).join(' ').trim();
+function scoreCandidate(
+  result,
+  identity,
+  artist,
+  albumHint
+) {
+  const title = normalizeText(
+    result?.trackName ||
+    result?.collectionName ||
+    ''
+  );
 
-  if (!cleanedTitle || !rawArtist || !queryText) return '';
+  const expectedTitle = normalizeText(
+    identity.title
+  );
 
-  const cacheKey = `album::${normaliseText(cleanedTitle)}::${normaliseArtist(rawArtist)}`;
-  const cached = getCachedArtistArtwork(cacheKey);
-  if (cached) {
-    return cached;
+  const candidateArtist = normalizeArtist(
+    result?.artistName
+  );
+
+  const expectedArtist = normalizeArtist(
+    artist
+  );
+
+  const candidateAlbum = normalizeText(
+    result?.collectionName
+  );
+
+  const expectedAlbum = normalizeText(
+    albumHint
+  );
+
+  let score = 0;
+
+  if (!title || !expectedTitle) {
+    return -1000;
   }
 
-  if (albumRequests.has(cacheKey)) {
-    return albumRequests.get(cacheKey);
+  if (title === expectedTitle) {
+    score += 100;
+  } else if (
+    title.includes(expectedTitle) ||
+    expectedTitle.includes(title)
+  ) {
+    score += 55;
+  } else {
+    return -1000;
   }
 
-  const request = (async () => {
-    const timeoutController = new AbortController();
-    const onExternalAbort = () => timeoutController.abort();
-    signal?.addEventListener('abort', onExternalAbort, { once: true });
-
-    const timerId = window.setTimeout(() => {
-      timeoutController.abort();
-    }, Math.min(FETCH_TIMEOUT_MS, 4500));
-
-    try {
-      const url = new URL(ITUNES_SEARCH_URL);
-      url.search = new URLSearchParams({
-        term: queryText,
-        entity: 'song',
-        limit: '6'
-      }).toString();
-
-      const response = await fetch(url.toString(), {
-        method: 'GET',
-        credentials: 'omit',
-        signal: timeoutController.signal,
-        headers: {
-          Accept: 'application/json'
-        }
-      });
-
-      if (!response.ok) return '';
-
-      const data = await response.json();
-      const results = Array.isArray(data?.results) ? data.results : [];
-
-      const matched = results.find(
-        item =>
-          artistMatchesCandidate(rawArtist, item?.artistName) &&
-          titleMatchesCandidate(cleanedTitle, item?.trackName)
-      );
-
-      const rawArt = normaliseUrl(
-        matched?.artworkUrl100 || matched?.artworkUrl60 || ''
-      );
-      const hiResArt = rawArt
-        ? rawArt.replace(/\/\d+x\d+bb\.(jpg|png|webp)$/i, '/600x600bb.$1')
-        : '';
-
-      if (!validImageUrl(hiResArt)) return '';
-
-      setCachedArtistArtwork(cacheKey, hiResArt);
-      return hiResArt;
-    } catch {
-      return '';
-    } finally {
-      window.clearTimeout(timerId);
-      signal?.removeEventListener('abort', onExternalAbort);
+  if (expectedArtist) {
+    if (candidateArtist === expectedArtist) {
+      score += 65;
+    } else if (
+      candidateArtist.includes(expectedArtist) ||
+      expectedArtist.includes(candidateArtist)
+    ) {
+      score += 35;
+    } else {
+      score -= 50;
     }
-  })().finally(() => {
-    albumRequests.delete(cacheKey);
+  }
+
+  if (expectedAlbum) {
+    if (candidateAlbum === expectedAlbum) {
+      score += 45;
+    } else if (
+      candidateAlbum.includes(expectedAlbum) ||
+      expectedAlbum.includes(candidateAlbum)
+    ) {
+      score += 25;
+    }
+  }
+
+  const collectionType = String(
+    result?.collectionType || ''
+  ).toLowerCase();
+
+  if (collectionType === 'album') {
+    score += 12;
+  } else if (collectionType === 'single') {
+    score += 8;
+  }
+
+  const artwork = clean(
+    result?.artworkUrl100 ||
+    result?.artworkUrl60 ||
+    '',
+    1000
+  );
+
+  if (artwork) {
+    score += 20;
+  }
+
+  return score;
+}
+
+function upgradeArtworkUrl(url) {
+  if (!url) {
+    return '';
+  }
+
+  return String(url)
+    .replace(/\/[0-9]+x[0-9]+bb\./i, '/1000x1000bb.')
+    .replace(/\/[0-9]+x[0-9]+bb-/i, '/1000x1000bb-');
+}
+
+async function searchITunes(track, signal) {
+  const artist = getArtist(track);
+
+  const identity = cleanQueryTitle(
+    getTitle(track),
+    artist
+  );
+
+  if (!identity.title) {
+    return null;
+  }
+
+  const query = [
+    artist,
+    identity.title
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  const url = new URL(ITUNES_ENDPOINT);
+
+  url.search = new URLSearchParams({
+    term: query,
+    entity: 'song',
+    limit: '15',
+    media: 'music',
+    country: 'US'
+  }).toString();
+
+  const response = await fetch(url.toString(), {
+    signal,
+    headers: {
+      Accept: 'application/json'
+    }
   });
 
-  albumRequests.set(cacheKey, request);
-  return request;
+  if (!response.ok) {
+    throw new Error(
+      'iTunes HTTP ' + response.status
+    );
+  }
+
+  const data = await response.json();
+
+  if (!Array.isArray(data?.results)) {
+    return null;
+  }
+
+  const ranked = data.results
+    .map(result => ({
+      result,
+      score: scoreCandidate(
+        result,
+        identity,
+        artist,
+        identity.album || getAlbum(track)
+      )
+    }))
+    .filter(item => item.score >= 100)
+    .sort((a, b) => b.score - a.score);
+
+  for (const item of ranked) {
+    const artwork = upgradeArtworkUrl(
+      item.result?.artworkUrl100 ||
+      item.result?.artworkUrl60
+    );
+
+    if (isValidImageUrl(artwork)) {
+      return {
+        artwork,
+        score: item.score,
+        album: clean(
+          item.result.collectionName,
+          180
+        ),
+        artist: clean(
+          item.result.artistName,
+          180
+        ),
+        source: 'itunes'
+      };
+    }
+  }
+
+  return null;
 }
 
-async function fetchArtistArtwork(name, signal) {
-  const expectedName = String(name || '').trim();
-  const key = normaliseArtist(expectedName);
-  if (!key) return '';
+/* =========================================================
+   BÚSQUEDA DE ARTISTA EN DEEZER
+   ========================================================= */
 
-  const cached = getCachedArtistArtwork(key);
+async function searchDeezerArtist(artist, signal) {
+  const normalized = normalizeArtist(artist);
+
+  if (!normalized) {
+    return '';
+  }
+
+  const cacheKey = normalized;
+
+  const cached = getCachedArtistArtwork(artist);
+
   if (cached) {
     return cached;
   }
 
-  if (artistRequests.has(key)) {
-    return artistRequests.get(key);
+  if (artistRequests.has(cacheKey)) {
+    return artistRequests.get(cacheKey).promise;
   }
 
-  const request = (async () => {
-    const timeoutController = new AbortController();
-    const onExternalAbort = () => timeoutController.abort();
-    signal?.addEventListener('abort', onExternalAbort, { once: true });
+  const controller = new AbortController();
 
-    const timerId = window.setTimeout(() => {
-      timeoutController.abort();
-    }, FETCH_TIMEOUT_MS);
+  const relayAbort = () => controller.abort();
 
+  signal?.addEventListener(
+    'abort',
+    relayAbort,
+    { once: true }
+  );
+
+  const promise = (async () => {
     try {
       const url =
-        `${DEEZER_PROXY}/search/artist?q=${encodeURIComponent(expectedName)}&limit=5`;
+        DEEZER_ENDPOINT +
+        '/search/artist?' +
+        new URLSearchParams({
+          q: artist,
+          limit: '5'
+        });
 
       const response = await fetch(url, {
-        method: 'GET',
-        credentials: 'omit',
-        signal: timeoutController.signal,
+        signal: controller.signal,
         headers: {
           Accept: 'application/json'
         }
       });
 
       if (!response.ok) {
-        throw new Error(`No se pudo consultar la portada (${response.status}).`);
+        return '';
       }
 
       const data = await response.json();
 
-      if (data?.error || !Array.isArray(data?.data)) {
-        throw new Error('Respuesta inválida al buscar el artista.');
+      const artists = Array.isArray(data?.data)
+        ? data.data
+        : [];
+
+      const match = artists.find(item => {
+        return (
+          normalizeArtist(item?.name) === normalized
+        );
+      }) || artists[0];
+
+      const artwork = clean(
+        match?.picture_xl ||
+        match?.picture_big ||
+        match?.picture_medium ||
+        '',
+        1000
+      );
+
+      if (isValidImageUrl(artwork)) {
+        saveArtistArtwork(artist, artwork);
+
+        return artwork;
       }
 
-      const exactMatch = data.data.find(
-        item => normaliseArtist(item?.name) === key
-      );
-      const looseMatch = exactMatch || data.data.find(
-        item => artistMatchesCandidate(expectedName, item?.name)
-      );
-
-      if (!looseMatch) {
-        return '';
-      }
-
-      const artwork = normaliseUrl(
-        looseMatch?.picture_xl ||
-        looseMatch?.picture_big ||
-        looseMatch?.picture_medium ||
-        ''
-      );
-
-      if (!validImageUrl(artwork)) return '';
-
-      setCachedArtistArtwork(key, artwork);
-      return artwork;
+      return '';
     } finally {
-      window.clearTimeout(timerId);
-      signal?.removeEventListener('abort', onExternalAbort);
-    }
-  })().finally(() => {
-    artistRequests.delete(key);
-  });
+      signal?.removeEventListener(
+        'abort',
+        relayAbort
+      );
 
-  artistRequests.set(key, request);
-  return request;
-}
+      const current = artistRequests.get(cacheKey);
 
-/* --------------------------------------------------------------------------
-   06. APLICACIÓN PRINCIPAL DE PORTADA Y SINCRONIZACIÓN AMBIENTAL
-   -------------------------------------------------------------------------- */
-
-export function applyArtwork(track, url = '', options = {}) {
-  const safeTrack = track && typeof track === 'object' ? track : {};
-  const explicitUrl = normaliseUrl(url);
-  const trackArt = normaliseUrl(safeTrack.artwork);
-  const thumbArt = normaliseUrl(safeTrack.thumbnail);
-  const metaArt = normaliseUrl(safeTrack.metadata?.artwork);
-
-  const candidate = validImageUrl(explicitUrl)
-    ? explicitUrl
-    : validImageUrl(trackArt)
-      ? trackArt
-      : validImageUrl(thumbArt)
-        ? thumbArt
-        : validImageUrl(metaArt)
-          ? metaArt
-          : FALLBACK;
-
-  activeArtwork = candidate;
-
-  const title = getTrackTitle(safeTrack) || 'Canción';
-  const artist = getTrackArtist(safeTrack);
-  const altText = artist ? `${title} — ${artist}` : title;
-
-  const targets = imageTargets();
-  for (const target of targets) {
-    setImage(target, candidate, altText, {
-      isPrimary: isPrimaryArtworkTarget(target)
-    });
-  }
-
-  const cssUrl = candidate.replace(/["\\\n\r]/g, '');
-  scheduleVisualSync({
-    artworkCss: candidate === FALLBACK ? 'none' : cssUrl,
-    isPlaying: isPlayingState
-  });
-
-  const colorKey = trackKey(safeTrack) || candidate;
-  const colorSignal = options.signal || requestController?.signal || null;
-
-  void resolveSongColorWithBudget(candidate, colorKey, colorSignal).then(color => {
-    if (activeArtwork !== candidate) return;
-    activeSongColor = color;
-    scheduleVisualSync({
-      songColor: color,
-      secondaryColor: DEFAULT_SECONDARY_COLOR
-    });
-
-    document.dispatchEvent(
-      new CustomEvent('shunel:artwork-updated', {
-        detail: {
-          track: safeTrack,
-          artwork: candidate,
-          songColor: activeSongColor
-        }
-      })
-    );
-  });
-
-  return candidate;
-}
-
-/* --------------------------------------------------------------------------
-   07. CARGA ORQUESTADA POR PISTA (PRIORIDAD ESTRICTA DE CARÁTULA DEL TEMA)
-   -------------------------------------------------------------------------- */
-
-export async function loadArtwork(track, options = {}) {
-  if (!track || typeof track !== 'object') {
-    return applyArtwork(null, FALLBACK);
-  }
-
-  const key = trackKey(track);
-  const currentReqId = ++requestCounter;
-
-  if (
-    key &&
-    key === activeTrackKey &&
-    !options.force &&
-    !isLoadingState &&
-    activeArtwork !== FALLBACK
-  ) {
-    return activeArtwork;
-  }
-
-  activeTrack = track;
-  activeTrackKey = key;
-  isLoadingState = true;
-
-  requestController?.abort();
-  requestController = new AbortController();
-
-  const signal = options.signal || requestController.signal;
-  const targets = imageTargets();
-  updateTargetsLifecycle(targets, 'loading');
-
-  let moddedTrack = track;
-  try {
-    const maybeModded = applyModToTrack(track);
-    if (maybeModded && typeof maybeModded === 'object') {
-      moddedTrack = maybeModded;
-    }
-  } catch (err) {
-    logDebug('applyModToTrack falló:', err?.message);
-  }
-
-  const originalArtwork = normaliseUrl(
-    track.artwork ||
-    track.thumbnail ||
-    track.cover ||
-    track.metadata?.artwork ||
-    ''
-  );
-
-  const trackOverride =
-    moddedTrack?.modPackId &&
-    validImageUrl(moddedTrack.artwork) &&
-    normaliseUrl(moddedTrack.artwork) !== originalArtwork
-      ? normaliseUrl(moddedTrack.artwork)
-      : '';
-
-  const artistEntry = (() => {
-    try {
-      return getArtistArtworkEntry(track);
-    } catch {
-      return null;
+      if (current?.promise === promise) {
+        artistRequests.delete(cacheKey);
+      }
     }
   })();
 
-  const isStale = () =>
-    currentReqId !== requestCounter ||
-    (key && activeTrackKey !== key) ||
-    Boolean(signal?.aborted);
+  artistRequests.set(cacheKey, {
+    promise,
+    controller
+  });
+
+  return promise;
+}
+
+/* =========================================================
+   METADATA / MUSICBRAINZ
+   ========================================================= */
+
+async function searchMusicMetadata(track, signal) {
+  const metadata = await getTrackMetadata(
+    track,
+    {
+      signal,
+      timeout: 8000
+    }
+  );
+
+  if (
+    !metadata ||
+    !isValidImageUrl(metadata.artwork)
+  ) {
+    return null;
+  }
+
+  return {
+    artwork: metadata.artwork,
+    album: metadata.album || '',
+    artist: metadata.artist || '',
+    source: 'musicbrainz-cover-art-archive'
+  };
+}
+
+/* =========================================================
+   DEDUPLICACIÓN DE BÚSQUEDAS DE ÁLBUM
+   ========================================================= */
+
+function getAlbumRequest(key, factory) {
+  const existing = albumRequests.get(key);
+
+  if (existing) {
+    return existing.promise;
+  }
+
+  const controller = new AbortController();
+
+  const promise = Promise.resolve()
+    .then(() => factory(controller.signal))
+    .finally(() => {
+      const current = albumRequests.get(key);
+
+      if (current?.promise === promise) {
+        albumRequests.delete(key);
+      }
+    });
+
+  albumRequests.set(key, {
+    promise,
+    controller
+  });
+
+  return promise;
+}
+
+/* =========================================================
+   CANCELACIÓN DE PISTA
+   ========================================================= */
+
+function cancelActiveRequest() {
+  if (activeController) {
+    activeController.abort();
+    activeController = null;
+  }
+
+  activeRequestId++;
+
+  /*
+   * Las peticiones compartidas de artista o álbum
+   * no se cancelan aquí.
+   *
+   * Cada una tiene su propio controlador.
+   */
+}
+
+function isCurrentRequest(requestId, key) {
+  return (
+    !destroyed &&
+    requestId === activeRequestId &&
+    key === activeRequestKey
+  );
+}
+
+/* =========================================================
+   COLOR DOMINANTE
+   ========================================================= */
+
+function colorFromImage(image) {
+  const canvas = document.createElement('canvas');
+
+  canvas.width = 24;
+  canvas.height = 24;
+
+  const context = canvas.getContext('2d', {
+    willReadFrequently: true
+  });
+
+  if (!context) {
+    return null;
+  }
 
   try {
-    // 1. Override explícito por mod de canción
-    if (validImageUrl(trackOverride)) {
-      if (isStale()) return activeArtwork;
-      isLoadingState = false;
-      return applyArtwork(moddedTrack, trackOverride, { signal });
-    }
+    context.drawImage(
+      image,
+      0,
+      0,
+      canvas.width,
+      canvas.height
+    );
 
-    // 2. Pintado inicial inmediato si el track ya trae carátula o miniatura
-    if (validImageUrl(originalArtwork)) {
-      if (isStale()) return activeArtwork;
-      applyArtwork(track, originalArtwork, { signal });
-    }
+    const pixels = context.getImageData(
+      0,
+      0,
+      canvas.width,
+      canvas.height
+    ).data;
 
-    // 3. Metadata específica del track (/api/metadata)
-    try {
-      const metadata = await getTrackMetadata(track, {
-        signal,
-        force: Boolean(options.force)
-      });
+    let red = 0;
+    let green = 0;
+    let blue = 0;
+    let count = 0;
 
-      if (isStale()) return activeArtwork;
+    for (
+      let index = 0;
+      index < pixels.length;
+      index += 4
+    ) {
+      const alpha = pixels[index + 3];
 
-      const metaArtwork = normaliseUrl(metadata?.artwork);
-      if (validImageUrl(metaArtwork)) {
-        const enrichedTrack = {
-          ...track,
-          metadata: {
-            ...(track.metadata && typeof track.metadata === 'object' ? track.metadata : {}),
-            ...(metadata && typeof metadata === 'object' ? metadata : {})
-          }
-        };
-        isLoadingState = false;
-        return applyArtwork(enrichedTrack, metaArtwork, { signal });
+      if (alpha < 100) {
+        continue;
       }
-    } catch (error) {
-      if (error?.name === 'AbortError' || isStale()) {
-        return activeArtwork;
+
+      const r = pixels[index];
+      const g = pixels[index + 1];
+      const b = pixels[index + 2];
+
+      /*
+       * Ignorar píxeles casi blancos o negros.
+       */
+
+      const brightness = (r + g + b) / 3;
+
+      if (brightness < 18 || brightness > 245) {
+        continue;
       }
-      logDebug('getTrackMetadata sin portada propia:', error?.message);
+
+      red += r;
+      green += g;
+      blue += b;
+
+      count++;
     }
 
-    // 4. Respaldo de carátula de álbum validada si metadata no devolvió portada
-    try {
-      const albumArtwork = await fetchAlbumArtwork(track, signal);
-      if (isStale()) return activeArtwork;
-
-      if (validImageUrl(albumArtwork)) {
-        isLoadingState = false;
-        return applyArtwork(track, albumArtwork, { signal });
-      }
-    } catch (error) {
-      if (error?.name === 'AbortError' || isStale()) {
-        return activeArtwork;
-      }
+    if (!count) {
+      return null;
     }
 
-    // 5. Portada explícita del pack de artista si existe
-    if (validImageUrl(artistEntry?.artwork)) {
-      if (isStale()) return activeArtwork;
-      isLoadingState = false;
-      return applyArtwork(track, normaliseUrl(artistEntry.artwork), { signal });
-    }
+    const r = Math.round(red / count);
+    const g = Math.round(green / count);
+    const b = Math.round(blue / count);
 
-    // 6. Mantener miniatura original del track si existía
-    if (validImageUrl(originalArtwork)) {
-      isLoadingState = false;
-      return applyArtwork(track, originalArtwork, { signal });
-    }
+    return {
+      primary: `rgb(${r}, ${g}, ${b})`,
+      secondary: `rgba(${r}, ${g}, ${b}, 0.32)`,
+      rgb: [r, g, b]
+    };
+  } catch {
+    /*
+     * Canvas puede bloquear getImageData cuando
+     * el servidor remoto no permite CORS.
+     */
 
-    // 7. Último recurso antes de FALLBACK: foto de artista validada
-    const artistQueryName = normaliseUrl(artistEntry?.name) || getTrackArtist(track);
-    if (artistQueryName) {
-      try {
-        const artistArtwork = await fetchArtistArtwork(artistQueryName, signal);
-        if (isStale()) return activeArtwork;
-
-        if (validImageUrl(artistArtwork)) {
-          isLoadingState = false;
-          return applyArtwork(track, artistArtwork, { signal });
-        }
-      } catch (error) {
-        if (error?.name === 'AbortError' || isStale()) {
-          return activeArtwork;
-        }
-        logDebug('fetchArtistArtwork sin resultado:', error?.message);
-      }
-    }
-
-    if (isStale()) return activeArtwork;
-    isLoadingState = false;
-    return applyArtwork(track, FALLBACK, { signal });
-  } finally {
-    if (currentReqId === requestCounter) {
-      isLoadingState = false;
-    }
+    return null;
   }
 }
 
-/* --------------------------------------------------------------------------
-   08. PRECAGAR SIGUIENTE PORTADA DE COLA (BAJA PRIORIDAD / RESPETANDO SAVEDATA)
-   -------------------------------------------------------------------------- */
-
-export function preloadArtwork(url) {
-  const safeUrl = normaliseUrl(url);
-  if (!validImageUrl(safeUrl) || safeUrl === FALLBACK) return;
-  if (!isPersistableUrl(safeUrl)) return;
-  if (isDataSaverEnabled()) return;
-  if (document.hidden) return;
-  if (preloadedUrls.has(safeUrl)) return;
-
-  if (preloadedUrls.size > 60) {
-    const first = preloadedUrls.values().next().value;
-    preloadedUrls.delete(first);
-  }
-  preloadedUrls.add(safeUrl);
-
-  const img = new Image();
-  img.decoding = 'async';
-  img.loading = 'eager';
-  img.src = safeUrl;
-}
-
-/* --------------------------------------------------------------------------
-   09. GESTOS TÁCTILES (PRESS SCALE + SWIPE HORIZONTAL OPCIONAL) Y A11Y
-   -------------------------------------------------------------------------- */
-
-function bindArtworkGestures(el) {
-  if (!el || gestureState.has(el)) return;
-
-  const state = {
-    pointerId: null,
-    startX: 0,
-    startY: 0,
-    lastX: 0,
-    lastY: 0,
-    moved: false,
-    rafId: 0
-  };
-  gestureState.set(el, state);
-
-  const setScaleRaf = nextVal => {
-    if (state.rafId) cancelAnimationFrame(state.rafId);
-    state.rafId = requestAnimationFrame(() => {
-      state.rafId = 0;
-      setGestureScale(el, nextVal);
-    });
-  };
-
-  const onPointerDown = event => {
-    if (event.pointerType === 'mouse' && event.button !== 0) return;
-    state.pointerId = event.pointerId;
-    state.startX = event.clientX;
-    state.startY = event.clientY;
-    state.lastX = event.clientX;
-    state.lastY = event.clientY;
-    state.moved = false;
-    setScaleRaf(isPrimaryArtworkTarget(el) ? 0.975 : 0.95);
-  };
-
-  const onPointerMove = event => {
-    if (state.pointerId !== event.pointerId) return;
-    state.lastX = event.clientX;
-    state.lastY = event.clientY;
-    const dx = Math.abs(state.lastX - state.startX);
-    const dy = Math.abs(state.lastY - state.startY);
-    if (dx > 8 || dy > 8) {
-      state.moved = true;
-    }
-  };
-
-  const finishGesture = (event, cancelled = false) => {
-    if (state.pointerId !== event.pointerId) return;
-
-    const deltaX = state.lastX - state.startX;
-    const deltaY = state.lastY - state.startY;
-    const wasSwipeHorizontal =
-      !cancelled &&
-      Math.abs(deltaX) > 64 &&
-      Math.abs(deltaX) > Math.abs(deltaY) * 1.4;
-
-    state.pointerId = null;
-    setScaleRaf(1);
-
-    if (wasSwipeHorizontal && el.id === 'fullPlayerThumbnail') {
-      document.dispatchEvent(
-        new CustomEvent('shunel:artwork-swipe', {
-          detail: {
-            direction: deltaX < 0 ? 'next' : 'prev',
-            deltaX,
-            track: activeTrack
-          }
-        })
-      );
-    }
-  };
-
-  const onPointerUp = event => finishGesture(event, false);
-  const onPointerCancel = event => finishGesture(event, true);
-  const onPointerLeave = event => {
-    if (state.pointerId === event.pointerId) {
-      state.pointerId = null;
-      setScaleRaf(1);
-    }
-  };
-
-  const onKeyDown = event => {
-    if (!el.hasAttribute('tabindex')) return;
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
-      el.click();
-    }
-  };
-
-  el.addEventListener('pointerdown', onPointerDown, { passive: true });
-  el.addEventListener('pointermove', onPointerMove, { passive: true });
-  el.addEventListener('pointerup', onPointerUp, { passive: true });
-  el.addEventListener('pointercancel', onPointerCancel, { passive: true });
-  el.addEventListener('pointerleave', onPointerLeave, { passive: true });
-  el.addEventListener('keydown', onKeyDown);
-
-  cleanupCallbacks.push(() => {
-    if (state.rafId) cancelAnimationFrame(state.rafId);
-    el.removeEventListener('pointerdown', onPointerDown);
-    el.removeEventListener('pointermove', onPointerMove);
-    el.removeEventListener('pointerup', onPointerUp);
-    el.removeEventListener('pointercancel', onPointerCancel);
-    el.removeEventListener('pointerleave', onPointerLeave);
-    el.removeEventListener('keydown', onKeyDown);
-  });
-}
-
-function attachGesturesToCurrentTargets() {
-  for (const target of imageTargets()) {
-    bindArtworkGestures(target);
-  }
-}
-
-/* --------------------------------------------------------------------------
-   10. INICIALIZACIÓN, ESTADOS Y LIMPIEZA
-   -------------------------------------------------------------------------- */
-
-export function setArtworkPlaybackState(playing) {
-  const nextPlaying = Boolean(playing);
-  if (nextPlaying === isPlayingState) return;
-  isPlayingState = nextPlaying;
-  scheduleVisualSync({ isPlaying: isPlayingState });
-}
-
-export function resetArtwork() {
-  requestController?.abort();
-  requestController = null;
-  activeTrackKey = '';
-  activeTrack = null;
-  activeSongColor = DEFAULT_SONG_COLOR;
-  isLoadingState = false;
-
-  scheduleVisualSync({
-    artworkCss: 'none',
-    songColor: DEFAULT_SONG_COLOR,
-    secondaryColor: DEFAULT_SECONDARY_COLOR,
-    isPlaying: isPlayingState
-  });
-
-  return applyArtwork(null, FALLBACK);
-}
-
-export function destroyArtwork() {
-  while (cleanupCallbacks.length) {
-    const fn = cleanupCallbacks.pop();
-    try {
-      fn();
-    } catch {
-      /* Ignora error al limpiar. */
-    }
-  }
-  requestController?.abort();
-  requestController = null;
-  artistRequests.clear();
-  albumRequests.clear();
-  if (rafScheduled) {
-    cancelAnimationFrame(rafScheduled);
-    rafScheduled = false;
-  }
-  initialized = false;
-}
-
-export function initArtwork() {
-  if (initialized) {
-    attachGesturesToCurrentTargets();
+function setSongColors(color) {
+  if (!color) {
     return;
   }
 
-  initialized = true;
-  attachGesturesToCurrentTargets();
+  activeSongColor = color.primary;
 
-  const onTrackChange = event => {
-    const track = extractTrackFromEvent(event);
-    if (track) {
-      attachGesturesToCurrentTargets();
-      void loadArtwork(track);
-    }
-  };
+  activeSecondaryColor = color.secondary;
 
-  const onPlayRequest = event => {
-    const track = extractTrackFromEvent(event);
-    if (track) {
-      attachGesturesToCurrentTargets();
-      void loadArtwork(track);
-    }
-  };
+  const root = document.documentElement;
 
-  const onPlaybackState = event => {
-    const detail = event?.detail;
-    if (typeof detail?.playing === 'boolean') {
-      setArtworkPlaybackState(detail.playing);
-    } else if (typeof detail?.isPlaying === 'boolean') {
-      setArtworkPlaybackState(detail.isPlaying);
-    } else if (typeof detail?.state === 'string') {
-      setArtworkPlaybackState(detail.state === 'playing');
-    }
-  };
+  root.style.setProperty(
+    '--song-color',
+    color.primary
+  );
 
-  const onModsChanged = () => {
-    attachGesturesToCurrentTargets();
-    if (activeTrack) {
-      void loadArtwork(activeTrack, { force: true });
-    }
-  };
+  root.style.setProperty(
+    '--shunel-song-secondary',
+    color.secondary
+  );
 
-  const onPreloadNext = event => {
-    const nextUrl =
-      event?.detail?.artwork ||
-      event?.detail?.thumbnail ||
-      event?.detail?.track?.artwork ||
-      event?.detail?.track?.thumbnail ||
-      '';
-    if (nextUrl) {
-      preloadArtwork(nextUrl);
+  safeDispatch(
+    'shunel:artwork-color-updated',
+    {
+      color: color.primary,
+      secondary: color.secondary
     }
-  };
+  );
+}
 
-  const onVisibilityChange = () => {
-    if (!document.hidden) {
-      attachGesturesToCurrentTargets();
-      scheduleVisualSync({
-        artworkCss: activeArtwork === FALLBACK ? 'none' : activeArtwork.replace(/["\\\n\r]/g, ''),
-        songColor: activeSongColor,
-        secondaryColor: DEFAULT_SECONDARY_COLOR,
-        isPlaying: isPlayingState
-      });
-    }
-  };
-
-  let reducedMotionMq = null;
-  let onMotionChange = null;
-  try {
-    reducedMotionMq = window.matchMedia('(prefers-reduced-motion: reduce)');
-    onMotionChange = () => {
-      if (prefersReducedMotion()) {
-        for (const el of imageTargets()) {
-          setGestureScale(el, 1);
-        }
-      }
-    };
-    if (typeof reducedMotionMq.addEventListener === 'function') {
-      reducedMotionMq.addEventListener('change', onMotionChange);
-    } else if (typeof reducedMotionMq.addListener === 'function') {
-      reducedMotionMq.addListener(onMotionChange);
-    }
-  } catch {
-    /* Ignora si matchMedia no está disponible. */
+async function extractDominantSongColor(
+  url,
+  key,
+  requestId
+) {
+  if (!url || !key) {
+    return null;
   }
 
-  document.addEventListener('shunel:track-change', onTrackChange);
-  document.addEventListener('shunel:play-request', onPlayRequest);
-  document.addEventListener('shunel:playback-state', onPlaybackState);
-  document.addEventListener('shunel:mods-changed', onModsChanged);
-  document.addEventListener('shunel:preload-artwork', onPreloadNext);
-  document.addEventListener('visibilitychange', onVisibilityChange);
+  const cached = getCachedSongColor(key);
 
-  cleanupCallbacks.push(() => {
-    document.removeEventListener('shunel:track-change', onTrackChange);
-    document.removeEventListener('shunel:play-request', onPlayRequest);
-    document.removeEventListener('shunel:playback-state', onPlaybackState);
-    document.removeEventListener('shunel:mods-changed', onModsChanged);
-    document.removeEventListener('shunel:preload-artwork', onPreloadNext);
-    document.removeEventListener('visibilitychange', onVisibilityChange);
+  if (cached) {
+    if (isCurrentRequest(requestId, key)) {
+      setSongColors(cached);
+    }
 
-    if (reducedMotionMq && onMotionChange) {
-      if (typeof reducedMotionMq.removeEventListener === 'function') {
-        reducedMotionMq.removeEventListener('change', onMotionChange);
-      } else if (typeof reducedMotionMq.addListener === 'function') {
-        reducedMotionMq.removeListener(onMotionChange);
+    return cached;
+  }
+
+  try {
+    const image = await loadImage(url, {
+      timeout: COLOR_TIMEOUT,
+      crossOrigin: true
+    });
+
+    const color = colorFromImage(image);
+
+    if (!color) {
+      return null;
+    }
+
+    /*
+     * No guardar ni aplicar colores de una pista
+     * que ya dejó de estar activa.
+     */
+
+    if (!isCurrentRequest(requestId, key)) {
+      return null;
+    }
+
+    saveSongColor(key, color);
+
+    setSongColors(color);
+
+    return color;
+  } catch {
+    return null;
+  }
+}
+
+/* =========================================================
+   PRESUPUESTO PARA EXTRACCIÓN DE COLOR
+   ========================================================= */
+
+async function resolveSongColorWithBudget(
+  url,
+  key,
+  requestId
+) {
+  let timer = null;
+
+  try {
+    await Promise.race([
+      extractDominantSongColor(
+        url,
+        key,
+        requestId
+      ),
+
+      new Promise(resolve => {
+        timer = setTimeout(
+          resolve,
+          COLOR_TIMEOUT
+        );
+      })
+    ]);
+  } finally {
+    if (timer !== null) {
+      clearTimeout(timer);
+    }
+  }
+}
+
+/* =========================================================
+   SINCRONIZACIÓN VISUAL
+   ========================================================= */
+
+function syncArtworkVisuals() {
+  visualSyncPending = false;
+
+  for (const element of getArtworkElements()) {
+    element.style.setProperty(
+      '--shunel-art-gesture-scale',
+      String(gestureScale)
+    );
+
+    element.classList.toggle(
+      'is-playing',
+      isPlaying
+    );
+  }
+}
+
+function scheduleVisualSync() {
+  if (visualRafId || destroyed) {
+    return;
+  }
+
+  visualRafId = requestAnimationFrame(() => {
+    visualRafId = 0;
+
+    if (destroyed) {
+      return;
+    }
+
+    syncArtworkVisuals();
+  });
+}
+
+/* =========================================================
+   GESTOS TÁCTILES Y POINTER
+   ========================================================= */
+
+function onPointerDown(event) {
+  if (
+    event.pointerType === 'mouse' &&
+    event.button !== 0
+  ) {
+    return;
+  }
+
+  activePointer = event.pointerId;
+
+  pointerStartX = event.clientX;
+  pointerStartY = event.clientY;
+
+  pointerMoved = false;
+}
+
+function onPointerMove(event) {
+  if (
+    activePointer === null ||
+    event.pointerId !== activePointer
+  ) {
+    return;
+  }
+
+  const dx = event.clientX - pointerStartX;
+  const dy = event.clientY - pointerStartY;
+
+  if (
+    Math.abs(dx) > 8 ||
+    Math.abs(dy) > 8
+  ) {
+    pointerMoved = true;
+  }
+
+  if (!pointerMoved) {
+    return;
+  }
+
+  const distance = Math.min(
+    Math.abs(dx) + Math.abs(dy),
+    70
+  );
+
+  gestureScale = Math.max(
+    0.96,
+    1 - distance / 1800
+  );
+
+  scheduleVisualSync();
+}
+
+function onPointerUp(event) {
+  if (
+    activePointer === null ||
+    event.pointerId !== activePointer
+  ) {
+    return;
+  }
+
+  activePointer = null;
+
+  gestureScale = 1;
+
+  scheduleVisualSync();
+}
+
+function onPointerCancel() {
+  activePointer = null;
+
+  gestureScale = 1;
+
+  scheduleVisualSync();
+}
+
+function bindGestureEvents(element) {
+  if (!element || imageListeners.has(element)) {
+    return;
+  }
+
+  const listeners = {
+    pointerdown: onPointerDown,
+    pointermove: onPointerMove,
+    pointerup: onPointerUp,
+    pointercancel: onPointerCancel
+  };
+
+  for (const [event, handler] of Object.entries(listeners)) {
+    element.addEventListener(
+      event,
+      handler,
+      { passive: true }
+    );
+  }
+
+  element.style.touchAction = 'pan-y';
+
+  imageListeners.set(
+    element,
+    listeners
+  );
+}
+
+function unbindGestureEvents(element) {
+  const listeners = imageListeners.get(element);
+
+  if (!listeners) {
+    return;
+  }
+
+  for (const [event, handler] of Object.entries(listeners)) {
+    element.removeEventListener(
+      event,
+      handler
+    );
+  }
+
+  imageListeners.delete(element);
+}
+
+/* =========================================================
+   ACCESIBILIDAD
+   ========================================================= */
+
+function prepareAccessibility() {
+  for (const element of getArtworkElements()) {
+    if (element.tagName?.toLowerCase() === 'img') {
+      if (!element.hasAttribute('alt')) {
+        element.alt = 'Portada de la canción';
       }
+
+      element.decoding = 'async';
+    } else {
+      element.setAttribute(
+        'role',
+        'img'
+      );
+
+      element.setAttribute(
+        'aria-label',
+        'Portada de la canción'
+      );
+    }
+
+    bindGestureEvents(element);
+  }
+}
+
+/* =========================================================
+   PRELOAD
+   ========================================================= */
+
+export async function preloadArtwork(track) {
+  if (!isObject(track)) {
+    return null;
+  }
+
+  const key = getTrackKey(track);
+
+  if (!key) {
+    return null;
+  }
+
+  if (preloadRequests.has(key)) {
+    return preloadRequests.get(key);
+  }
+
+  const promise = (async () => {
+    const controller = new AbortController();
+
+    try {
+      /*
+       * Precalentar metadatos sin modificar
+       * la portada que está en reproducción.
+       */
+
+      const metadata = await getTrackMetadata(
+        track,
+        {
+          signal: controller.signal
+        }
+      );
+
+      if (
+        metadata?.artwork &&
+        isValidImageUrl(metadata.artwork)
+      ) {
+        const image = new Image();
+
+        image.src = metadata.artwork;
+
+        return metadata.artwork;
+      }
+
+      return getYouTubeThumbnail(track) || null;
+    } catch {
+      return getYouTubeThumbnail(track) || null;
+    }
+  })().finally(() => {
+    preloadRequests.delete(key);
+  });
+
+  preloadRequests.set(key, promise);
+
+  return promise;
+}
+
+/* =========================================================
+   CARGA PRINCIPAL DE PORTADA
+   ========================================================= */
+
+export async function loadArtwork(
+  track,
+  options = {}
+) {
+  if (!isObject(track) || destroyed) {
+    return null;
+  }
+
+  const requestId = ++activeRequestId;
+
+  if (activeController) {
+    activeController.abort();
+  }
+
+  const controller = new AbortController();
+
+  activeController = controller;
+
+  const key = getTrackKey(track);
+
+  activeRequestKey = key;
+
+  activeTrack = track;
+
+  activeColorKey = key;
+
+  activeSongColor = null;
+  activeSecondaryColor = null;
+
+  const forceRefresh = Boolean(
+    options.forceRefresh ||
+    options.refresh
+  );
+
+  /*
+   * Reiniciar prioridad para una nueva canción,
+   * conservando la portada anterior mientras carga.
+   */
+
+  const explicitMod = getExplicitModArtwork(track);
+
+  if (explicitMod) {
+    applyArtwork(
+      explicitMod,
+      {
+        source: 'mod',
+        force: true
+      }
+    );
+
+    return {
+      artwork: explicitMod,
+      source: 'mod'
+    };
+  }
+
+  /*
+   * Miniatura original como fallback temporal.
+   */
+
+  const youtube = getYouTubeThumbnail(track);
+
+  if (youtube) {
+    applyArtwork(
+      youtube,
+      {
+        source: 'youtube-thumbnail',
+        force: true
+      }
+    );
+  }
+
+  const identity = cleanQueryTitle(
+    getTitle(track),
+    getArtist(track)
+  );
+
+  const albumKey = [
+    normalizeArtist(getArtist(track)),
+    normalizeText(identity.album || getAlbum(track))
+  ].join('::');
+
+  const isCurrent = () =>
+    isCurrentRequest(requestId, key) &&
+    !controller.signal.aborted;
+
+  const sources = [];
+
+  /*
+   * 1. MusicBrainz / Cover Art Archive.
+   */
+
+  sources.push(async () => {
+    return getAlbumRequest(
+      albumKey + '::musicbrainz',
+      signal => searchMusicMetadata(
+        track,
+        signal
+      )
+    );
+  });
+
+  /*
+   * 2. iTunes.
+   */
+
+  sources.push(async () => {
+    return searchITunes(
+      track,
+      controller.signal
+    );
+  });
+
+  /*
+   * 3. Portada de artista.
+   */
+
+  sources.push(async () => {
+    const artist = getArtist(track);
+
+    const cached = getCachedArtistArtwork(artist);
+
+    if (cached) {
+      return {
+        artwork: cached,
+        source: 'artist'
+      };
+    }
+
+    const modArtwork = getArtistModArtwork(artist);
+
+    if (modArtwork) {
+      return {
+        artwork: modArtwork,
+        source: 'artist'
+      };
+    }
+
+    const artwork = await searchDeezerArtist(
+      artist,
+      controller.signal
+    );
+
+    if (!artwork) {
+      return null;
+    }
+
+    return {
+      artwork,
+      source: 'artist'
+    };
+  });
+
+  /*
+   * Ejecutar las fuentes en orden de prioridad.
+   *
+   * Una portada de artista no reemplaza una portada
+   * oficial que ya se haya encontrado.
+   */
+
+  let bestResult = null;
+
+  for (const sourceSearch of sources) {
+    if (!isCurrent()) {
+      throw createAbortError();
+    }
+
+    try {
+      const result = await sourceSearch();
+
+      if (
+        !result ||
+        !isValidImageUrl(result.artwork)
+      ) {
+        continue;
+      }
+
+      if (!isCurrent()) {
+        throw createAbortError();
+      }
+
+      bestResult = result;
+
+      const source = result.source || 'fallback';
+
+      const applied = applyArtwork(
+        result.artwork,
+        {
+          source,
+          force: false
+        }
+      );
+
+      if (applied) {
+        /*
+         * MusicBrainz e iTunes tienen prioridad
+         * sobre una imagen de artista.
+         */
+
+        if (
+          source === 'musicbrainz-cover-art-archive' ||
+          source === 'itunes'
+        ) {
+          break;
+        }
+      }
+    } catch (error) {
+      if (isAbortError(error)) {
+        throw error;
+      }
+
+      /*
+       * Si una fuente falla, continuar con la siguiente.
+       */
+    }
+  }
+
+  if (!isCurrent()) {
+    throw createAbortError();
+  }
+
+  /*
+   * Si no se encontró una portada superior,
+   * conservar la miniatura original de YouTube.
+   */
+
+  if (!bestResult && !activeArtwork) {
+    applyFallback(track);
+  }
+
+  const result = {
+    artwork: activeArtwork,
+    source: activeArtworkSource,
+    found: Boolean(bestResult)
+  };
+
+  safeDispatch(
+    'shunel:artwork-updated',
+    {
+      ...result,
+      track
+    }
+  );
+
+  return result;
+}
+
+/* =========================================================
+   ESTADO DEL REPRODUCTOR
+   ========================================================= */
+
+export function setArtworkPlaybackState(state) {
+  if (typeof state === 'boolean') {
+    isPlaying = state;
+  } else if (isObject(state)) {
+    isPlaying = Boolean(
+      state.playing ??
+      state.isPlaying ??
+      false
+    );
+  } else {
+    isPlaying = false;
+  }
+
+  scheduleVisualSync();
+}
+
+/* =========================================================
+   RESET
+   ========================================================= */
+
+export function resetArtwork(options = {}) {
+  cancelActiveRequest();
+
+  activeTrack = null;
+
+  activeRequestKey = '';
+
+  activeColorKey = '';
+
+  activeArtwork = '';
+
+  activeArtworkSource = 'fallback';
+
+  activeSongColor = null;
+
+  activeSecondaryColor = null;
+
+  gestureScale = 1;
+
+  if (options.clearColors) {
+    songColorCache.clear();
+  }
+
+  for (const element of getArtworkElements()) {
+    element.classList.remove(
+      'has-artwork',
+      'is-playing',
+      'artwork-loading',
+      'artwork-failed'
+    );
+
+    element.removeAttribute(
+      'data-shunel-artwork-source'
+    );
+
+    if (element.tagName?.toLowerCase() === 'img') {
+      element.src = FALLBACK_ARTWORK;
+    } else {
+      element.style.backgroundImage =
+        `url("${FALLBACK_ARTWORK}")`;
+    }
+  }
+
+  updateArtworkCss(FALLBACK_ARTWORK);
+
+  document.documentElement.style.removeProperty(
+    '--song-color'
+  );
+
+  document.documentElement.style.removeProperty(
+    '--shunel-song-secondary'
+  );
+
+  scheduleVisualSync();
+}
+
+/* =========================================================
+   EVENTOS
+   ========================================================= */
+
+function listen(target, eventName, handler) {
+  if (!target) {
+    return;
+  }
+
+  target.addEventListener(
+    eventName,
+    handler
+  );
+
+  boundEvents.push({
+    target,
+    eventName,
+    handler
+  });
+}
+
+function handleTrackChange(event) {
+  const track =
+    event?.detail?.track ||
+    event?.detail?.song ||
+    event?.detail;
+
+  if (!isObject(track)) {
+    return;
+  }
+
+  loadArtwork(track).catch(error => {
+    if (!isAbortError(error)) {
+      console.warn(
+        '[Shunel Artwork] Track artwork failed:',
+        error
+      );
     }
   });
+}
+
+function handlePlayRequest(event) {
+  const track =
+    event?.detail?.track ||
+    event?.detail?.song;
+
+  if (isObject(track)) {
+    loadArtwork(track).catch(() => {});
+  }
+}
+
+function handlePlaybackState(event) {
+  setArtworkPlaybackState(
+    event?.detail || false
+  );
+}
+
+function handleModsChanged() {
+  if (!activeTrack) {
+    return;
+  }
+
+  const artwork = getExplicitModArtwork(
+    activeTrack
+  );
+
+  if (artwork) {
+    applyArtwork(
+      artwork,
+      {
+        source: 'mod',
+        force: true
+      }
+    );
+
+    return;
+  }
+
+  /*
+   * Al retirar un mod, volver a resolver
+   * la portada sin dejar la imagen personalizada.
+   */
+
+  loadArtwork(
+    activeTrack,
+    {
+      forceRefresh: true
+    }
+  ).catch(() => {});
+}
+
+function handlePreloadArtwork(event) {
+  const track =
+    event?.detail?.track ||
+    event?.detail?.song ||
+    event?.detail;
+
+  if (isObject(track)) {
+    preloadArtwork(track);
+  }
+}
+
+function bindApplicationEvents() {
+  listen(
+    window,
+    'shunel:track-change',
+    handleTrackChange
+  );
+
+  listen(
+    window,
+    'shunel:play-request',
+    handlePlayRequest
+  );
+
+  listen(
+    window,
+    'shunel:playback-state',
+    handlePlaybackState
+  );
+
+  listen(
+    window,
+    'shunel:mods-changed',
+    handleModsChanged
+  );
+
+  listen(
+    window,
+    'shunel:preload-artwork',
+    handlePreloadArtwork
+  );
+}
+
+/* =========================================================
+   INICIALIZACIÓN
+   ========================================================= */
+
+export function initArtwork() {
+  if (initialized && !destroyed) {
+    return true;
+  }
+
+  destroyed = false;
+
+  initialized = true;
+
+  prepareAccessibility();
+
+  bindApplicationEvents();
+
+  const currentTrack =
+    window.currentTrack ||
+    window.currentSong ||
+    null;
+
+  if (isObject(currentTrack)) {
+    loadArtwork(currentTrack).catch(() => {});
+  }
+
+  return true;
+}
+
+/* =========================================================
+   DESTRUCCIÓN
+   ========================================================= */
+
+export function destroyArtwork() {
+  destroyed = true;
+
+  initialized = false;
+
+  cancelActiveRequest();
+
+  /*
+   * Cancelar RAF usando el ID numérico real.
+   */
+
+  if (visualRafId) {
+    cancelAnimationFrame(visualRafId);
+
+    visualRafId = 0;
+  }
+
+  visualSyncPending = false;
+
+  /*
+   * Eliminar listeners globales.
+   */
+
+  for (const item of boundEvents) {
+    item.target.removeEventListener(
+      item.eventName,
+      item.handler
+    );
+  }
+
+  boundEvents = [];
+
+  /*
+   * Eliminar listeners de gestos.
+   */
+
+  for (const element of getArtworkElements()) {
+    unbindGestureEvents(element);
+  }
+
+  /*
+   * Cancelar solicitudes propias.
+   */
+
+  for (const request of albumRequests.values()) {
+    request.controller?.abort();
+  }
+
+  for (const request of artistRequests.values()) {
+    request.controller?.abort();
+  }
+
+  for (const request of preloadRequests.values()) {
+    request?.controller?.abort?.();
+  }
+
+  albumRequests.clear();
+
+  artistRequests.clear();
+
+  preloadRequests.clear();
+
+  activeController = null;
+
+  activePointer = null;
+
+  visualElements.clear();
+}
+
+/* =========================================================
+   INFORMACIÓN DE DEPURACIÓN
+   ========================================================= */
+
+export function getArtworkState() {
+  return {
+    version: VERSION,
+
+    artwork: activeArtwork,
+
+    source: activeArtworkSource,
+
+    track: activeTrack,
+
+    requestId: activeRequestId,
+
+    requestKey: activeRequestKey,
+
+    playing: isPlaying,
+
+    initialized,
+
+    destroyed
+  };
+}
+
+/* =========================================================
+   INICIALIZACIÓN AUTOMÁTICA
+   ========================================================= */
+
+if (typeof window !== 'undefined') {
+  if (document.readyState === 'loading') {
+    document.addEventListener(
+      'DOMContentLoaded',
+      initArtwork,
+      { once: true }
+    );
+  } else {
+    initArtwork();
+  }
 }

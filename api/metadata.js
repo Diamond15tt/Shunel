@@ -1,680 +1,1297 @@
-/* ==========================================================================
-   SHUNEL — Metadata API Function (v2.1)
-   MusicBrainz + Cover Art Archive sin bloqueos de arranque ni timeouts largos.
-   ========================================================================== */
 
-const DEFAULT_USER_AGENT = 'Shunel/2.1 (https://github.com/Diamond15tt/Shunel)';
-const MB_BASE_URL = 'https://musicbrainz.org/ws/2/release-group/';
-const CAA_BASE_URL = 'https://coverartarchive.org/release-group';
+/* =========================================================
+   SHUNEL — METADATA API v4.2
+   MusicBrainz Recording
+       -> Releases / Release Groups
+       -> Cover Art Archive
 
-const REQUEST_TIMEOUT_MS = 3200;
-const MEMORY_CACHE_MAX = 150;
-const HIT_TTL_MS = 12 * 60 * 60 * 1000;
-const MISS_TTL_MS = 10 * 60 * 1000;
+   Runtime: Node.js / Vercel
+   Module system: CommonJS
+   ========================================================= */
 
-const ALLOWED_COVER_SIZES = new Map([
-  ['250', 'front-250'],
-  ['front-250', 'front-250'],
-  ['500', 'front-500'],
-  ['front-500', 'front-500'],
-  ['1200', 'front-1200'],
-  ['front-1200', 'front-1200'],
-  ['full', 'front'],
-  ['front', 'front']
-]);
+const USER_AGENT =
+  'Shunel/4.2 (https://github.com/Diamond15tt/Shunel)';
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const LUCENE_SPECIAL_RE = /[+\-&|!(){}[\]^"~*?:\\/]/g;
-const CONTROL_CHARS_RE = /[\u0000-\u001f\u007f]/g;
-const MULTISPACE_RE = /\s+/g;
+const MUSICBRAINZ_URL =
+  'https://musicbrainz.org/ws/2/recording/';
+
+const COVER_ART_URL =
+  'https://coverartarchive.org/release-group';
+
+const REQUEST_TIMEOUT_MS = 2600;
+const TOTAL_BUDGET_MS = 8200;
+
+const POSITIVE_CACHE_TTL = 12 * 60 * 60 * 1000;
+const NEGATIVE_CACHE_TTL = 10 * 60 * 1000;
+
+const MAX_CACHE_ENTRIES = 150;
+
+const MBID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const memoryCache = new Map();
-const inflightRequests = new Map();
+const pendingRequests = new Map();
 
-function getUserAgent() {
-  try {
-    const envVal = typeof process !== 'undefined' && process?.env?.MUSICBRAINZ_USER_AGENT;
-    const cleaned = cleanText(envVal || DEFAULT_USER_AGENT, 200);
-    return cleaned || DEFAULT_USER_AGENT;
-  } catch {
-    return DEFAULT_USER_AGENT;
+/* =========================================================
+   UTILIDADES
+   ========================================================= */
+
+function clean(value, maxLength = 180) {
+  const input = Array.isArray(value) ? value[0] : value;
+
+  if (input === null || input === undefined) {
+    return '';
   }
-}
 
-function extractFirstQueryValue(raw) {
-  if (Array.isArray(raw)) return raw.length > 0 ? raw[0] : '';
-  if (raw && typeof raw === 'object') return '';
-  return raw;
-}
+  if (typeof input === 'object') {
+    return '';
+  }
 
-function cleanText(value, max = 160) {
-  const raw = extractFirstQueryValue(value);
-  if (raw === null || raw === undefined) return '';
-  return String(raw)
-    .replace(CONTROL_CHARS_RE, ' ')
-    .replace(MULTISPACE_RE, ' ')
+  return String(input)
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replace(/\s+/g, ' ')
     .trim()
-    .slice(0, max);
+    .slice(0, maxLength);
 }
 
-function escapeRegExp(str) {
-  return String(str || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function stripDiacritics(str) {
-  return String(str || '')
+function normalizeText(value) {
+  return String(value || '')
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '');
-}
-
-function normaliseComparable(value) {
-  return stripDiacritics(String(value || ''))
+    .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
+    .replace(/\$/g, 's')
     .replace(/&/g, ' and ')
-    .replace(/[^a-z0-9\s]+/g, ' ')
-    .replace(MULTISPACE_RE, ' ')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
     .trim();
 }
 
-function normaliseArtistName(value) {
-  return normaliseComparable(value)
-    .replace(/\b(official|topic|vevo|music|records|record|tv|channel|hd|hq)\b/g, ' ')
-    .replace(MULTISPACE_RE, ' ')
+function normalizeArtist(value) {
+  return normalizeText(value)
+    .replace(/\b(?:official|topic|vevo|music|records?|tv|channel|hd|hq)\b/g, ' ')
+    .replace(/\s+/g, ' ')
     .trim();
 }
 
-function splitArtistTokens(artistValue) {
-  const cleaned = cleanText(artistValue, 140);
-  if (!cleaned) return [];
-  const parts = cleaned
-    .split(/\s*(?:,|&|\+|\/|\bfeat\.?\b|\bft\.?\b|\bwith\b|\bx\b|\band\b|\by\b)\s*/i)
-    .map(normaliseArtistName)
-    .filter(Boolean);
-  return [...new Set(parts)];
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function hasWholePhrase(haystack, needle) {
-  if (!haystack || !needle) return false;
-  if (haystack === needle) return true;
-  const escaped = escapeRegExp(needle);
-  const wordBoundaryRe = new RegExp(`(?:^|\\s)${escaped}(?:\\s|$)`, 'i');
-  return wordBoundaryRe.test(haystack);
-}
-
-function artistsMatch(requestedArtist, candidateArtist) {
-  const reqNorm = normaliseArtistName(requestedArtist);
-  const candNorm = normaliseArtistName(candidateArtist);
-  if (!reqNorm || !candNorm) return false;
-
-  if (reqNorm === candNorm) return true;
-  if (hasWholePhrase(candNorm, reqNorm) || hasWholePhrase(reqNorm, candNorm)) return true;
-
-  const reqParts = splitArtistTokens(requestedArtist);
-  const candParts = splitArtistTokens(candidateArtist);
-
-  for (const rPart of reqParts) {
-    if (rPart.length < 2) continue;
-    for (const cPart of candParts) {
-      if (cPart.length < 2) continue;
-      if (rPart === cPart || hasWholePhrase(cPart, rPart) || hasWholePhrase(rPart, cPart)) {
-        return true;
-      }
-    }
-  }
-
-  return false;
-}
-
-function cleanTrackTitle(rawTitle, rawArtist = '') {
-  let title = cleanText(rawTitle, 180);
-  const artist = cleanText(rawArtist, 120);
-  if (!title) return '';
-
-  if (artist) {
-    const artistVariants = [artist, ...splitArtistTokens(artist)].filter(Boolean);
-    for (const variant of artistVariants) {
-      const prefixRe = new RegExp(`^${escapeRegExp(variant)}\\s*[-–—:|/]+\\s*`, 'i');
-      if (prefixRe.test(title)) {
-        title = title.replace(prefixRe, '').trim();
-        break;
-      }
-    }
-  }
-
-  title = title.replace(
-    /\s*[\[(](?:[^[\]()]{0,80}\b(?:official|video|audio|lyric(?:s)?|visualizer|prod\.?|remix|remaster(?:ed)?|live|acoustic|instrumental|explicit|clean|version|edit|radio|mix|x100pre|yhlqmdlg|el ultimo tour)\b[^[\]()]{0,80})[\])]\s*/gi,
-    ' '
+function isValidMbid(value) {
+  return (
+    typeof value === 'string' &&
+    MBID_REGEX.test(value)
   );
-
-  title = title.replace(
-    /\s+(?:official\s*(?:video|audio|lyric\s*video|visualizer)|video\s*oficial|audio\s*oficial|letra(?:\s*oficial)?|lyrics?)\s*$/i,
-    ''
-  );
-
-  title = title.replace(/\s+[|｜]\s+.*$/, '');
-  title = title.replace(/\s+[-–—]\s+[A-Z0-9]{4,}\s*$/, '');
-  title = title.replace(MULTISPACE_RE, ' ').trim();
-
-  return title || cleanText(rawTitle, 160);
 }
 
-function sanitiseLuceneTerm(value, maxLen = 75) {
-  const base = stripDiacritics(cleanText(value, maxLen))
-    .replace(LUCENE_SPECIAL_RE, ' ')
-    .replace(MULTISPACE_RE, ' ')
-    .trim();
-  return base.slice(0, maxLen).trim();
-}
-
-function isValidMbid(id) {
-  return typeof id === 'string' && UUID_RE.test(id.trim());
-}
-
-function isSafeHttpsUrl(urlStr) {
-  if (typeof urlStr !== 'string' || !urlStr.trim()) return false;
+function isSafeHttps(value) {
   try {
-    const parsed = new URL(urlStr.trim());
-    return parsed.protocol === 'https:';
+    return new URL(value).protocol === 'https:';
   } catch {
     return false;
   }
 }
 
-function resolveCoverSize(rawSize) {
-  const key = cleanText(rawSize, 20).toLowerCase();
-  return ALLOWED_COVER_SIZES.get(key) || 'front-500';
+/* =========================================================
+   NORMALIZACIÓN DE ARTISTAS
+   ========================================================= */
+
+function splitArtists(value) {
+  return [
+    ...new Set(
+      clean(value, 200)
+        .split(
+          /\s*(?:,|&|\+|\/|\bfeat\.?\b|\bft\.?\b|\bwith\b|\bx\b|\band\b|\by\b)\s*/i
+        )
+        .map(normalizeArtist)
+        .filter(Boolean)
+    )
+  ];
 }
 
-function buildCacheKey(cleanTitle, cleanArtist, coverSize) {
-  return `${normaliseComparable(cleanTitle)}::${normaliseArtistName(cleanArtist)}::${coverSize}`;
+function artistsMatch(expected, candidate) {
+  const a = normalizeArtist(expected);
+  const b = normalizeArtist(candidate);
+
+  if (!a || !b) {
+    return false;
+  }
+
+  if (a === b || a.includes(b) || b.includes(a)) {
+    return true;
+  }
+
+  const expectedArtists = splitArtists(expected);
+  const candidateArtists = splitArtists(candidate);
+
+  return expectedArtists.some(expectedArtist =>
+    candidateArtists.some(candidateArtist =>
+      expectedArtist === candidateArtist ||
+      expectedArtist.includes(candidateArtist) ||
+      candidateArtist.includes(expectedArtist)
+    )
+  );
 }
 
-function readMemoryCache(key) {
+/* =========================================================
+   NORMALIZACIÓN DE TÍTULOS Y ÁLBUMES
+   ========================================================= */
+
+function cleanTrackTitle(rawTitle, rawArtist = '', rawAlbum = '') {
+  const original = clean(rawTitle, 240);
+
+  let title = original;
+  let album = clean(rawAlbum, 180);
+
+  const artist = clean(rawArtist, 200);
+
+  /*
+   * Eliminar el nombre del artista cuando YouTube
+   * lo incluye al principio del título.
+   */
+
+  if (artist) {
+    const artistVariants = [
+      artist,
+      ...splitArtists(artist)
+    ];
+
+    for (const variant of artistVariants) {
+      if (!variant) continue;
+
+      const expression = new RegExp(
+        '^' + escapeRegExp(variant) + '\\s*[-–—:|/]+\\s*',
+        'i'
+      );
+
+      if (expression.test(title)) {
+        title = title.replace(expression, '').trim();
+        break;
+      }
+    }
+  }
+
+  /*
+   * Separar el nombre del álbum.
+   *
+   * Ejemplo:
+   * TURiSTA (Visualizer) I DeBÍ TiRAR MáS FOToS
+   *
+   * El separador " I " se procesa antes de eliminar
+   * los adornos del video.
+   */
+
+  const albumSeparator = title.match(
+    /\s+(?:\||｜|I)\s+(?=[A-ZÁÉÍÓÚÑ0-9])/
+  );
+
+  if (albumSeparator) {
+    if (!album) {
+      album = title
+        .slice(
+          albumSeparator.index +
+          albumSeparator[0].length
+        )
+        .trim();
+    }
+
+    title = title
+      .slice(0, albumSeparator.index)
+      .trim();
+  }
+
+  /*
+   * Eliminar etiquetas entre paréntesis o corchetes
+   * relacionadas con el video.
+   */
+
+  const videoDecorations = [
+    'official',
+    'video',
+    'audio',
+    'lyrics?',
+    'lyric video',
+    'visualizer',
+    'prod',
+    'remix',
+    'remastered',
+    'remaster',
+    'live',
+    'acoustic',
+    'instrumental',
+    'explicit',
+    'clean',
+    'version',
+    'edit',
+    'radio',
+    'mix',
+    'hd',
+    '4k'
+  ].join('|');
+
+  const decorationRegex = new RegExp(
+    '\\s*[\\[(][^\\])]*\\b(?:' +
+    videoDecorations +
+    ')\\b[^\\])]*[\\])]',
+    'gi'
+  );
+
+  title = title.replace(decorationRegex, ' ');
+
+  /*
+   * Eliminar adornos que aparezcan al final
+   * sin paréntesis.
+   */
+
+  title = title
+    .replace(
+      /\s+(?:official\s*(?:video|audio|lyric\s*video|visualizer)|video\s*oficial|audio\s*oficial|letra(?:\s*oficial)?|lyrics?|visualizer)\s*$/i,
+      ''
+    )
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  /*
+   * Limpiar álbum.
+   */
+
+  album = album
+    .replace(/\s*[\[(].*?[\])]\s*/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return {
+    title: title || original,
+    album,
+    originalTitle: original
+  };
+}
+
+/* =========================================================
+   BÚSQUEDAS MUSICBRAINZ
+   ========================================================= */
+
+function toLucene(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[+\-&|!(){}[\]^"~*?:\\/]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 100);
+}
+
+function getCacheKey(title, artist, album) {
+  return [
+    normalizeText(title),
+    normalizeArtist(artist),
+    normalizeText(album),
+    'front-500'
+  ].join('::');
+}
+
+/* =========================================================
+   CACHÉ EN MEMORIA
+   ========================================================= */
+
+function readCache(key) {
   const entry = memoryCache.get(key);
-  if (!entry) return null;
-  if (Date.now() > entry.expiresAt) {
+
+  if (!entry) {
+    return null;
+  }
+
+  if (Date.now() >= entry.expiresAt) {
     memoryCache.delete(key);
     return null;
   }
+
+  /*
+   * Mover al final para mantener las entradas
+   * recientemente utilizadas.
+   */
+
   memoryCache.delete(key);
   memoryCache.set(key, entry);
+
   return entry.data;
 }
 
-function writeMemoryCache(key, data, ttlMs) {
-  if (!key || !data || typeof data !== 'object') return;
-  if (memoryCache.has(key)) memoryCache.delete(key);
-
+function writeCache(key, data, ttl) {
   memoryCache.set(key, {
     data,
-    expiresAt: Date.now() + ttlMs
+    expiresAt: Date.now() + ttl
   });
 
-  while (memoryCache.size > MEMORY_CACHE_MAX) {
+  while (memoryCache.size > MAX_CACHE_ENTRIES) {
     const oldestKey = memoryCache.keys().next().value;
     memoryCache.delete(oldestKey);
   }
 }
 
-async function fetchWithTimeout(url, options = {}, timeoutMs = REQUEST_TIMEOUT_MS) {
+/* =========================================================
+   TIMEOUT Y PETICIONES HTTP
+   ========================================================= */
+
+function createTimeoutError() {
+  const error = new Error('La petición excedió el tiempo disponible.');
+
+  error.name = 'AbortError';
+  error.code = 'ETIMEDOUT';
+
+  return error;
+}
+
+async function fetchWithTimeout(
+  url,
+  options = {},
+  timeoutMs = REQUEST_TIMEOUT_MS,
+  deadline = Infinity,
+  readBody = true
+) {
   const controller = new AbortController();
-  const timerId = setTimeout(() => {
-    try {
-      controller.abort();
-    } catch {
-      /* Ignora error al abortar */
-    }
-  }, timeoutMs);
+
+  const parentSignal = options.signal;
+
+  const relayAbort = () => {
+    controller.abort(parentSignal.reason);
+  };
+
+  if (parentSignal?.aborted) {
+    relayAbort();
+  } else {
+    parentSignal?.addEventListener(
+      'abort',
+      relayAbort,
+      { once: true }
+    );
+  }
+
+  const remaining = Math.max(
+    1,
+    Math.min(timeoutMs, deadline - Date.now())
+  );
+
+  const timer = setTimeout(() => {
+    controller.abort(createTimeoutError());
+  }, remaining);
 
   try {
-    return await fetch(url, {
+    const response = await fetch(url, {
       ...options,
       signal: controller.signal
     });
+
+    let body = '';
+
+    if (readBody) {
+      /*
+       * El timeout permanece activo durante la lectura
+       * completa del cuerpo de la respuesta.
+       */
+
+      body = await response.text();
+    } else if (response.body) {
+      /*
+       * Para Cover Art Archive no necesitamos descargar
+       * la imagen. Basta con comprobar las cabeceras.
+       */
+
+      await response.body.cancel().catch(() => {});
+    }
+
+    return {
+      response,
+      body
+    };
+  } catch (error) {
+    if (
+      controller.signal.aborted &&
+      !parentSignal?.aborted
+    ) {
+      throw createTimeoutError();
+    }
+
+    throw error;
   } finally {
-    clearTimeout(timerId);
+    clearTimeout(timer);
+
+    parentSignal?.removeEventListener(
+      'abort',
+      relayAbort
+    );
   }
 }
 
-async function safeJsonParse(response) {
+/* =========================================================
+   RESPUESTAS JSON
+   ========================================================= */
+
+function parseJson(body, serviceName) {
   try {
-    const text = await response.text();
-    if (!text) return null;
-    return JSON.parse(text);
+    const data = JSON.parse(body);
+
+    if (!data || typeof data !== 'object') {
+      throw new Error('JSON inválido');
+    }
+
+    return data;
   } catch {
-    return null;
+    const error = new Error(
+      'Respuesta JSON inválida de ' + serviceName
+    );
+
+    error.statusCode = 502;
+
+    throw error;
   }
 }
 
-function extractArtistCreditName(releaseGroup, fallbackArtist = '') {
-  const credits = Array.isArray(releaseGroup?.['artist-credit'])
-    ? releaseGroup['artist-credit']
-    : [];
+/* =========================================================
+   ARTIST CREDIT DE MUSICBRAINZ
+   ========================================================= */
 
-  if (credits.length > 0) {
-    const joined = credits
-      .map(item => {
-        const name = item?.name || item?.artist?.name || '';
-        const phrase = typeof item?.joinphrase === 'string' ? item.joinphrase : '';
-        return `${name}${phrase}`;
-      })
-      .join('')
-      .replace(MULTISPACE_RE, ' ')
-      .trim();
-
-    if (joined) return joined;
+function getArtistCredit(credit, fallback = '') {
+  if (!Array.isArray(credit)) {
+    return fallback;
   }
 
-  return fallbackArtist;
+  const result = credit
+    .map(item => {
+      const name = clean(
+        item?.name || item?.artist?.name,
+        100
+      );
+
+      const joinphrase =
+        typeof item?.joinphrase === 'string'
+          ? item.joinphrase
+          : '';
+
+      return name + joinphrase;
+    })
+    .join('')
+    .trim();
+
+  return result || fallback;
 }
 
-function isVariousArtists(artistName) {
-  const norm = normaliseArtistName(artistName);
-  return norm === 'various artists' || norm === 'varios artistas';
-}
+/* =========================================================
+   PUNTUACIÓN DE COINCIDENCIAS
+   ========================================================= */
 
-function tokenOverlapScore(queryText, candidateText) {
-  const qTokens = normaliseComparable(queryText)
+function tokenOverlap(a, b) {
+  const left = normalizeText(a)
     .split(' ')
-    .filter(t => t.length >= 2);
-  const cTokens = new Set(
-    normaliseComparable(candidateText)
+    .filter(token => token.length > 1);
+
+  const right = new Set(
+    normalizeText(b)
       .split(' ')
-      .filter(t => t.length >= 2)
+      .filter(token => token.length > 1)
   );
 
-  if (!qTokens.length || !cTokens.size) return 0;
-
-  let matches = 0;
-  for (const token of qTokens) {
-    if (cTokens.has(token)) matches += 1;
+  if (!left.length) {
+    return 0;
   }
-  return matches / qTokens.length;
+
+  return (
+    left.filter(token => right.has(token)).length /
+    left.length
+  );
 }
 
-function scoreReleaseGroup(group, cleanedTitle, requestedArtist, strictArtistRequired = true) {
-  if (!group || typeof group !== 'object' || !isValidMbid(group.id)) {
-    return -999;
+function scoreRecording(recording, title, artist) {
+  const expected = normalizeText(title);
+  const candidate = normalizeText(recording?.title);
+
+  if (!expected || !candidate) {
+    return -1000;
   }
 
   let score = 0;
-  const groupTitle = cleanText(group.title, 180);
-  const groupArtist = extractArtistCreditName(group, '');
-  const primaryType = String(group['primary-type'] || '').toLowerCase();
-  const secondaryTypes = Array.isArray(group['secondary-types'])
-    ? group['secondary-types'].map(s => String(s || '').toLowerCase())
-    : [];
 
-  const mbScore = Number(group.score || 0);
-  score += Math.min(25, Math.max(0, mbScore / 4));
-
-  const hasArtistFilter = Boolean(normaliseArtistName(requestedArtist));
-  if (hasArtistFilter) {
-    if (isVariousArtists(groupArtist)) {
-      score -= strictArtistRequired ? 80 : 35;
-    } else if (artistsMatch(requestedArtist, groupArtist)) {
-      score += 45;
-      if (normaliseArtistName(requestedArtist) === normaliseArtistName(groupArtist)) {
-        score += 15;
-      }
-    } else {
-      score -= strictArtistRequired ? 65 : 15;
-    }
-  } else if (isVariousArtists(groupArtist)) {
-    score -= 20;
-  }
-
-  const qTitleNorm = normaliseComparable(cleanedTitle);
-  const gTitleNorm = normaliseComparable(groupTitle);
-  const overlap = tokenOverlapScore(cleanedTitle, groupTitle);
-
-  if (qTitleNorm && gTitleNorm) {
-    if (qTitleNorm === gTitleNorm) {
-      score += 30;
-    } else if (gTitleNorm.includes(qTitleNorm) || qTitleNorm.includes(gTitleNorm)) {
-      score += 18;
-    }
-    score += overlap * 20;
-  }
-
-  if (
-    hasArtistFilter &&
-    gTitleNorm &&
-    gTitleNorm === normaliseArtistName(requestedArtist) &&
-    qTitleNorm !== gTitleNorm
+  if (expected === candidate) {
+    score += 100;
+  } else if (
+    expected.includes(candidate) ||
+    candidate.includes(expected)
   ) {
-    score -= 20;
+    score += 55;
+  } else {
+    score += tokenOverlap(title, recording.title) * 35;
   }
 
-  if (primaryType === 'album') score += 10;
-  else if (primaryType === 'single' || primaryType === 'ep') score += 8;
+  const credit = getArtistCredit(
+    recording?.['artist-credit']
+  );
 
-  if (secondaryTypes.includes('compilation')) score -= 18;
-  if (secondaryTypes.includes('bootleg') || secondaryTypes.includes('pseudo-release')) score -= 30;
-  if (secondaryTypes.includes('live')) score -= 6;
-  if (secondaryTypes.includes('remix')) score -= 4;
+  if (artist) {
+    score += artistsMatch(artist, credit)
+      ? 65
+      : -80;
+  }
 
-  const dateStr = cleanText(group['first-release-date'], 20);
-  if (/^\d{4}/.test(dateStr)) {
-    score += 4;
+  const musicBrainzScore = Number(recording?.score);
+
+  if (Number.isFinite(musicBrainzScore)) {
+    score += Math.min(
+      15,
+      Math.max(0, musicBrainzScore / 7)
+    );
+  }
+
+  if (recording?.video === 'true') {
+    score -= 4;
   }
 
   return score;
 }
 
-async function queryMusicBrainzReleaseGroups(queryString, limit = 6) {
-  const url = new URL(MB_BASE_URL);
+function scoreReleaseGroup(
+  group,
+  title,
+  artist,
+  albumHint
+) {
+  if (!isValidMbid(group?.id)) {
+    return -1000;
+  }
+
+  const groupTitle = normalizeText(group.title);
+  const expectedAlbum = normalizeText(albumHint);
+
+  let score = 0;
+
+  /*
+   * Coincidencia del álbum extraído del título.
+   */
+
+  if (expectedAlbum) {
+    if (groupTitle === expectedAlbum) {
+      score += 110;
+    } else if (
+      groupTitle.includes(expectedAlbum) ||
+      expectedAlbum.includes(groupTitle)
+    ) {
+      score += 65;
+    } else {
+      score -= 20;
+    }
+  }
+
+  /*
+   * Coincidencia del artista.
+   */
+
+  const credit = getArtistCredit(
+    group?.['artist-credit']
+  );
+
+  if (artistsMatch(artist, credit)) {
+    score += 35;
+  } else if (artist && credit) {
+    score -= 45;
+  }
+
+  /*
+   * Tipo de lanzamiento.
+   */
+
+  const primaryType = String(
+    group?.['primary-type'] || ''
+  ).toLowerCase();
+
+  const secondaryTypes = Array.isArray(
+    group?.['secondary-types']
+  )
+    ? group['secondary-types'].map(value =>
+        String(value).toLowerCase()
+      )
+    : [];
+
+  if (primaryType === 'album') {
+    score += 18;
+  } else if (
+    primaryType === 'single' ||
+    primaryType === 'ep'
+  ) {
+    score += 8;
+  }
+
+  if (secondaryTypes.includes('compilation')) {
+    score -= 15;
+  }
+
+  if (secondaryTypes.includes('live')) {
+    score -= 10;
+  }
+
+  if (
+    secondaryTypes.includes('bootleg') ||
+    secondaryTypes.includes('pseudo-release')
+  ) {
+    score -= 35;
+  }
+
+  if (secondaryTypes.includes('remix')) {
+    score -= 8;
+  }
+
+  if (/^\d{4}/.test(
+    clean(group?.['first-release-date'], 20)
+  )) {
+    score += 3;
+  }
+
+  score += tokenOverlap(
+    title,
+    group.title
+  ) * (expectedAlbum ? 5 : 12);
+
+  return score;
+}
+
+/* =========================================================
+   CONSULTA DE RECORDINGS
+   ========================================================= */
+
+async function searchRecordings(
+  title,
+  artist,
+  deadline
+) {
+  const titleTerm = toLucene(title);
+  const artistTerm = toLucene(artist);
+
+  if (!titleTerm) {
+    return [];
+  }
+
+  let query;
+
+  if (artistTerm) {
+    query =
+      'recording:"' +
+      titleTerm +
+      '" AND artist:"' +
+      artistTerm +
+      '"';
+  } else {
+    query =
+      'recording:"' +
+      titleTerm +
+      '"';
+  }
+
+  const url = new URL(MUSICBRAINZ_URL);
+
   url.search = new URLSearchParams({
-    query: queryString,
+    query,
     fmt: 'json',
-    limit: String(limit)
+    limit: '8',
+    inc: 'releases'
   }).toString();
 
-  const response = await fetchWithTimeout(url.toString(), {
-    method: 'GET',
-    headers: {
-      'User-Agent': getUserAgent(),
-      Accept: 'application/json'
-    }
-  });
+  const result = await fetchWithTimeout(
+    url.toString(),
+    {
+      headers: {
+        'User-Agent': USER_AGENT,
+        Accept: 'application/json'
+      }
+    },
+    REQUEST_TIMEOUT_MS,
+    deadline
+  );
 
-  if (!response.ok) {
-    const err = new Error(`MusicBrainz HTTP ${response.status}`);
-    err.statusCode = response.status === 503 || response.status === 429 ? 503 : 502;
-    throw err;
+  if (!result.response.ok) {
+    const error = new Error(
+      'MusicBrainz HTTP ' + result.response.status
+    );
+
+    error.statusCode =
+      result.response.status === 429 ||
+      result.response.status === 503
+        ? 503
+        : 502;
+
+    throw error;
   }
 
-  const payload = await safeJsonParse(response);
-  if (!payload || typeof payload !== 'object') {
-    const err = new Error('Respuesta JSON inválida de MusicBrainz');
-    err.statusCode = 502;
-    throw err;
-  }
+  const data = parseJson(
+    result.body,
+    'MusicBrainz'
+  );
 
-  return Array.isArray(payload['release-groups']) ? payload['release-groups'] : [];
+  return Array.isArray(data.recordings)
+    ? data.recordings
+    : [];
 }
 
-function buildLuceneQuery(cleanedTitle, requestedArtist, mode = 'strict') {
-  const tTerm = sanitiseLuceneTerm(cleanedTitle, 75);
-  const aTerm = sanitiseLuceneTerm(requestedArtist, 65);
+/* =========================================================
+   OBTENER RELEASE GROUPS DESDE LOS RELEASES
+   ========================================================= */
 
-  if (mode === 'strict') {
-    const parts = [];
-    if (tTerm) parts.push(`release:${tTerm}`);
-    if (aTerm) parts.push(`artist:${aTerm}`);
-    return parts.join(' AND ');
-  }
-
-  if (mode === 'broad') {
-    const parts = [];
-    if (tTerm) parts.push(tTerm);
-    if (aTerm) parts.push(`artist:${aTerm}`);
-    return parts.join(' AND ');
-  }
-
-  return tTerm || aTerm;
-}
-
-async function findRankedReleaseGroups(cleanedTitle, requestedArtist) {
-  const queries = [
-    { q: buildLuceneQuery(cleanedTitle, requestedArtist, 'strict'), strictArtist: true },
-    { q: buildLuceneQuery(cleanedTitle, requestedArtist, 'broad'), strictArtist: true }
-  ].filter(item => Boolean(item.q));
-
-  let groups = [];
-  let usedStrictArtist = true;
-
-  for (const item of queries) {
-    groups = await queryMusicBrainzReleaseGroups(item.q, 6);
-    if (groups.length > 0) {
-      usedStrictArtist = item.strictArtist;
-      break;
-    }
-  }
-
-  if (groups.length === 0 && requestedArtist) {
-    const fallbackQ = buildLuceneQuery(cleanedTitle, '', 'title-only');
-    if (fallbackQ) {
-      groups = await queryMusicBrainzReleaseGroups(fallbackQ, 6);
-      usedStrictArtist = false;
-    }
-  }
-
-  const ranked = groups
-    .map(group => ({
-      group,
-      score: scoreReleaseGroup(group, cleanedTitle, requestedArtist, usedStrictArtist)
+function rankReleaseGroups(
+  recordings,
+  title,
+  artist,
+  albumHint
+) {
+  const rankedRecordings = recordings
+    .map(recording => ({
+      recording,
+      score: scoreRecording(
+        recording,
+        title,
+        artist
+      )
     }))
-    .filter(item => item.score > -50)
+    .filter(item => item.score >= 55)
     .sort((a, b) => b.score - a.score);
 
-  if (ranked.length === 0 && groups.length > 0) {
-    return groups
-      .filter(g => isValidMbid(g?.id))
-      .map(group => ({ group, score: 0 }));
+  const groups = new Map();
+
+  for (const item of rankedRecordings.slice(0, 5)) {
+    const releases = Array.isArray(
+      item.recording?.releases
+    )
+      ? item.recording.releases
+      : [];
+
+    for (const release of releases) {
+      const rawGroup = release?.['release-group'];
+
+      if (!isValidMbid(rawGroup?.id)) {
+        continue;
+      }
+
+      const group = {
+        ...rawGroup,
+
+        /*
+         * Algunos resultados no incluyen
+         * artist-credit dentro del release-group.
+         */
+
+        'artist-credit':
+          rawGroup['artist-credit'] ||
+          release['artist-credit']
+      };
+
+      const groupScore =
+        item.score +
+        scoreReleaseGroup(
+          group,
+          title,
+          artist,
+          albumHint
+        );
+
+      const previous = groups.get(group.id);
+
+      if (
+        !previous ||
+        groupScore > previous.score
+      ) {
+        groups.set(group.id, {
+          group,
+          score: groupScore,
+          releaseDate: clean(release.date, 20),
+          releaseTitle: clean(release.title, 180)
+        });
+      }
+    }
   }
 
-  return ranked;
+  return [...groups.values()]
+    .sort((a, b) => b.score - a.score);
 }
 
-async function resolveCoverArtUrl(mbid, coverSize = 'front-500') {
-  if (!isValidMbid(mbid)) return '';
+/* =========================================================
+   COVER ART ARCHIVE
+   ========================================================= */
 
-  const safeSize = resolveCoverSize(coverSize);
-  const endpoint = `${CAA_BASE_URL}/${encodeURIComponent(mbid)}/${encodeURIComponent(safeSize)}`;
+async function resolveCoverArt(mbid, deadline) {
+  if (!isValidMbid(mbid)) {
+    return '';
+  }
+
+  const endpoint =
+    COVER_ART_URL +
+    '/' +
+    encodeURIComponent(mbid) +
+    '/front-500';
+
+  /*
+   * Primera opción: HEAD.
+   */
 
   try {
-    const headResp = await fetchWithTimeout(
+    const head = await fetchWithTimeout(
       endpoint,
       {
         method: 'HEAD',
         redirect: 'follow',
         headers: {
-          'User-Agent': getUserAgent(),
+          'User-Agent': USER_AGENT,
           Accept: 'image/*'
         }
       },
-      2200
+      1500,
+      deadline,
+      false
     );
 
-    if (headResp.ok) {
-      const finalUrl = headResp.url && isSafeHttpsUrl(headResp.url) ? headResp.url : endpoint;
-      if (isSafeHttpsUrl(finalUrl)) return finalUrl;
+    const contentType =
+      head.response.headers.get('content-type') || '';
+
+    const finalUrl =
+      head.response.url || endpoint;
+
+    if (
+      head.response.ok &&
+      (!contentType || contentType.startsWith('image/')) &&
+      isSafeHttps(finalUrl)
+    ) {
+      return finalUrl;
     }
   } catch {
-    /* Sin portada disponible en CAA */
+    // Continuar con GET si HEAD falla.
+  }
+
+  /*
+   * Segunda opción: GET.
+   *
+   * Algunos servidores no aceptan HEAD.
+   * No necesitamos descargar la imagen completa.
+   */
+
+  try {
+    const get = await fetchWithTimeout(
+      endpoint,
+      {
+        method: 'GET',
+        redirect: 'follow',
+        headers: {
+          'User-Agent': USER_AGENT,
+          Accept: 'image/*',
+          Range: 'bytes=0-0'
+        }
+      },
+      1700,
+      deadline,
+      false
+    );
+
+    const contentType =
+      get.response.headers.get('content-type') || '';
+
+    const finalUrl =
+      get.response.url || endpoint;
+
+    if (
+      get.response.ok &&
+      contentType.startsWith('image/') &&
+      isSafeHttps(finalUrl)
+    ) {
+      return finalUrl;
+    }
+  } catch {
+    // Sin portada disponible.
   }
 
   return '';
 }
 
-async function pickBestArtworkFromCandidates(rankedCandidates, maxChecks = 3, coverSize = 'front-500') {
-  const slice = rankedCandidates.slice(0, maxChecks);
-  for (const candidate of slice) {
-    const mbid = candidate?.group?.id;
-    if (!isValidMbid(mbid)) continue;
-    const artwork = await resolveCoverArtUrl(mbid, coverSize);
-    if (artwork) {
-      return {
-        artwork,
-        selectedGroup: candidate.group,
-        score: candidate.score
-      };
+/* =========================================================
+   RESOLUCIÓN DE LA MEJOR PORTADA
+   ========================================================= */
+
+async function findBestCover(
+  title,
+  artist,
+  albumHint,
+  deadline
+) {
+  const recordings = await searchRecordings(
+    title,
+    artist,
+    deadline
+  );
+
+  const candidates = rankReleaseGroups(
+    recordings,
+    title,
+    artist,
+    albumHint
+  );
+
+  /*
+   * Consultar los candidatos mejor puntuados.
+   */
+
+  for (const candidate of candidates.slice(0, 3)) {
+    if (Date.now() >= deadline - 100) {
+      break;
     }
+
+    const artwork = await resolveCoverArt(
+      candidate.group.id,
+      deadline
+    );
+
+    if (!artwork) {
+      continue;
+    }
+
+    return {
+      artwork,
+
+      album: clean(
+        candidate.group.title ||
+        candidate.releaseTitle,
+        160
+      ),
+
+      date: clean(
+        candidate.group['first-release-date'] ||
+        candidate.releaseDate,
+        20
+      ),
+
+      musicbrainzId: candidate.group.id,
+
+      artist: getArtistCredit(
+        candidate.group['artist-credit'],
+        artist
+      )
+    };
   }
 
-  return {
-    artwork: '',
-    selectedGroup: rankedCandidates[0]?.group || null,
-    score: rankedCandidates[0]?.score ?? 0
-  };
+  return null;
 }
 
-function applySecurityAndCacheHeaders(res, status, hasArtwork, hasData) {
-  res.setHeader('Content-Type', 'application/json; charset=utf-8');
-  res.setHeader('X-Content-Type-Options', 'nosniff');
+/* =========================================================
+   CABECERAS HTTP
+   ========================================================= */
+
+function setCacheHeaders(res, status, hasArtwork) {
+  let cacheControl;
 
   if (status >= 400) {
-    res.setHeader('Cache-Control', 'no-store, max-age=0');
+    cacheControl = 'no-store';
+  } else if (hasArtwork) {
+    cacheControl =
+      'public, s-maxage=86400, stale-while-revalidate=3600';
+  } else {
+    cacheControl =
+      'public, s-maxage=300, stale-while-revalidate=300';
+  }
+
+  res.setHeader('Cache-Control', cacheControl);
+
+  res.setHeader(
+    'X-Content-Type-Options',
+    'nosniff'
+  );
+}
+
+function sendJson(res, status, payload) {
+  if (res.writableEnded || res.headersSent) {
     return;
   }
 
-  if (hasArtwork && hasData) {
-    res.setHeader('Cache-Control', 'public, s-maxage=86400, stale-while-revalidate=604800');
-  } else if (hasData) {
-    res.setHeader('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
-  } else {
-    res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=1800');
-  }
-}
-
-function sendJson(res, status, body) {
-  if (res.writableEnded || res.headersSent) return;
-  applySecurityAndCacheHeaders(
+  setCacheHeaders(
     res,
     status,
-    Boolean(body?.artwork),
-    Boolean(body?.musicbrainzId || body?.album)
+    Boolean(payload?.artwork)
   );
-  res.status(status).json(body);
+
+  return res.status(status).json(payload);
 }
 
-async function computeMetadataPayload(rawTitle, rawArtist, coverSize) {
-  const originalTitle = cleanText(rawTitle, 160);
-  const requestedArtist = cleanText(rawArtist, 120);
-  const cleanedTitle = cleanTrackTitle(originalTitle, requestedArtist) || originalTitle;
+/* =========================================================
+   RESOLVER PRINCIPAL
+   ========================================================= */
 
-  const ranked = await findRankedReleaseGroups(cleanedTitle, requestedArtist);
+async function resolveMetadata(
+  titleInput,
+  artistInput,
+  albumInput,
+  deadline
+) {
+  const identity = cleanTrackTitle(
+    titleInput,
+    artistInput,
+    albumInput
+  );
 
-  if (!ranked.length) {
+  if (!identity.title) {
+    const error = new Error(
+      'Falta el título de la canción.'
+    );
+
+    error.statusCode = 400;
+
+    throw error;
+  }
+
+  const result = await findBestCover(
+    identity.title,
+    artistInput,
+    identity.album,
+    deadline
+  );
+
+  /*
+   * Respuesta válida sin portada.
+   * Se puede almacenar durante 10 minutos.
+   */
+
+  if (!result) {
     return {
       payload: {
-        title: cleanedTitle,
-        artist: requestedArtist,
-        album: '',
+        title: identity.title,
+        artist: clean(artistInput, 180),
+        album: identity.album,
         date: '',
         artwork: '',
         musicbrainzId: '',
         source: 'none'
       },
-      ttlMs: MISS_TTL_MS
+
+      ttl: NEGATIVE_CACHE_TTL
     };
   }
 
-  const { artwork, selectedGroup, score } = await pickBestArtworkFromCandidates(
-    ranked,
-    3,
-    coverSize
-  );
+  return {
+    payload: {
+      title: identity.title,
+      artist: result.artist || clean(artistInput, 180),
+      album: result.album || identity.album,
+      date: result.date,
 
-  const chosenGroup = selectedGroup || ranked[0].group;
-  const resolvedArtist =
-    extractArtistCreditName(chosenGroup, requestedArtist) || requestedArtist;
-  const albumTitle = cleanText(chosenGroup?.title, 160);
-  const releaseDate = cleanText(chosenGroup?.['first-release-date'], 20);
-  const mbid = isValidMbid(chosenGroup?.id) ? chosenGroup.id.trim() : '';
+      artwork: isSafeHttps(result.artwork)
+        ? result.artwork
+        : '',
 
-  const payload = {
-    title: cleanedTitle,
-    artist: resolvedArtist,
-    album: albumTitle,
-    date: releaseDate,
-    artwork: isSafeHttpsUrl(artwork) ? artwork : '',
-    musicbrainzId: mbid,
-    source: artwork ? 'musicbrainz-cover-art-archive' : 'musicbrainz'
+      musicbrainzId: result.musicbrainzId,
+
+      source: 'musicbrainz-cover-art-archive'
+    },
+
+    ttl: POSITIVE_CACHE_TTL
   };
-
-  const ttlMs = artwork && score >= 15 ? HIT_TTL_MS : MISS_TTL_MS;
-  return { payload, ttlMs };
 }
 
-module.exports = async function handler(req, res) {
-  try {
-    const method = String(req?.method || 'GET').toUpperCase();
+/* =========================================================
+   VERCEL SERVERLESS HANDLER
+   ========================================================= */
 
+module.exports = async function handler(req, res) {
+  /*
+   * Declarar fuera de try para que también
+   * esté disponible dentro de catch.
+   */
+
+  const method = String(
+    req?.method || 'GET'
+  ).toUpperCase();
+
+  try {
     if (method === 'OPTIONS') {
-      res.setHeader('Allow', 'GET, HEAD, OPTIONS');
-      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader(
+        'Allow',
+        'GET, HEAD, OPTIONS'
+      );
+
+      res.setHeader(
+        'Cache-Control',
+        'no-store'
+      );
+
       return res.status(204).end();
     }
 
     if (method !== 'GET' && method !== 'HEAD') {
-      res.setHeader('Allow', 'GET, HEAD, OPTIONS');
-      return sendJson(res, 405, { error: 'Método no permitido.' });
+      res.setHeader(
+        'Allow',
+        'GET, HEAD, OPTIONS'
+      );
+
+      return sendJson(res, 405, {
+        error: 'Método no permitido.'
+      });
     }
 
-    const query = req?.query && typeof req.query === 'object' ? req.query : {};
-    const rawTitle = cleanText(query.title, 180);
-    const rawArtist = cleanText(query.artist, 120);
-    const coverSize = resolveCoverSize(query.size);
+    const query = req?.query || {};
 
-    if (!rawTitle) {
-      return sendJson(res, 400, { error: 'Falta el título.' });
-    }
+    let title = clean(query.title, 240);
+    let artist = clean(query.artist, 200);
+    let album = clean(query.album, 180);
 
-    const cleanedTitle = cleanTrackTitle(rawTitle, rawArtist) || rawTitle;
-    const cacheKey = buildCacheKey(cleanedTitle, rawArtist, coverSize);
+    /*
+     * Compatibilidad con solicitudes donde
+     * req.query no esté disponible.
+     */
 
-    const cached = readMemoryCache(cacheKey);
-    if (cached) {
-      if (method === 'HEAD') {
-        applySecurityAndCacheHeaders(
-          res,
-          200,
-          Boolean(cached.artwork),
-          Boolean(cached.musicbrainzId || cached.album)
+    if (req?.url) {
+      try {
+        const parsed = new URL(
+          req.url,
+          'https://shunel.vercel.app'
         );
-        return res.status(200).end();
+
+        title ||= clean(
+          parsed.searchParams.get('title'),
+          240
+        );
+
+        artist ||= clean(
+          parsed.searchParams.get('artist'),
+          200
+        );
+
+        album ||= clean(
+          parsed.searchParams.get('album'),
+          180
+        );
+      } catch {
+        // Se conserva lo recibido en req.query.
       }
-      return sendJson(res, 200, cached);
     }
 
-    let pending = inflightRequests.get(cacheKey);
-    if (!pending) {
-      pending = computeMetadataPayload(rawTitle, rawArtist, coverSize)
-        .then(({ payload, ttlMs }) => {
-          writeMemoryCache(cacheKey, payload, ttlMs);
-          return payload;
-        })
-        .finally(() => {
-          inflightRequests.delete(cacheKey);
-        });
-      inflightRequests.set(cacheKey, pending);
+    if (!title) {
+      return sendJson(res, 400, {
+        error: 'Falta el título de la canción.'
+      });
     }
 
-    const resultPayload = await pending;
+    const identity = cleanTrackTitle(
+      title,
+      artist,
+      album
+    );
 
-    if (method === 'HEAD') {
-      applySecurityAndCacheHeaders(
+    const key = getCacheKey(
+      identity.title,
+      artist,
+      identity.album
+    );
+
+    /*
+     * Consultar caché.
+     */
+
+    const cached = readCache(key);
+
+    if (cached) {
+      setCacheHeaders(
         res,
         200,
-        Boolean(resultPayload.artwork),
-        Boolean(resultPayload.musicbrainzId || resultPayload.album)
+        Boolean(cached.artwork)
       );
+
+      if (method === 'HEAD') {
+        return res.status(200).end();
+      }
+
+      return res.status(200).json(cached);
+    }
+
+    /*
+     * Deduplicar solicitudes simultáneas.
+     */
+
+    let task = pendingRequests.get(key);
+
+    if (!task) {
+      const deadline =
+        Date.now() + TOTAL_BUDGET_MS;
+
+      task = resolveMetadata(
+        title,
+        artist,
+        album,
+        deadline
+      )
+        .then(result => {
+          writeCache(
+            key,
+            result.payload,
+            result.ttl
+          );
+
+          return result.payload;
+        })
+        .finally(() => {
+          pendingRequests.delete(key);
+        });
+
+      pendingRequests.set(key, task);
+    }
+
+    const payload = await task;
+
+    setCacheHeaders(
+      res,
+      200,
+      Boolean(payload.artwork)
+    );
+
+    if (method === 'HEAD') {
       return res.status(200).end();
     }
 
-    return sendJson(res, 200, resultPayload);
+    return res.status(200).json(payload);
+
   } catch (error) {
-    const statusCode =
-      typeof error?.statusCode === 'number' && error.statusCode >= 400 && error.statusCode < 600
-        ? error.statusCode
+    /*
+     * Clasificar errores sin exponer detalles
+     * internos del servidor.
+     */
+
+    const status = Number(error?.statusCode) ||
+      (
+        error?.name === 'AbortError' ||
+        error?.code === 'ETIMEDOUT'
+          ? 504
+          : 502
+      );
+
+    const safeStatus =
+      status >= 400 && status <= 599
+        ? status
         : 500;
 
-    if (method !== 'HEAD') {
-      const message =
-        statusCode === 503
-          ? 'MusicBrainz está saturado o en mantenimiento temporalmente.'
-          : statusCode === 502
-            ? 'MusicBrainz no respondió correctamente.'
-            : 'No se pudieron consultar los metadatos.';
+    let message =
+      'No se pudieron obtener los metadatos musicales.';
 
-      return sendJson(res, statusCode, { error: message });
+    if (safeStatus === 400) {
+      message = clean(error?.message, 180);
+    } else if (safeStatus === 503) {
+      message =
+        'MusicBrainz está temporalmente ocupado. Inténtalo de nuevo.';
+    } else if (safeStatus === 504) {
+      message =
+        'La búsqueda de portadas excedió el tiempo disponible.';
     }
 
-    if (res && !res.writableEnded && !res.headersSent) {
-      applySecurityAndCacheHeaders(res, statusCode, false, false);
-      return res.status(statusCode).end();
+    if (method === 'HEAD') {
+      setCacheHeaders(
+        res,
+        safeStatus,
+        false
+      );
+
+      return res.status(safeStatus).end();
     }
+
+    return sendJson(res, safeStatus, {
+      error: message,
+      source: 'error'
+    });
   }
 };
