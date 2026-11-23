@@ -1,7 +1,8 @@
 /* ==========================================================================
-   SHUNEL — Artwork Manager (v4.0)
-   Portadas por canción, validación de coincidencias, --song-color con <canvas>,
-   estados de carga/reproducción, gestos táctiles, a11y y gestión limpia de ciclo de vida.
+   SHUNEL — Artwork Manager (v4.1)
+   Portadas por canción, validación de coincidencias, respaldo de carátula de álbum,
+   --song-color con <canvas>, estados de carga/reproducción, gestos táctiles, a11y
+   y gestión limpia de ciclo de vida.
    ========================================================================== */
 
 import { getTrackMetadata } from './metadata.js';
@@ -12,11 +13,13 @@ import {
 
 const FALLBACK = '/assets/logo.png';
 const DEEZER_PROXY = 'https://proxy.cors.dev/https://api.deezer.com';
+const ITUNES_SEARCH_URL = 'https://itunes.apple.com/search';
 const CACHE_KEY = 'shunel_artist_artwork_v3';
 const CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 10; // 10 días
 const MAX_CACHE_ENTRIES = 90;
 const MAX_COLOR_CACHE_ENTRIES = 120;
 const FETCH_TIMEOUT_MS = 7000;
+const COLOR_SYNC_TIMEOUT_MS = 450;
 const DEFAULT_SONG_COLOR = '#242424';
 const DEFAULT_SECONDARY_COLOR = '#141414';
 
@@ -37,6 +40,7 @@ let rafScheduled = false;
 let pendingVisualSync = null;
 
 const artistRequests = new Map();
+const albumRequests = new Map();
 const colorCache = new Map();
 const preloadedUrls = new Set();
 const cleanupCallbacks = [];
@@ -133,7 +137,7 @@ function splitCollaborators(artistName) {
   const raw = String(artistName || '').trim();
   if (!raw) return [];
   const parts = raw
-    .split(/\s*(?:,|&|\+|\/|\bfeat\.?\b|\bft\.?\b|\bwith\b|\bx\b|\band\b)\s*/i)
+    .split(/\s*(?:,|&|\+|\/|\bfeat\.?\b|\bft\.?\b|\bwith\b|\bx\b|\band\b|\by\b)\s*/i)
     .map(normaliseArtist)
     .filter(Boolean);
   return [...new Set(parts)];
@@ -159,22 +163,39 @@ function cleanQueryTitle(title, artist = '') {
   let cleaned = String(title || '').trim();
   if (!cleaned) return '';
 
-  // Elimina separadores típicos como "Artista - Canción" si el artista coincide al inicio
   const artistClean = String(artist || '').trim();
   if (artistClean) {
     const escapedArtist = artistClean.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    cleaned = cleaned.replace(new RegExp(`^${escapedArtist}\\s*[-–—:|]+\\s*`, 'i'), '');
+    cleaned = cleaned.replace(new RegExp(`^${escapedArtist}\\s*[-–—:|/]+\\s*`, 'i'), '');
   }
 
-  // Elimina sufijos de video/audio/letras y etiquetas entre paréntesis o corchetes
   cleaned = cleaned
-    .replace(/\s*[\[(](?:official\s*(?:video|audio|lyric\s*video|visualizer)|lyrics?|audio|hd|4k|remaster(?:ed)?|explicit|clean|prod\.?.*?)[\])]\s*/gi, ' ')
-    .replace(/\s+(?:official\s*(?:video|audio|lyrics?)|lyrics?|video\s*oficial|audio\s*oficial)\s*$/i, '')
-    .replace(/\s*\|\s*.*$/, '')
+    .replace(/\s*[\[(](?:[^[\]()]{0,80}\b(?:official|video|audio|lyric\s*video|visualizer|lyrics?|hd|4k|remaster(?:ed)?|explicit|clean|prod\.?)\b[^[\]()]{0,80})[\])]\s*/gi, ' ')
+    .replace(/\s+(?:official\s*(?:video|audio|lyrics?)|lyrics?|video\s*oficial|audio\s*oficial|visualizer)\s*$/i, '')
+    .replace(/\s+[|｜]\s+.*$/, '')
     .replace(/\s{2,}/g, ' ')
     .trim();
 
   return cleaned || String(title || '').trim();
+}
+
+function titleMatchesCandidate(expectedTitle, candidateTitle) {
+  const expNorm = normaliseText(expectedTitle);
+  const candNorm = normaliseText(candidateTitle);
+  if (!expNorm || !candNorm) return false;
+  if (expNorm === candNorm) return true;
+  if (expNorm.length >= 3 && candNorm.includes(expNorm)) return true;
+  if (candNorm.length >= 3 && expNorm.includes(candNorm)) return true;
+
+  const expTokens = expNorm.split(' ').filter(t => t.length >= 2);
+  const candSet = new Set(candNorm.split(' ').filter(t => t.length >= 2));
+  if (!expTokens.length || !candSet.size) return false;
+
+  let hits = 0;
+  for (const token of expTokens) {
+    if (candSet.has(token)) hits += 1;
+  }
+  return hits / expTokens.length >= 0.6;
 }
 
 function normaliseUrl(value) {
@@ -365,7 +386,6 @@ function setImage(image, url, alt, options = {}) {
     return;
   }
 
-  const targetAbs = resolveAbsoluteUrl(safeUrl);
   const currentAttr = normaliseUrl(image.getAttribute('src'));
 
   if (currentAttr === safeUrl && image.complete && image.naturalWidth > 0) {
@@ -411,7 +431,6 @@ function setImage(image, url, alt, options = {}) {
   if (currentAttr !== safeUrl) {
     image.src = safeUrl;
   } else {
-    // Fuerza reevaluación si tenía mismo src pero no completó
     image.src = '';
     image.src = safeUrl;
   }
@@ -453,7 +472,6 @@ function rgbToHex(r, g, b) {
 }
 
 function tuneColorForDarkBackdrop(r, g, b) {
-  // Calcula luminancia relativa aproximada (0..1)
   const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
   const maxC = Math.max(r, g, b);
   const minC = Math.min(r, g, b);
@@ -463,12 +481,10 @@ function tuneColorForDarkBackdrop(r, g, b) {
   let ng = g;
   let nb = b;
 
-  // Si es demasiado oscuro y casi sin saturación, usar tono neutro/respaldo
   if (luminance < 0.055 && saturation < 0.18) {
     return DEFAULT_SONG_COLOR;
   }
 
-  // Si es muy oscuro pero tiene color, levantar suavemente para que el tinte se note
   if (luminance < 0.09) {
     const lift = 1.45;
     nr = Math.min(255, nr * lift + 10);
@@ -476,7 +492,6 @@ function tuneColorForDarkBackdrop(r, g, b) {
     nb = Math.min(255, nb * lift + 10);
   }
 
-  // Si es demasiado brillante o saturado, moderar para no restar contraste al texto blanco
   const tunedLum = (0.2126 * nr + 0.7152 * ng + 0.0722 * nb) / 255;
   if (tunedLum > 0.58) {
     const scale = 0.58 / tunedLum;
@@ -541,7 +556,6 @@ async function extractDominantSongColor(imageUrl, cacheKeyHint = '', signal = nu
     const onAbort = () => finish(activeSongColor || DEFAULT_SONG_COLOR);
     signal?.addEventListener('abort', onAbort, { once: true });
 
-    // Solo pedir CORS en URLs externas HTTPS
     if (/^https:\/\//i.test(safeUrl)) {
       probe.crossOrigin = 'anonymous';
     }
@@ -552,7 +566,6 @@ async function extractDominantSongColor(imageUrl, cacheKeyHint = '', signal = nu
         const h = colorCanvas.height;
         colorCtx.clearRect(0, 0, w, h);
 
-        // Si es imagen panorámica (ej. miniatura 16:9 de YouTube), recorta franjas superior/inferior
         const natW = probe.naturalWidth || w;
         const natH = probe.naturalHeight || h;
         let sx = 0;
@@ -582,13 +595,11 @@ async function extractDominantSongColor(imageUrl, cacheKeyHint = '', signal = nu
           const minC = Math.min(r, g, b);
           const lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
 
-          // Ignora negros puros y blancos casi quemados para obtener el tono real del arte
           if (lum < 0.04 || lum > 0.94) continue;
 
           const sat = maxC === 0 ? 0 : (maxC - minC) / maxC;
           const weight = 1 + sat * 2.2;
 
-          // Cuantización en cubos de 24 niveles
           const qr = Math.floor(r / 24) * 24;
           const qg = Math.floor(g / 24) * 24;
           const qb = Math.floor(b / 24) * 24;
@@ -639,6 +650,26 @@ async function extractDominantSongColor(imageUrl, cacheKeyHint = '', signal = nu
   });
 }
 
+function resolveSongColorWithBudget(imageUrl, cacheKeyHint, signal, budgetMs = COLOR_SYNC_TIMEOUT_MS) {
+  const safeUrl = normaliseUrl(imageUrl);
+  if (!validImageUrl(safeUrl) || safeUrl === FALLBACK) {
+    return Promise.resolve(DEFAULT_SONG_COLOR);
+  }
+
+  const cacheKey = cacheKeyHint || safeUrl;
+  if (colorCache.has(cacheKey)) {
+    return Promise.resolve(colorCache.get(cacheKey));
+  }
+
+  const extraction = extractDominantSongColor(safeUrl, cacheKey, signal);
+  return Promise.race([
+    extraction,
+    new Promise(resolve => {
+      window.setTimeout(() => resolve(activeSongColor || DEFAULT_SONG_COLOR), budgetMs);
+    })
+  ]);
+}
+
 /* --------------------------------------------------------------------------
    04. CACHÉ PERSISTENTE CON TTL Y LÍMITE DE TAMAÑO
    -------------------------------------------------------------------------- */
@@ -656,7 +687,6 @@ function readArtworkCache() {
 
     for (const [k, entry] of Object.entries(raw)) {
       if (typeof entry === 'string') {
-        // Entradas legacy sin timestamp se migran o limpian
         mutated = true;
         continue;
       }
@@ -725,8 +755,88 @@ function setCachedArtistArtwork(normalizedArtistKey, url) {
 }
 
 /* --------------------------------------------------------------------------
-   05. BÚSQUEDA DE PORTADA DE ARTISTA CON VALIDACIÓN DE COINCIDENCIA
+   05. BÚSQUEDA DE CARÁTULA DE ÁLBUM Y ARTISTA CON VALIDACIÓN
    -------------------------------------------------------------------------- */
+
+async function fetchAlbumArtwork(track, signal) {
+  const rawTitle = getTrackTitle(track);
+  const rawArtist = getTrackArtist(track);
+  const cleanedTitle = cleanQueryTitle(rawTitle, rawArtist);
+  const queryText = [cleanedTitle, rawArtist].filter(Boolean).join(' ').trim();
+
+  if (!cleanedTitle || !rawArtist || !queryText) return '';
+
+  const cacheKey = `album::${normaliseText(cleanedTitle)}::${normaliseArtist(rawArtist)}`;
+  const cached = getCachedArtistArtwork(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  if (albumRequests.has(cacheKey)) {
+    return albumRequests.get(cacheKey);
+  }
+
+  const request = (async () => {
+    const timeoutController = new AbortController();
+    const onExternalAbort = () => timeoutController.abort();
+    signal?.addEventListener('abort', onExternalAbort, { once: true });
+
+    const timerId = window.setTimeout(() => {
+      timeoutController.abort();
+    }, Math.min(FETCH_TIMEOUT_MS, 4500));
+
+    try {
+      const url = new URL(ITUNES_SEARCH_URL);
+      url.search = new URLSearchParams({
+        term: queryText,
+        entity: 'song',
+        limit: '6'
+      }).toString();
+
+      const response = await fetch(url.toString(), {
+        method: 'GET',
+        credentials: 'omit',
+        signal: timeoutController.signal,
+        headers: {
+          Accept: 'application/json'
+        }
+      });
+
+      if (!response.ok) return '';
+
+      const data = await response.json();
+      const results = Array.isArray(data?.results) ? data.results : [];
+
+      const matched = results.find(
+        item =>
+          artistMatchesCandidate(rawArtist, item?.artistName) &&
+          titleMatchesCandidate(cleanedTitle, item?.trackName)
+      );
+
+      const rawArt = normaliseUrl(
+        matched?.artworkUrl100 || matched?.artworkUrl60 || ''
+      );
+      const hiResArt = rawArt
+        ? rawArt.replace(/\/\d+x\d+bb\.(jpg|png|webp)$/i, '/600x600bb.$1')
+        : '';
+
+      if (!validImageUrl(hiResArt)) return '';
+
+      setCachedArtistArtwork(cacheKey, hiResArt);
+      return hiResArt;
+    } catch {
+      return '';
+    } finally {
+      window.clearTimeout(timerId);
+      signal?.removeEventListener('abort', onExternalAbort);
+    }
+  })().finally(() => {
+    albumRequests.delete(cacheKey);
+  });
+
+  albumRequests.set(cacheKey, request);
+  return request;
+}
 
 async function fetchArtistArtwork(name, signal) {
   const expectedName = String(name || '').trim();
@@ -774,7 +884,6 @@ async function fetchArtistArtwork(name, signal) {
         throw new Error('Respuesta inválida al buscar el artista.');
       }
 
-      // Prioriza coincidencia exacta normalizada; si no hay, valida coincidencia flexible de artista
       const exactMatch = data.data.find(
         item => normaliseArtist(item?.name) === key
       );
@@ -849,28 +958,27 @@ export function applyArtwork(track, url = '', options = {}) {
     isPlaying: isPlayingState
   });
 
-  // Calcula --song-color en segundo plano sin bloquear el flujo principal
+  const colorKey = trackKey(safeTrack) || candidate;
   const colorSignal = options.signal || requestController?.signal || null;
-  void extractDominantSongColor(candidate, trackKey(safeTrack) || candidate, colorSignal).then(
-    color => {
-      if (activeArtwork !== candidate) return;
-      activeSongColor = color;
-      scheduleVisualSync({
-        songColor: color,
-        secondaryColor: DEFAULT_SECONDARY_COLOR
-      });
-    }
-  );
 
-  document.dispatchEvent(
-    new CustomEvent('shunel:artwork-updated', {
-      detail: {
-        track: safeTrack,
-        artwork: candidate,
-        songColor: activeSongColor
-      }
-    })
-  );
+  void resolveSongColorWithBudget(candidate, colorKey, colorSignal).then(color => {
+    if (activeArtwork !== candidate) return;
+    activeSongColor = color;
+    scheduleVisualSync({
+      songColor: color,
+      secondaryColor: DEFAULT_SECONDARY_COLOR
+    });
+
+    document.dispatchEvent(
+      new CustomEvent('shunel:artwork-updated', {
+        detail: {
+          track: safeTrack,
+          artwork: candidate,
+          songColor: activeSongColor
+        }
+      })
+    );
+  });
 
   return candidate;
 }
@@ -887,7 +995,13 @@ export async function loadArtwork(track, options = {}) {
   const key = trackKey(track);
   const currentReqId = ++requestCounter;
 
-  if (key && key === activeTrackKey && !options.force && activeArtwork !== FALLBACK) {
+  if (
+    key &&
+    key === activeTrackKey &&
+    !options.force &&
+    !isLoadingState &&
+    activeArtwork !== FALLBACK
+  ) {
     return activeArtwork;
   }
 
@@ -941,20 +1055,20 @@ export async function loadArtwork(track, options = {}) {
     Boolean(signal?.aborted);
 
   try {
-    // 1. Si hay override explícito del mod de canción, aplicarlo de inmediato
+    // 1. Override explícito por mod de canción
     if (validImageUrl(trackOverride)) {
       if (isStale()) return activeArtwork;
       isLoadingState = false;
       return applyArtwork(moddedTrack, trackOverride, { signal });
     }
 
-    // 2. Si el track ya trae portada propia, pintarla de inmediato sin esperar red
+    // 2. Pintado inicial inmediato si el track ya trae carátula o miniatura
     if (validImageUrl(originalArtwork)) {
       if (isStale()) return activeArtwork;
       applyArtwork(track, originalArtwork, { signal });
     }
 
-    // 3. Consultar metadata específica del track
+    // 3. Metadata específica del track (/api/metadata)
     try {
       const metadata = await getTrackMetadata(track, {
         signal,
@@ -982,19 +1096,35 @@ export async function loadArtwork(track, options = {}) {
       logDebug('getTrackMetadata sin portada propia:', error?.message);
     }
 
-    // 4. Si ya había portada válida propia del track, mantenerla sin pisarla con foto de artista
-    if (validImageUrl(originalArtwork)) {
-      isLoadingState = false;
-      return applyArtwork(track, originalArtwork, { signal });
+    // 4. Respaldo de carátula de álbum validada si metadata no devolvió portada
+    try {
+      const albumArtwork = await fetchAlbumArtwork(track, signal);
+      if (isStale()) return activeArtwork;
+
+      if (validImageUrl(albumArtwork)) {
+        isLoadingState = false;
+        return applyArtwork(track, albumArtwork, { signal });
+      }
+    } catch (error) {
+      if (error?.name === 'AbortError' || isStale()) {
+        return activeArtwork;
+      }
     }
 
-    // 5. Solo cuando el track NO tiene portada propia ni de metadata: usar portada de artista/pack
+    // 5. Portada explícita del pack de artista si existe
     if (validImageUrl(artistEntry?.artwork)) {
       if (isStale()) return activeArtwork;
       isLoadingState = false;
       return applyArtwork(track, normaliseUrl(artistEntry.artwork), { signal });
     }
 
+    // 6. Mantener miniatura original del track si existía
+    if (validImageUrl(originalArtwork)) {
+      isLoadingState = false;
+      return applyArtwork(track, originalArtwork, { signal });
+    }
+
+    // 7. Último recurso antes de FALLBACK: foto de artista validada
     const artistQueryName = normaliseUrl(artistEntry?.name) || getTrackArtist(track);
     if (artistQueryName) {
       try {
@@ -1203,6 +1333,7 @@ export function destroyArtwork() {
   requestController?.abort();
   requestController = null;
   artistRequests.clear();
+  albumRequests.clear();
   if (rafScheduled) {
     cancelAnimationFrame(rafScheduled);
     rafScheduled = false;
@@ -1315,7 +1446,7 @@ export function initArtwork() {
     if (reducedMotionMq && onMotionChange) {
       if (typeof reducedMotionMq.removeEventListener === 'function') {
         reducedMotionMq.removeEventListener('change', onMotionChange);
-      } else if (typeof reducedMotionMq.removeListener === 'function') {
+      } else if (typeof reducedMotionMq.addListener === 'function') {
         reducedMotionMq.removeListener(onMotionChange);
       }
     }
