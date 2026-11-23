@@ -190,17 +190,34 @@
   backdrop-filter: blur(var(--pg-blur)) saturate(var(--pg-saturate));
 }
 
-/* 4.2 Botones de vidrio: sin pseudo-elementos (más livianos),
-   el borde y el brillo van en box-shadow */
+/* 4.2 Botones de vidrio con bisel especular más nítido */
 .full-player-header .icon-button,
 .full-player-info .icon-button,
 .full-player-options button,
 .queue-header .icon-button {
-  background: var(--pg-button-glass), rgba(255, 255, 255, .03);
+  background: var(--pg-button-glass), rgba(255, 255, 255, .04);
   border: 0;
-  box-shadow: var(--pg-button-shadow);
-  -webkit-backdrop-filter: blur(16px) saturate(170%);
-  backdrop-filter: blur(16px) saturate(170%);
+  box-shadow:
+    inset 0 1.5px 1px rgba(255, 255, 255, .28),
+    inset 0 -1px 1px rgba(255, 255, 255, .06),
+    inset 0 0 0 1px rgba(255, 255, 255, .08),
+    0 8px 20px rgba(0, 0, 0, .32);
+  -webkit-backdrop-filter: blur(18px) saturate(185%);
+  backdrop-filter: blur(18px) saturate(185%);
+}
+
+/* 33. Escritorio: mantener centrado limpio al presionar */
+@media (min-width: 700px) {
+  .player-dock {
+    left: 50%;
+    right: auto;
+    width: min(620px, calc(100vw - 40px));
+    transform: translateX(-50%);
+  }
+
+  .player-dock:active {
+    transform: translateX(-50%) scale(.985);
+  }
 }
 
 /* 4.3 Borde especular con máscara (solo superficies grandes) */

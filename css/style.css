@@ -2035,12 +2035,37 @@
   }
 }
 
-/* =========================================================
-   21. LIQUID GLASS
-   Capas: tinte + blur/saturación (cuerpo), borde especular
-   (::before con máscara) y brillo superior (inset shadow).
-   Solo en navegación y controles flotantes.
-========================================================= */
+  /* Bisel especular más marcado en cápsula, mini player y botones de vidrio */
+  .bottom-nav,
+  .mini-player,
+  .glass-regular,
+  .glass-clear,
+  .profile-button,
+  .glass-button {
+    box-shadow:
+      var(--glass-shadow),
+      inset 0 1.5px 1px rgba(255, 255, 255, .24),
+      inset 0 -1px 1px rgba(255, 255, 255, .05);
+  }
+
+  /* Pestaña activa con aspecto de lente translúcida */
+  .bottom-nav-item.active {
+    background: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, .15) 0%,
+      rgba(255, 255, 255, .06) 100%
+    );
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, .24),
+      inset 0 0 0 1px rgba(255, 255, 255, .08),
+      0 4px 12px rgba(0, 0, 0, .22);
+  }
+
+  /* Progreso del mini player alineado con --accent */
+  .mini-player-progress-fill {
+    background: var(--accent, #ffffff);
+  }
+
 
 @layer glass {
   .topbar,

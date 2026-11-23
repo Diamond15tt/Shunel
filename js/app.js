@@ -25,7 +25,7 @@ import {
 import { startRadio, getRadioState, stopRadio, playRadioTrack } from "./radio.js";
 import { getRecommendations, resolveRecommendation } from "./recommendations.js";
 import { discoverTracks, discoverByMood } from "./discovery.js";
-import { askShunelAI } from "./ai.js";
+import { askShunelAIFull } from "./ai.js";
 
 // // El cerebro: gusto, ranking, shuffle y texto (sin DOM)
 import {
@@ -1484,12 +1484,66 @@ function buildAIContext() {
   };
 }
 
+function renderAISuggestions(suggestions) {
+  const root = document.getElementById("shunelAIMessages");
+  if (!root || !Array.isArray(suggestions) || !suggestions.length) return;
+  const box = makeElement("div", "shunel-feature-actions shunel-ai-suggestions");
+  suggestions.slice(0, 3).forEach(text => {
+    const chip = makeElement("button", "filter-chip", String(text).slice(0, 80));
+    chip.type = "button";
+    chip.addEventListener("click", () => {
+      const input = document.getElementById("shunelAIInput");
+      if (!input || aiBusy) return;
+      input.value = String(text);
+      document.getElementById("shunelAIForm")?.requestSubmit();
+    });
+    box.append(chip);
+  });
+  root.append(box);
+  root.scrollTop = root.scrollHeight;
+}
+
+// // Acciones que propone Shunel AI. Cada canción por resolver gasta una búsqueda de YouTube: máximo 3 por mensaje
+async function runAIActions(actions) {
+  let resolved = 0;
+  let firstPlay = true;
+  for (const action of (Array.isArray(actions) ? actions : []).slice(0, 5)) {
+    try {
+      if (action.type === "play" || action.type === "queue") {
+        const base = { title: action.title, artist: action.artist, source: "ai" };
+        if (action.type === "play" && firstPlay) {
+          firstPlay = false;
+          resolved += 1;
+          selectAndPlayTrack({ ...base, needsResolve: true }, { context: "user" });
+          continue;
+        }
+        if (resolved >= 3) continue;
+        resolved += 1;
+        const found = await resolveRecommendation(base);
+        if (found?.videoId) addToQueue({ ...base, ...found });
+      } else if (action.type === "radio" && action.artist) {
+        const tracks = await startRadio(action.artist, { limit: 15 });
+        renderRadioTracks(tracks, `Radio de ${action.artist}`);
+      } else if (action.type === "search" && action.query) {
+        navigateToView("search");
+        if (ui.elements.input) ui.elements.input.value = action.query;
+        void executeSearch(action.query, searchTracks);
+      } else if (action.type === "mood" && action.query) {
+        void runDiscovery("", action.query);
+      }
+    } catch (error) {
+      if (error?.name !== "AbortError") ui.toastMessage(error?.message || "No se pudo completar una acción de Shunel AI.");
+    }
+  }
+}
+
 async function handleAIMessage(event) {
   event.preventDefault();
   if (aiBusy) return;
   const input = document.getElementById("shunelAIInput");
   const text = input?.value.trim();
   if (!text) return;
+  document.querySelector("#shunelAIMessages .shunel-ai-suggestions")?.remove();
   aiMessages.push({ role: "user", content: text });
   // // Solo los últimos 20 mensajes: menos tokens, respuesta más rápida
   if (aiMessages.length > 20) aiMessages = aiMessages.slice(-20);
@@ -1499,9 +1553,11 @@ async function handleAIMessage(event) {
   const submit = document.querySelector("#shunelAIForm button[type='submit']");
   if (submit) { submit.disabled = true; submit.textContent = "Pensando..."; }
   try {
-    const reply = await askShunelAI(aiMessages, { context: buildAIContext() });
+    const { reply, actions, suggestions } = await askShunelAIFull(aiMessages, { context: buildAIContext() });
     aiMessages.push({ role: "assistant", content: reply });
     renderAIMessage("assistant", reply);
+    renderAISuggestions(suggestions);
+    if (actions.length) void runAIActions(actions);
   } catch (error) {
     const message = error.message || "Shunel AI no está disponible.";
     renderAIMessage("assistant", message);
