@@ -1,388 +1,813 @@
 /* ==========================================================================
-   SHUNEL — Radio & Discovery System (v2.0)
-   200 mejoras de Arquitectura, UI/UX, Rendimiento, Accesibilidad y Estados
+   SHUNEL — Radio & Discovery System (v3.0)
+   Arquitectura en @layer, propiedades lógicas, estados de audio, a11y y UI
    ========================================================================== */
 
-:root {
-  /* 1-15: Sistema de diseño y tokens de color semánticos */
-  --shunel-bg-base: #070b14;
-  --shunel-raised: #0d1423;
-  --shunel-surface-hover: #141e33;
-  --shunel-surface-active: #1a2742;
-  --shunel-glass: rgba(13, 20, 35, 0.72);
-  --shunel-accent: #38bdf8;
-  --shunel-accent-glow: rgba(56, 189, 248, 0.35);
-  --shunel-live: #ef4444;
-  --shunel-live-glow: rgba(239, 68, 68, 0.4);
-  --shunel-text-primary: #f8fafc;
-  --shunel-text-muted: #98a2b3;
-  --shunel-text-subtle: #667085;
-  --shunel-border: rgba(255, 255, 255, 0.08);
-  --shunel-border-hover: rgba(255, 255, 255, 0.18);
-  --shunel-error-bg: rgba(230, 154, 154, 0.08);
-  --shunel-error-text: #fca5a5;
+@layer shunel.tokens, shunel.base, shunel.components, shunel.states, shunel.a11y;
 
-  /* 16-30: Escala tipográfica fluida, espaciado y radios */
-  --shunel-radius-sm: 6px;
-  --shunel-radius-md: 10px;
-  --shunel-radius-lg: 14px;
-  --shunel-radius-full: 9999px;
-  --shunel-gap-xs: 6px;
-  --shunel-gap-sm: 10px;
-  --shunel-gap-md: 14px;
-  --shunel-gap-lg: 20px;
-  --shunel-art-size: clamp(44px, 5vw, 52px);
-  --shunel-font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  --shunel-font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
-  --shunel-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
-  --shunel-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-  --shunel-transition-fast: 160ms var(--shunel-ease-out);
-  --shunel-transition-base: 260ms var(--shunel-ease-out);
+@layer shunel.tokens {
+  :root {
+    /* Paleta base y superficies */
+    --shunel-bg-base: #070b14;
+    --shunel-raised: #0d1423;
+    --shunel-surface-hover: #141e33;
+    --shunel-surface-active: #1a2742;
+    --shunel-glass: rgba(13, 20, 35, 0.72);
+
+    /* Colores semánticos y de estado */
+    --shunel-accent: #38bdf8;
+    --shunel-accent-soft: rgba(56, 189, 248, 0.14);
+    --shunel-accent-border: rgba(56, 189, 248, 0.4);
+    --shunel-accent-glow: rgba(56, 189, 248, 0.35);
+
+    --shunel-live: #ef4444;
+    --shunel-live-soft: rgba(239, 68, 68, 0.18);
+    --shunel-live-border: rgba(239, 68, 68, 0.48);
+    --shunel-live-glow: rgba(239, 68, 68, 0.4);
+
+    --shunel-buffering: #f59e0b;
+    --shunel-buffering-soft: rgba(245, 158, 11, 0.16);
+    --shunel-success: #22c55e;
+    --shunel-success-soft: rgba(34, 197, 94, 0.16);
+
+    /* Texto (ajustado para mejor contraste sobre fondos oscuros) */
+    --shunel-text-primary: #f8fafc;
+    --shunel-text-muted: #9aa5b8;
+    --shunel-text-subtle: #7c889e;
+
+    /* Bordes, errores y sombras */
+    --shunel-border: rgba(255, 255, 255, 0.08);
+    --shunel-border-hover: rgba(255, 255, 255, 0.18);
+    --shunel-error-bg: rgba(239, 68, 68, 0.1);
+    --shunel-error-border: rgba(239, 68, 68, 0.28);
+    --shunel-error-text: #fca5a5;
+
+    --shunel-shadow-sm: 0 4px 10px rgba(0, 0, 0, 0.32);
+    --shunel-shadow-md: 0 8px 22px -6px rgba(0, 0, 0, 0.45);
+    --shunel-shadow-lg: 0 12px 32px -8px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+
+    /* Radios, espaciado y dimensiones clave */
+    --shunel-radius-sm: 6px;
+    --shunel-radius-md: 10px;
+    --shunel-radius-lg: 14px;
+    --shunel-radius-full: 9999px;
+
+    --shunel-gap-xs: 6px;
+    --shunel-gap-sm: 10px;
+    --shunel-gap-md: 14px;
+    --shunel-gap-lg: 20px;
+
+    --shunel-art-size: clamp(44px, 5vw, 52px);
+    --shunel-row-intrinsic-h: 70px;
+    --shunel-list-max-h: min(520px, 62dvh);
+    --shunel-state-min-h: 180px;
+    --shunel-scrollbar-w: 5px;
+    --shunel-eq-h: 14px;
+    --shunel-blur: 14px;
+
+    /* Tipografía */
+    --shunel-font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    --shunel-font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+    --shunel-font-min-badge: 0.75rem;
+
+    /* Curvas y duraciones */
+    --shunel-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+    --shunel-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+    --shunel-transition-fast: 150ms var(--shunel-ease-out);
+    --shunel-transition-base: 240ms var(--shunel-ease-out);
+
+    /* Variables de transformación de fila */
+    --shunel-row-tx: 0px;
+    --shunel-row-scale: 1;
+  }
 }
 
-/* 31-45: Contenedor principal con Container Queries y aislamiento de renderizado */
-.shunel-radio-section {
-  container-type: inline-size;
-  container-name: shunel-radio;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--shunel-gap-md);
-  min-width: 0;
-  padding: clamp(14px, 2.5vw, 22px);
-  background: linear-gradient(180deg, rgba(13, 20, 35, 0.65) 0%, rgba(7, 11, 20, 0.9) 100%);
-  border: 1px solid var(--shunel-border);
-  border-radius: var(--shunel-radius-lg);
-  box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  font-family: var(--shunel-font-sans);
-  color: var(--shunel-text-primary);
-  contain: layout style;
-  isolation: isolate;
+@layer shunel.base {
+  .shunel-radio-section,
+  .shunel-radio-section *,
+  .shunel-radio-section *::before,
+  .shunel-radio-section *::after {
+    box-sizing: border-box;
+  }
 }
 
-/* 46-60: Cabecera de sección con soporte para insignias "EN VIVO" y controles */
-.shunel-radio-heading {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--shunel-gap-sm);
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--shunel-border);
-  font-size: clamp(1rem, 1.4vw, 1.15rem);
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1.25;
-  text-wrap: balance;
-}
+@layer shunel.components {
+  /* Contenedor principal con Container Queries y aislamiento */
+  .shunel-radio-section {
+    container-type: inline-size;
+    container-name: shunel-radio;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--shunel-gap-md);
+    min-width: 0;
+    padding: clamp(14px, 2.5vw, 22px);
+    background: linear-gradient(180deg, rgba(13, 20, 35, 0.72) 0%, rgba(7, 11, 20, 0.92) 100%);
+    border: 1px solid var(--shunel-border);
+    border-radius: var(--shunel-radius-lg);
+    box-shadow: var(--shunel-shadow-lg);
+    backdrop-filter: blur(var(--shunel-blur));
+    -webkit-backdrop-filter: blur(var(--shunel-blur));
+    font-family: var(--shunel-font-sans);
+    font-size-adjust: 0.5;
+    color: var(--shunel-text-primary);
+    contain: layout style;
+    isolation: isolate;
+  }
 
-.shunel-radio-heading-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 10px;
-  font-size: 0.72rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: #fff;
-  background: color-mix(in srgb, var(--shunel-live) 20%, transparent);
-  border: 1px solid color-mix(in srgb, var(--shunel-live) 50%, transparent);
-  border-radius: var(--shunel-radius-full);
-}
+  /* Densidad compacta opcional */
+  .shunel-radio-section.is-compact {
+    --shunel-art-size: 40px;
+    --shunel-row-intrinsic-h: 56px;
+    padding: 12px;
+    gap: var(--shunel-gap-sm);
+  }
 
-.shunel-radio-heading-badge::before {
-  content: "";
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background-color: var(--shunel-live);
-  box-shadow: 0 0 8px var(--shunel-live);
-  animation: shunel-pulse 1.8s infinite ease-in-out;
-}
+  /* Cabecera de sección */
+  .shunel-radio-heading {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--shunel-gap-sm);
+    padding-block-end: 10px;
+    border-block-end: 1px solid var(--shunel-border);
+    font-size: clamp(1rem, 1.4vw, 1.15rem);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.25;
+    text-wrap: balance;
+    min-width: 0;
+  }
 
-/* 61-75: Lista de pistas con scroll suave, scrollbar estilizado y content-visibility */
-.shunel-radio-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-height: 520px;
-  overflow-y: auto;
-  overscroll-behavior-y: contain;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
-  padding-right: 4px;
-}
+  .shunel-radio-heading-title {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--shunel-gap-xs);
+    min-width: 0;
+  }
 
-.shunel-radio-list::-webkit-scrollbar {
-  width: 5px;
-}
+  .shunel-radio-heading-meta {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--shunel-gap-xs);
+    font-size: var(--shunel-font-min-badge);
+    font-weight: 500;
+    color: var(--shunel-text-muted);
+    font-variant-numeric: tabular-nums;
+  }
 
-.shunel-radio-list::-webkit-scrollbar-track {
-  background: transparent;
-}
+  /* Badge EN VIVO */
+  .shunel-radio-heading-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px;
+    font-size: var(--shunel-font-min-badge);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #fff;
+    background: var(--shunel-live-soft);
+    border: 1px solid var(--shunel-live-border);
+    border-radius: var(--shunel-radius-full);
+    flex-shrink: 0;
+  }
 
-.shunel-radio-list::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: var(--shunel-radius-full);
-}
+  .shunel-radio-heading-badge::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: var(--shunel-live);
+    box-shadow: 0 0 8px var(--shunel-live);
+    animation: shunel-pulse 1.8s infinite ease-in-out;
+  }
 
-.shunel-radio-list::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.3);
-}
+  /* Lista de pistas con scroll suave y propiedades lógicas */
+  .shunel-radio-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: var(--shunel-list-max-h);
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    scrollbar-gutter: stable;
+    scroll-padding-block: 12px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+    padding-inline-end: 4px;
+    min-width: 0;
+  }
 
-/* 76-105: Fila de pista (Track Row) con microinteracciones, focus accesible y estados */
-.shunel-radio-track {
-  position: relative;
-  display: grid;
-  grid-template-columns: var(--shunel-art-size) minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--shunel-gap-md);
-  padding: 9px 10px;
-  border-radius: var(--shunel-radius-md);
-  border: 1px solid transparent;
-  border-bottom-color: var(--shunel-border);
-  background-color: transparent;
-  cursor: pointer;
-  user-select: none;
-  -webkit-tap-highlight-color: transparent;
-  content-visibility: auto;
-  contain-intrinsic-size: auto 66px;
-  transition:
-    background-color var(--shunel-transition-fast),
-    border-color var(--shunel-transition-fast),
-    transform var(--shunel-transition-fast),
-    box-shadow var(--shunel-transition-fast);
-}
+  /* Modo descubrimiento en cuadrícula opcional */
+  .shunel-radio-list.is-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: var(--shunel-gap-sm);
+  }
 
-.shunel-radio-track:last-child {
-  border-bottom-color: transparent;
-}
+  .shunel-radio-list::-webkit-scrollbar {
+    width: var(--shunel-scrollbar-w);
+  }
 
-.shunel-radio-track:hover {
-  background-color: var(--shunel-surface-hover);
-  border-color: var(--shunel-border-hover);
-  transform: translateX(3px);
-}
+  .shunel-radio-list::-webkit-scrollbar-track {
+    background: transparent;
+  }
 
-.shunel-radio-track:active {
-  transform: scale(0.992);
-  background-color: var(--shunel-surface-active);
-}
+  .shunel-radio-list::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.16);
+    border-radius: var(--shunel-radius-full);
+  }
 
-.shunel-radio-track:focus-visible {
-  outline: 2px solid var(--shunel-accent);
-  outline-offset: 2px;
-  background-color: var(--shunel-surface-hover);
-}
+  .shunel-radio-list::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
+  }
 
-/* 106-120: Estado de pista activa / reproduciendo ahora (Now Playing) */
-.shunel-radio-track[aria-current="true"],
-.shunel-radio-track.is-playing {
-  background: linear-gradient(90deg, color-mix(in srgb, var(--shunel-accent) 14%, transparent) 0%, rgba(13, 20, 35, 0.4) 100%);
-  border-color: color-mix(in srgb, var(--shunel-accent) 40%, transparent);
-  box-shadow: 0 4px 20px -4px rgba(0, 0, 0, 0.4);
-}
+  /* Separador de bloque / grupo en Discovery o programación */
+  .shunel-radio-group-label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--shunel-gap-xs);
+    padding: 8px 10px 4px;
+    font-size: var(--shunel-font-min-badge);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--shunel-text-subtle);
+  }
 
-.shunel-radio-track.is-playing::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 18%;
-  bottom: 18%;
-  width: 3px;
-  border-radius: 0 4px 4px 0;
-  background: var(--shunel-accent);
-  box-shadow: 0 0 10px var(--shunel-accent);
-}
-
-/* 121-145: Carátula del álbum (Cover Art) con relación de aspecto, overlay y zoom */
-.shunel-radio-track-art {
-  position: relative;
-  width: var(--shunel-art-size);
-  height: var(--shunel-art-size);
-  border-radius: var(--shunel-radius-sm);
-  overflow: hidden;
-  background: var(--shunel-raised);
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35), inset 0 0 0 1px rgba(255, 255, 255, 0.1);
-  flex-shrink: 0;
-}
-
-.shunel-radio-track img {
-  width: 100%;
-  height: 100%;
-  aspect-ratio: 1 / 1;
-  object-fit: cover;
-  object-position: center;
-  display: block;
-  background: var(--shunel-raised);
-  border-radius: var(--shunel-radius-sm);
-  transition: transform var(--shunel-transition-base), filter var(--shunel-transition-fast);
-  will-change: transform;
-}
-
-.shunel-radio-track:hover img {
-  transform: scale(1.07);
-  filter: brightness(0.82);
-}
-
-/* 146-160: Metadatos de pista (Título, Artista, Etiquetas Explicit/Hi-Res) */
-.shunel-radio-track-meta {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 3px;
-  min-width: 0;
-}
-
-.shunel-radio-track-title {
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: var(--shunel-text-primary);
-  line-height: 1.3;
-  letter-spacing: -0.01em;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  transition: color var(--shunel-transition-fast);
-}
-
-.shunel-radio-track:hover .shunel-radio-track-title,
-.shunel-radio-track.is-playing .shunel-radio-track-title {
-  color: var(--shunel-accent);
-}
-
-.shunel-radio-track-artist {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--shunel-text-muted);
-  font-size: 0.84rem;
-  font-weight: 450;
-  line-height: 1.3;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.shunel-radio-badge-explicit {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 4px;
-  height: 15px;
-  font-size: 0.65rem;
-  font-weight: 700;
-  color: var(--shunel-text-muted);
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 3px;
-  flex-shrink: 0;
-}
-
-/* 161-175: Columna derecha (Duración tabular, ecualizador animado y botones de acción) */
-.shunel-radio-track-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  flex-shrink: 0;
-}
-
-.shunel-radio-track-duration {
-  font-family: var(--shunel-font-mono);
-  font-size: 0.78rem;
-  font-variant-numeric: tabular-nums;
-  color: var(--shunel-text-subtle);
-}
-
-.shunel-radio-equalizer {
-  display: inline-flex;
-  align-items: flex-end;
-  gap: 2px;
-  height: 14px;
-  width: 14px;
-}
-
-.shunel-radio-equalizer span {
-  width: 3px;
-  background: var(--shunel-accent);
-  border-radius: 2px;
-  animation: shunel-eq 0.9s infinite ease-in-out alternate;
-}
-
-.shunel-radio-equalizer span:nth-child(2) { animation-delay: 0.2s; }
-.shunel-radio-equalizer span:nth-child(3) { animation-delay: 0.4s; }
-
-/* 176-190: Estados Vacío, Error y Skeleton Loading */
-.shunel-radio-empty,
-.shunel-radio-error {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  gap: 8px;
-  padding: 28px 18px;
-  border-radius: var(--shunel-radius-md);
-  font-size: 0.9rem;
-  line-height: 1.5;
-  text-wrap: pretty;
-}
-
-.shunel-radio-empty {
-  color: var(--shunel-text-muted);
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px dashed var(--shunel-border);
-}
-
-.shunel-radio-error {
-  color: var(--shunel-error-text);
-  background: var(--shunel-error-bg);
-  border: 1px solid rgba(230, 154, 154, 0.25);
-}
-
-.shunel-radio-skeleton {
-  background: linear-gradient(90deg, var(--shunel-raised) 25%, #18233c 50%, var(--shunel-raised) 75%);
-  background-size: 200% 100%;
-  animation: shunel-shimmer 1.5s infinite linear;
-  border-radius: var(--shunel-radius-sm);
-}
-
-/* 191-200: Keyframes, Container Queries Responsivas y Accesibilidad de Movimiento */
-@keyframes shunel-pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.45; transform: scale(0.82); }
-}
-
-@keyframes shunel-eq {
-  0% { height: 3px; }
-  100% { height: 14px; }
-}
-
-@keyframes shunel-shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
-}
-
-@container shunel-radio (max-width: 380px) {
+  /* Fila de pista */
   .shunel-radio-track {
-    gap: 10px;
-    padding: 8px 6px;
+    position: relative;
+    display: grid;
+    grid-template-columns: var(--shunel-art-size) minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--shunel-gap-md);
+    padding: 9px 10px;
+    min-block-size: 48px;
+    min-width: 0;
+    border-radius: var(--shunel-radius-md);
+    border: 1px solid transparent;
+    border-block-end-color: var(--shunel-border);
+    background-color: transparent;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    content-visibility: auto;
+    contain-intrinsic-size: auto var(--shunel-row-intrinsic-h);
+    transform: translate3d(var(--shunel-row-tx), 0, 0) scale(var(--shunel-row-scale));
+    transition:
+      background-color var(--shunel-transition-fast),
+      border-color var(--shunel-transition-fast),
+      transform var(--shunel-transition-fast),
+      box-shadow var(--shunel-transition-fast);
   }
+
+  .shunel-radio-track:last-child {
+    border-block-end-color: transparent;
+  }
+
+  .shunel-radio-track:hover {
+    --shunel-row-tx: 2px;
+    background-color: var(--shunel-surface-hover);
+    border-color: var(--shunel-border-hover);
+  }
+
+  .shunel-radio-track:active {
+    --shunel-row-scale: 0.992;
+    background-color: var(--shunel-surface-active);
+  }
+
+  .shunel-radio-track:focus-visible,
+  .shunel-radio-btn:focus-visible,
+  .shunel-radio-action-btn:focus-visible {
+    outline: 2px solid var(--shunel-accent);
+    outline-offset: 2px;
+  }
+
+  .shunel-radio-track:focus-visible {
+    background-color: var(--shunel-surface-hover);
+  }
+
+  /* Carátula del álbum con fallback y overlay de reproducción */
+  .shunel-radio-track-art {
+    position: relative;
+    width: var(--shunel-art-size);
+    height: var(--shunel-art-size);
+    border-radius: var(--shunel-radius-sm);
+    overflow: hidden;
+    display: grid;
+    place-items: center;
+    background: linear-gradient(135deg, var(--shunel-raised) 0%, #15223b 100%);
+    box-shadow: var(--shunel-shadow-sm), inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+    flex-shrink: 0;
+    color: var(--shunel-text-muted);
+    font-size: 0.85rem;
+  }
+
+  .shunel-radio-track-img {
+    width: 100%;
+    height: 100%;
+    aspect-ratio: 1 / 1;
+    object-fit: cover;
+    object-position: center;
+    display: block;
+    border-radius: var(--shunel-radius-sm);
+    transition: transform var(--shunel-transition-base), filter var(--shunel-transition-fast);
+  }
+
+  .shunel-radio-track:hover .shunel-radio-track-img,
+  .shunel-radio-track:focus-visible .shunel-radio-track-img {
+    will-change: transform;
+    transform: scale(1.06);
+    filter: brightness(0.76);
+  }
+
+  .shunel-radio-art-overlay {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    background: rgba(7, 11, 20, 0.45);
+    color: #fff;
+    opacity: 0;
+    transition: opacity var(--shunel-transition-fast);
+    pointer-events: none;
+  }
+
+  .shunel-radio-track:hover .shunel-radio-art-overlay,
+  .shunel-radio-track:focus-visible .shunel-radio-art-overlay,
+  .shunel-radio-track.is-playing .shunel-radio-art-overlay,
+  .shunel-radio-track.is-paused .shunel-radio-art-overlay {
+    opacity: 1;
+  }
+
+  /* Metadatos de pista */
+  .shunel-radio-track-meta {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 3px;
+    min-width: 0;
+  }
+
+  .shunel-radio-track-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--shunel-text-primary);
+    line-height: 1.32;
+    letter-spacing: -0.01em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    overflow-wrap: anywhere;
+    transition: color var(--shunel-transition-fast);
+  }
+
+  .shunel-radio-track-title.is-multiline {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    white-space: normal;
+  }
+
+  .shunel-radio-track-artist {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--shunel-text-muted);
+    font-size: 0.84rem;
+    font-weight: 450;
+    line-height: 1.32;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
+
+  .shunel-radio-track-submeta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: var(--shunel-font-min-badge);
+    color: var(--shunel-text-subtle);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Badges semánticos (Explicit, Hi-Res, Live, Discovery) */
+  .shunel-radio-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 18px;
+    padding: 0 6px;
+    font-size: var(--shunel-font-min-badge);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    border-radius: 4px;
+    flex-shrink: 0;
+    user-select: none;
+  }
+
+  .shunel-radio-badge-explicit {
+    color: var(--shunel-text-primary);
+    background: rgba(255, 255, 255, 0.14);
+  }
+
+  .shunel-radio-badge-hires {
+    color: var(--shunel-accent);
+    background: var(--shunel-accent-soft);
+    border: 1px solid var(--shunel-accent-border);
+  }
+
+  .shunel-radio-badge-live {
+    color: #fff;
+    background: var(--shunel-live-soft);
+    border: 1px solid var(--shunel-live-border);
+  }
+
+  .shunel-radio-badge-discovery {
+    color: var(--shunel-success);
+    background: var(--shunel-success-soft);
+  }
+
+  /* Columna derecha: duración, ecualizador y acciones */
+  .shunel-radio-track-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
   .shunel-radio-track-duration {
+    font-family: var(--shunel-font-mono);
+    font-size: 0.78rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--shunel-text-subtle);
+  }
+
+  .shunel-radio-action-btn {
+    display: inline-grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: var(--shunel-radius-sm);
+    background: transparent;
+    color: var(--shunel-text-muted);
+    cursor: pointer;
+    transition:
+      color var(--shunel-transition-fast),
+      background-color var(--shunel-transition-fast),
+      border-color var(--shunel-transition-fast),
+      transform var(--shunel-ease-spring) 180ms;
+  }
+
+  .shunel-radio-action-btn:hover {
+    color: var(--shunel-text-primary);
+    background: rgba(255, 255, 255, 0.08);
+    border-color: var(--shunel-border);
+  }
+
+  .shunel-radio-action-btn[aria-pressed="true"],
+  .shunel-radio-action-btn.is-active {
+    color: var(--shunel-accent);
+    background: var(--shunel-accent-soft);
+  }
+
+  /* Ecualizador animado (solo visible al sonar o pausar pista activa) */
+  .shunel-radio-equalizer {
     display: none;
+    align-items: flex-end;
+    gap: 2px;
+    height: var(--shunel-eq-h);
+    width: 14px;
+  }
+
+  .shunel-radio-track.is-playing .shunel-radio-equalizer,
+  .shunel-radio-track.is-paused .shunel-radio-equalizer {
+    display: inline-flex;
+  }
+
+  .shunel-radio-equalizer span {
+    width: 3px;
+    height: 4px;
+    background: var(--shunel-accent);
+    border-radius: 2px;
+    animation: shunel-eq 0.9s infinite ease-in-out alternate;
+  }
+
+  .shunel-radio-equalizer span:nth-child(2) {
+    animation-delay: 0.2s;
+  }
+
+  .shunel-radio-equalizer span:nth-child(3) {
+    animation-delay: 0.4s;
+  }
+
+  .shunel-radio-track.is-paused .shunel-radio-equalizer span {
+    animation-play-state: paused;
+    height: 4px;
+    opacity: 0.55;
+  }
+
+  /* Barra de progreso opcional en pista activa */
+  .shunel-radio-track-progress {
+    position: absolute;
+    inset-inline: 10px;
+    inset-block-end: 0;
+    height: 2px;
+    border-radius: var(--shunel-radius-full);
+    background: rgba(255, 255, 255, 0.06);
+    overflow: hidden;
+    pointer-events: none;
+  }
+
+  .shunel-radio-track-progress > span {
+    display: block;
+    height: 100%;
+    width: var(--shunel-progress, 0%);
+    background: var(--shunel-accent);
+    transition: width 200ms linear;
+  }
+
+  /* Estados Vacío, Error, Sin Señal y Skeleton Loading */
+  .shunel-radio-empty,
+  .shunel-radio-error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: 10px;
+    min-block-size: var(--shunel-state-min-h);
+    padding: 28px 18px;
+    border-radius: var(--shunel-radius-md);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    text-wrap: pretty;
+  }
+
+  .shunel-radio-empty {
+    color: var(--shunel-text-muted);
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px dashed var(--shunel-border);
+  }
+
+  .shunel-radio-error {
+    color: var(--shunel-error-text);
+    background: var(--shunel-error-bg);
+    border: 1px solid var(--shunel-error-border);
+  }
+
+  .shunel-radio-state-title {
+    font-size: 0.98rem;
+    font-weight: 700;
+    color: var(--shunel-text-primary);
+  }
+
+  .shunel-radio-error .shunel-radio-state-title {
+    color: var(--shunel-error-text);
+  }
+
+  .shunel-radio-state-desc {
+    max-width: 38ch;
+    font-size: 0.86rem;
+    color: var(--shunel-text-muted);
+  }
+
+  .shunel-radio-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 36px;
+    padding: 0 14px;
+    border-radius: var(--shunel-radius-sm);
+    border: 1px solid var(--shunel-accent-border);
+    background: var(--shunel-accent-soft);
+    color: var(--shunel-text-primary);
+    font-family: inherit;
+    font-size: 0.84rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color var(--shunel-transition-fast), border-color var(--shunel-transition-fast);
+  }
+
+  .shunel-radio-btn:hover {
+    background: rgba(56, 189, 248, 0.24);
+    border-color: var(--shunel-accent);
+  }
+
+  /* Skeleton completo de fila */
+  .shunel-radio-skeleton {
+    background: linear-gradient(90deg, var(--shunel-raised) 25%, #18233c 50%, var(--shunel-raised) 75%);
+    background-size: 200% 100%;
+    animation: shunel-shimmer 1.5s infinite linear;
+    border-radius: var(--shunel-radius-sm);
+  }
+
+  .shunel-radio-skeleton-row {
+    display: grid;
+    grid-template-columns: var(--shunel-art-size) minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--shunel-gap-md);
+    padding: 9px 10px;
+  }
+
+  .shunel-radio-skeleton-art {
+    width: var(--shunel-art-size);
+    height: var(--shunel-art-size);
+  }
+
+  .shunel-radio-skeleton-lines {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+  }
+
+  .shunel-radio-skeleton-line {
+    height: 12px;
+    width: 68%;
+  }
+
+  .shunel-radio-skeleton-line--short {
+    height: 10px;
+    width: 42%;
+  }
+
+  .shunel-radio-skeleton-duration {
+    height: 12px;
+    width: 38px;
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .shunel-radio-track,
-  .shunel-radio-track img,
-  .shunel-radio-track-title,
-  .shunel-radio-heading-badge::before,
-  .shunel-radio-equalizer span,
-  .shunel-radio-skeleton {
-    animation: none !important;
-    transition: none !important;
-    transform: none !important;
+@layer shunel.states {
+  /* Pista seleccionada / cargada vs. reproduciendo / pausada / buffering */
+  .shunel-radio-track[aria-current="true"],
+  .shunel-radio-track.is-selected {
+    background: linear-gradient(90deg, var(--shunel-accent-soft) 0%, rgba(13, 20, 35, 0.45) 100%);
+    border-color: var(--shunel-accent-border);
+    box-shadow: var(--shunel-shadow-md);
+  }
+
+  .shunel-radio-track.is-playing::before,
+  .shunel-radio-track.is-paused::before,
+  .shunel-radio-track.is-buffering::before {
+    content: "";
+    position: absolute;
+    inset-inline-start: 0;
+    inset-block: 18%;
+    width: 3px;
+    border-radius: 0 4px 4px 0;
+    background: var(--shunel-accent);
+    box-shadow: 0 0 10px var(--shunel-accent-glow);
+  }
+
+  .shunel-radio-track.is-buffering::before {
+    background: var(--shunel-buffering);
+    box-shadow: 0 0 10px var(--shunel-buffering-soft);
+  }
+
+  .shunel-radio-track.is-paused::before {
+    opacity: 0.55;
+  }
+
+  .shunel-radio-track:hover .shunel-radio-track-title,
+  .shunel-radio-track.is-playing .shunel-radio-track-title,
+  .shunel-radio-track[aria-current="true"] .shunel-radio-track-title {
+    color: var(--shunel-accent);
+  }
+
+  .shunel-radio-track.is-buffering .shunel-radio-track-title {
+    color: var(--shunel-buffering);
+  }
+
+  /* Pista escuchada, en cola o deshabilitada */
+  .shunel-radio-track.is-played:not(.is-playing):not([aria-current="true"]) .shunel-radio-track-title {
+    color: var(--shunel-text-muted);
+  }
+
+  .shunel-radio-track.is-queued .shunel-radio-track-submeta::after {
+    content: "· En cola";
+    color: var(--shunel-accent);
+    font-weight: 600;
+  }
+
+  .shunel-radio-track.is-disabled,
+  .shunel-radio-track[aria-disabled="true"] {
+    opacity: 0.48;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+}
+
+@layer shunel.a11y {
+  @keyframes shunel-pulse {
+    0%, 100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.45;
+      transform: scale(0.82);
+    }
+  }
+
+  @keyframes shunel-eq {
+    0% {
+      height: 3px;
+    }
+    100% {
+      height: var(--shunel-eq-h);
+    }
+  }
+
+  @keyframes shunel-shimmer {
+    0% {
+      background-position: 200% 0;
+    }
+    100% {
+      background-position: -200% 0;
+    }
+  }
+
+  @container shunel-radio (max-width: 520px) {
+    .shunel-radio-track {
+      gap: var(--shunel-gap-sm);
+    }
+  }
+
+  @container shunel-radio (max-width: 380px) {
+    .shunel-radio-track {
+      gap: 8px;
+      padding: 8px 6px;
+    }
+
+    .shunel-radio-track-duration {
+      display: none;
+    }
+  }
+
+  @media (prefers-contrast: more) {
+    .shunel-radio-section,
+    .shunel-radio-track,
+    .shunel-radio-empty,
+    .shunel-radio-error {
+      border-color: currentColor;
+    }
+
+    .shunel-radio-track:focus-visible,
+    .shunel-radio-btn:focus-visible,
+    .shunel-radio-action-btn:focus-visible {
+      outline-width: 3px;
+    }
+  }
+
+  @media (forced-colors: active) {
+    .shunel-radio-track[aria-current="true"],
+    .shunel-radio-track.is-playing {
+      outline: 2px solid Highlight;
+    }
+
+    .shunel-radio-heading-badge,
+    .shunel-radio-badge,
+    .shunel-radio-btn {
+      forced-color-adjust: auto;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .shunel-radio-list {
+      scroll-behavior: auto;
+    }
+
+    .shunel-radio-track,
+    .shunel-radio-track-img,
+    .shunel-radio-track-title,
+    .shunel-radio-art-overlay,
+    .shunel-radio-action-btn,
+    .shunel-radio-btn,
+    .shunel-radio-heading-badge::before,
+    .shunel-radio-equalizer span,
+    .shunel-radio-skeleton {
+      animation: none !important;
+      animation-play-state: paused !important;
+      transition: none !important;
+    }
+
+    .shunel-radio-track {
+      --shunel-row-tx: 0px;
+      --shunel-row-scale: 1;
+    }
+
+    .shunel-radio-track:hover .shunel-radio-track-img,
+    .shunel-radio-track:focus-visible .shunel-radio-track-img {
+      transform: none;
+      filter: none;
+    }
   }
 }

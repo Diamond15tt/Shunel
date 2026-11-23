@@ -1,313 +1,395 @@
 /* ==========================================================================
-   SHUNEL — Artwork Presentation & Ambient Backdrop System (v3.1)
-   300 Mejoras: 200 de Ingeniería CSS/UI/UX + 100 de Rendimiento & Responsividad
-
-   // v3.1 — compatibilidad con player.css 3.0:
-   // - #fullPlayer ya NO se pisa con position: relative (el reproductor
-   //   quedaba metido en la página, 6000 px abajo, y no se veía).
-   // - Sin overflow: hidden en #fullPlayer (bloqueaba el scroll en iPhone SE).
-   // - Sin paddings duplicados: player.css ya maneja las safe areas.
-   // - Fondo de portada y viñeta en position: fixed, para que no se
-   //   desplacen ni agreguen scroll extra.
-   // - Paleta neutra (antes azulada) y brillo con el color de la canción.
-   // - La portada usa la propiedad "scale" de player.css; aquí ya no se
-   //   usa transform, para que las dos escalas no se multipliquen.
+   SHUNEL — Artwork Presentation & Ambient Backdrop System (v3.2)
+   Arquitectura en @layer, sin conflictos de transform/scale, a11y y GPU-aware
    ========================================================================== */
 
-:root {
-  /* 1-25: Tokens de arte, iluminación ambiental y superficies */
-  --shunel-artwork: none;
-  /* // nombres con "art-": radio.css usa --shunel-radius-full (9999px) y
-     // --shunel-raised, y como carga después dejaba la portada redonda */
-  --shunel-art-raised: #141414;
-  --shunel-artwork-bg-fallback: radial-gradient(circle at 30% 25%, #2a2a2a 0%, #141414 65%, #080808 100%);
-  --shunel-artwork-glow-color: color-mix(in srgb, var(--song-color, #242424) 45%, transparent);
-  --shunel-artwork-border: rgba(255, 255, 255, 0.14);
-  --shunel-artwork-inner-highlight: rgba(255, 255, 255, 0.22);
-  --shunel-artwork-shadow-color: rgba(0, 0, 0, 0.68);
-  --shunel-backdrop-blur: clamp(32px, 6vw, 64px);
-  --shunel-backdrop-saturate: 1.35;
-  --shunel-backdrop-brightness: 0.85;
-  --shunel-backdrop-opacity: 0.24;
-  --shunel-backdrop-scale: 1.18;
+@layer shunel.art-tokens, shunel.art-base, shunel.art-components, shunel.art-states, shunel.art-a11y;
 
-  /* 26-50: Escala responsiva fluida (Mobile -> Tablet -> Desktop -> Ultrawide) */
-  --shunel-thumb-mini: clamp(42px, 11vw, 54px);
-  --shunel-thumb-full: clamp(210px, min(72vw, 42dvh), 380px);
-  --shunel-art-radius-mini: clamp(8px, 2vw, 12px);
-  --shunel-art-radius-full: clamp(16px, 3.5vw, 26px);
-  --shunel-art-ease-fluid: cubic-bezier(0.22, 1, 0.36, 1);
-  --shunel-art-ease-spring: cubic-bezier(0.34, 1.45, 0.64, 1);
-  --shunel-dur-fade: 280ms;
-  --shunel-dur-scale: 420ms;
-}
-
-/* 51-95: Contenedor base de miniaturas y carátulas principales */
-#currentThumbnail,
-#fullPlayerThumbnail,
-[data-shunel-artwork] {
-  position: relative;
-  display: block;
-  aspect-ratio: 1 / 1;
-  width: 100%;
-  height: auto;
-  background-color: var(--shunel-art-raised, #141414);
-  background-image: var(--shunel-artwork-bg-fallback);
-  background-size: cover;
-  background-position: center;
-  object-fit: cover;
-  object-position: center;
-  overflow: hidden;
-  user-select: none;
-  -webkit-user-select: none;
-  -webkit-user-drag: none;
-  -webkit-touch-callout: none;
-  image-rendering: -webkit-optimize-contrast;
-  color: transparent; /* Oculta texto alt roto mientras carga */
-  box-shadow:
-    0 12px 28px -6px var(--shunel-artwork-shadow-color),
-    0 4px 10px -2px rgba(0, 0, 0, 0.45),
-    inset 0 1px 0 0 var(--shunel-artwork-inner-highlight),
-    0 0 0 1px var(--shunel-artwork-border);
-  transform: translateZ(0);
-  backface-visibility: hidden;
-  transition:
-    opacity var(--shunel-dur-fade) var(--shunel-art-ease-fluid),
-    transform var(--shunel-dur-scale) var(--shunel-art-ease-spring),
-    box-shadow var(--shunel-dur-fade) var(--shunel-art-ease-fluid),
-    filter var(--shunel-dur-fade) var(--shunel-art-ease-fluid),
-    border-radius var(--shunel-dur-fade) var(--shunel-art-ease-fluid);
-}
-
-/* 96-120: Dimensionamiento específico y responsivo para Mini Player */
-#currentThumbnail {
-  width: var(--shunel-thumb-mini);
-  height: var(--shunel-thumb-mini);
-  min-width: var(--shunel-thumb-mini);
-  min-height: var(--shunel-thumb-mini);
-  border-radius: var(--shunel-art-radius-mini);
-  flex-shrink: 0;
-}
-
-#currentThumbnail:hover {
-  transform: scale(1.05);
-  box-shadow:
-    0 8px 20px -4px rgba(0, 0, 0, 0.6),
-    0 0 14px var(--shunel-artwork-glow-color),
-    0 0 0 1px rgba(255, 255, 255, 0.25);
-}
-
-#currentThumbnail:active {
-  transform: scale(0.96);
-}
-
-/* 121-155: Dimensionamiento y física UI/UX para Full Player Artwork */
-#fullPlayerThumbnail {
-  width: var(--shunel-thumb-full);
-  height: var(--shunel-thumb-full);
-  max-width: 100%;
-  margin-inline: auto;
-  border-radius: var(--shunel-art-radius-full);
-  box-shadow:
-    0 24px 54px -12px rgba(0, 0, 0, 0.8),
-    0 10px 24px -8px rgba(0, 0, 0, 0.55),
-    0 0 40px -10px var(--shunel-artwork-glow-color),
-    inset 0 1.5px 1px rgba(255, 255, 255, 0.28),
-    0 0 0 1px var(--shunel-artwork-border);
-  /* // transiciones de la escala y la sombra de player.css */
-  transition:
-    scale 600ms var(--shunel-art-ease-spring),
-    opacity var(--shunel-dur-fade) var(--shunel-art-ease-fluid),
-    box-shadow 600ms var(--shunel-art-ease-fluid),
-    filter var(--shunel-dur-fade) var(--shunel-art-ease-fluid);
-}
-
-body.is-playing #fullPlayerThumbnail {
-  box-shadow:
-    0 30px 64px -14px rgba(0, 0, 0, 0.85),
-    0 12px 40px -6px var(--shunel-artwork-glow-color),
-    inset 0 1.5px 1px rgba(255, 255, 255, 0.28),
-    0 0 0 1px var(--shunel-artwork-border);
-}
-
-/* 156-175: Estados de reproducción (Play / Pause) estilo Apple Music */
-/* // la escala de pausa/play la hace player.css con body.is-playing */
-#fullPlayer.is-paused #fullPlayerThumbnail,
-[data-shunel-player-state="paused"] #fullPlayerThumbnail {
-  filter: brightness(0.88) saturate(0.9);
-  box-shadow:
-    0 12px 26px -8px rgba(0, 0, 0, 0.65),
-    0 0 0 1px rgba(255, 255, 255, 0.1);
-}
-
-#fullPlayer.is-playing #fullPlayerThumbnail,
-[data-shunel-player-state="playing"] #fullPlayerThumbnail {
-  filter: brightness(1) saturate(1.04);
-}
-
-/* 176-225: Contenedor FullPlayer, Safe Areas y Fondo Ambiental Dinámico */
-/* // position, overflow y paddings los pone player.css (fixed + scroll + safe areas) */
-/* // sin container-type: la contención convertía el fondo fixed en
-   // absoluto y agregaba ~150 px de scroll fantasma */
-#fullPlayer {
-  isolation: isolate;
-}
-
-/* // Abierto = transform: none. animations.css pone translateY(0) scale(1),
-   // que visualmente es igual pero ancla el fondo fixed al reproductor
-   // (vuelve el scroll fantasma). El id gana sin !important. */
-#fullPlayer.active {
-  transform: none;
-}
-
-/* // fixed: queda quieto aunque el reproductor haga scroll y no agrega
-   // scroll extra (player.css quita el transform al abrir, así que
-   // este fixed se ancla a la pantalla) */
-#fullPlayer::before {
-  content: "";
-  position: fixed;
-  inset: -12%;
-  z-index: 0;
-  pointer-events: none;
-  background-image: var(--shunel-artwork);
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-  filter:
-    blur(var(--shunel-backdrop-blur))
-    saturate(var(--shunel-backdrop-saturate))
-    brightness(var(--shunel-backdrop-brightness));
-  opacity: var(--shunel-backdrop-opacity);
-  transform: translate3d(0, 0, 0) scale(var(--shunel-backdrop-scale));
-  transform-origin: center center;
-  transition: opacity 500ms var(--shunel-art-ease-fluid);
-}
-
-/* 226-245: Viñeta de contraste para legibilidad garantizada de controles y letras */
-#fullPlayer::after {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(circle at 50% 30%, transparent 15%, rgba(8, 8, 8, 0.6) 85%),
-    linear-gradient(180deg, rgba(8, 8, 8, 0.2) 0%, rgba(8, 8, 8, 0.82) 100%);
-}
-
-#fullPlayer > * {
-  position: relative;
-  z-index: 1;
-}
-
-/* 246-275: Ciclo de vida de carga (Loading, Ready, Error/Empty) */
-.shunel-artwork-loading {
-  opacity: 0.58;
-  filter: blur(6px) scale(0.98);
-  animation: shunel-artwork-pulse 1.6s infinite ease-in-out;
-  transition:
-    opacity 200ms var(--shunel-art-ease-fluid),
-    filter 200ms var(--shunel-art-ease-fluid),
-    transform 200ms var(--shunel-art-ease-fluid);
-}
-
-.shunel-artwork-ready {
-  opacity: 1;
-  filter: blur(0) scale(1);
-  animation: none;
-  transition:
-    opacity 320ms var(--shunel-art-ease-fluid),
-    filter 320ms var(--shunel-art-ease-fluid),
-    transform 380ms var(--shunel-art-ease-spring);
-}
-
-.shunel-artwork-error,
-[data-shunel-artwork][src=""],
-[data-shunel-artwork]:not([src]) {
-  opacity: 0.9;
-  background-image: var(--shunel-artwork-bg-fallback);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
-}
-
-@keyframes shunel-artwork-pulse {
-  0%, 100% { opacity: 0.52; }
-  50% { opacity: 0.76; }
-}
-
-/* 276-300: Sistema Ultra-Responsivo (Portrait, Landscape, Pantallas Pequeñas, Desktop y A11y) */
-
-/* Pantallas muy bajas en altura (ej. iPhone SE o teclado abierto) */
-@media (max-height: 620px) {
+@layer shunel.art-tokens {
   :root {
-    --shunel-thumb-full: clamp(140px, 32dvh, 210px);
-    --shunel-art-radius-full: 14px;
+    /* Paleta neutra y superficies base */
+    --shunel-art-surface-base: #080808;
+    --shunel-art-raised: #141414;
+    --shunel-art-surface-elevated: #2a2a2a;
+    --shunel-art-song-fallback: #242424;
+
+    /* Arte, iluminación ambiental y bordes */
+    --shunel-artwork: none;
+    --shunel-artwork-bg-fallback: radial-gradient(
+      circle at 30% 25%,
+      var(--shunel-art-surface-elevated) 0%,
+      var(--shunel-art-raised) 65%,
+      var(--shunel-art-surface-base) 100%
+    );
+    --shunel-artwork-glow-color: color-mix(in srgb, var(--song-color, var(--shunel-art-song-fallback)) 45%, transparent);
+    --shunel-artwork-border: rgba(255, 255, 255, 0.14);
+    --shunel-artwork-border-strong: rgba(255, 255, 255, 0.25);
+    --shunel-artwork-inner-highlight: rgba(255, 255, 255, 0.22);
+    --shunel-artwork-inner-strong: rgba(255, 255, 255, 0.28);
+    --shunel-artwork-shadow-color: rgba(0, 0, 0, 0.68);
+    --shunel-artwork-shadow-deep: rgba(0, 0, 0, 0.82);
+
+    /* Backdrop ambiental y viñeta */
+    --shunel-backdrop-blur: clamp(24px, 4.5vw, 56px);
+    --shunel-backdrop-saturate: 1.35;
+    --shunel-backdrop-brightness: 0.85;
+    --shunel-backdrop-opacity: 0.24;
+    --shunel-backdrop-scale: 1.16;
+    --shunel-vignette-radial: radial-gradient(circle at 50% 30%, transparent 15%, rgba(8, 8, 8, 0.6) 85%);
+    --shunel-vignette-linear: linear-gradient(180deg, rgba(8, 8, 8, 0.2) 0%, rgba(8, 8, 8, 0.82) 100%);
+
+    /* Escala responsiva fluida */
+    --shunel-thumb-mini: clamp(42px, 11vw, 54px);
+    --shunel-thumb-full: clamp(210px, min(72vw, 42dvh), 380px);
+    --shunel-art-radius-mini: clamp(8px, 2vw, 12px);
+    --shunel-art-radius-full: clamp(16px, 3.5vw, 26px);
+
+    /* Curvas y duraciones */
+    --shunel-art-ease-fluid: cubic-bezier(0.22, 1, 0.36, 1);
+    --shunel-art-ease-spring: cubic-bezier(0.34, 1.32, 0.64, 1);
+    --shunel-dur-fade: 280ms;
+    --shunel-dur-scale: 420ms;
+    --shunel-dur-backdrop: 500ms;
+
+    /* Variables de transformación (evitan colisiones entre reglas y estados) */
+    --shunel-art-tx: 0px;
+    --shunel-art-ty: 0px;
+    --shunel-art-scale: 1;
+    --shunel-art-state-scale: 1;
+    --shunel-art-gesture-scale: 1;
+    --shunel-backdrop-tx: 0px;
+    --shunel-backdrop-ty: 0px;
+  }
+
+  @supports not (color: color-mix(in srgb, red 50%, transparent)) {
+    :root {
+      --shunel-artwork-glow-color: rgba(255, 255, 255, 0.14);
+    }
   }
 }
 
-/* Modo Horizontal en móviles (Landscape) */
-@media (orientation: landscape) and (max-height: 540px) {
-  :root {
-    --shunel-thumb-full: clamp(150px, 54dvh, 240px);
-  }
-  #fullPlayer::before {
-    --shunel-backdrop-blur: 28px;
-  }
-}
-
-/* Tablets y Desktop (Pantallas amplias) */
-@media (min-width: 768px) {
-  :root {
-    --shunel-thumb-full: clamp(280px, min(42vw, 48dvh), 440px);
-    --shunel-backdrop-opacity: 0.28;
-  }
-}
-
-/* Pantallas muy angostas (antes @container; ahora @media, ver nota de #fullPlayer) */
-@media (max-width: 340px) {
-  #fullPlayerThumbnail {
-    width: min(82cqw, 220px);
-    height: min(82cqw, 220px);
-    border-radius: 14px;
-  }
-}
-
-/* Accesibilidad: Reducción de movimiento y ahorro de batería/GPU */
-@media (prefers-reduced-motion: reduce) {
-  #currentThumbnail,
-  #fullPlayerThumbnail,
-  [data-shunel-artwork],
-  #fullPlayer::before,
-  .shunel-artwork-loading,
-  .shunel-artwork-ready {
-    animation: none !important;
-    transition: none !important;
-    transform: none !important;
-    will-change: auto !important;
-  }
-  #fullPlayer::before {
-    transform: scale(1.12) !important;
-  }
-  #fullPlayerThumbnail { scale: 1 !important; }
-}
-
-/* Accesibilidad: Modo alto contraste */
-@media (prefers-contrast: more) {
+@layer shunel.art-base {
   #currentThumbnail,
   #fullPlayerThumbnail,
   [data-shunel-artwork] {
-    box-shadow: 0 0 0 2px #ffffff !important;
+    box-sizing: border-box;
   }
+}
+
+@layer shunel.art-components {
+  /* Contenedor base de miniaturas y carátulas principales */
+  #currentThumbnail,
+  #fullPlayerThumbnail,
+  [data-shunel-artwork] {
+    position: relative;
+    display: block;
+    aspect-ratio: 1 / 1;
+    width: 100%;
+    height: auto;
+    background-color: var(--shunel-art-raised);
+    background-image: var(--shunel-artwork-bg-fallback);
+    background-size: cover;
+    background-position: center;
+    overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+    transform: translate3d(var(--shunel-art-tx), var(--shunel-art-ty), 0);
+    scale: calc(var(--shunel-art-scale) * var(--shunel-art-state-scale) * var(--shunel-art-gesture-scale));
+    transition:
+      opacity var(--shunel-dur-fade) var(--shunel-art-ease-fluid),
+      transform var(--shunel-dur-scale) var(--shunel-art-ease-fluid),
+      scale var(--shunel-dur-scale) var(--shunel-art-ease-spring),
+      box-shadow var(--shunel-dur-fade) var(--shunel-art-ease-fluid),
+      filter var(--shunel-dur-fade) var(--shunel-art-ease-fluid),
+      border-radius var(--shunel-dur-fade) var(--shunel-art-ease-fluid);
+  }
+
+  /* Propiedades específicas para elementos reemplazados (<img>, <video>) */
+  img#currentThumbnail,
+  img#fullPlayerThumbnail,
+  img[data-shunel-artwork] {
+    object-fit: cover;
+    object-position: center;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-user-drag: none;
+    -webkit-touch-callout: none;
+  }
+
+  /* Dimensionamiento específico para Mini Player */
+  #currentThumbnail {
+    width: var(--shunel-thumb-mini);
+    height: var(--shunel-thumb-mini);
+    max-width: none;
+    border-radius: var(--shunel-art-radius-mini);
+    flex-shrink: 0;
+    box-shadow:
+      0 8px 20px -6px var(--shunel-artwork-shadow-color),
+      inset 0 1px 0 0 var(--shunel-artwork-inner-highlight),
+      0 0 0 1px var(--shunel-artwork-border);
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    #currentThumbnail:hover {
+      --shunel-art-gesture-scale: 1.05;
+      box-shadow:
+        0 10px 24px -6px var(--shunel-artwork-shadow-deep),
+        0 0 16px -2px var(--shunel-artwork-glow-color),
+        0 0 0 1px var(--shunel-artwork-border-strong);
+    }
+  }
+
+  #currentThumbnail:active {
+    --shunel-art-gesture-scale: 0.96;
+  }
+
+  /* Dimensionamiento y física para Full Player Artwork */
+  #fullPlayerThumbnail {
+    width: var(--shunel-thumb-full);
+    height: var(--shunel-thumb-full);
+    max-width: 100%;
+    margin-inline: auto;
+    border-radius: var(--shunel-art-radius-full);
+    box-shadow:
+      0 24px 54px -12px var(--shunel-artwork-shadow-deep),
+      0 10px 24px -8px var(--shunel-artwork-shadow-color),
+      0 0 36px -6px var(--shunel-artwork-glow-color),
+      inset 0 1.5px 1px var(--shunel-artwork-inner-strong),
+      0 0 0 1px var(--shunel-artwork-border);
+    transition:
+      scale 600ms var(--shunel-art-ease-spring),
+      transform var(--shunel-dur-scale) var(--shunel-art-ease-fluid),
+      opacity var(--shunel-dur-fade) var(--shunel-art-ease-fluid),
+      box-shadow 600ms var(--shunel-art-ease-fluid),
+      filter var(--shunel-dur-fade) var(--shunel-art-ease-fluid),
+      border-radius var(--shunel-dur-fade) var(--shunel-art-ease-fluid);
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    #fullPlayerThumbnail:hover {
+      --shunel-art-gesture-scale: 1.02;
+    }
+  }
+
+  #fullPlayerThumbnail:active {
+    --shunel-art-gesture-scale: 0.98;
+  }
+
+  /* Contenedor FullPlayer y Fondo Ambiental Dinámico */
+  #fullPlayer {
+    isolation: isolate;
+  }
+
+  #fullPlayer::before {
+    content: "";
+    position: fixed;
+    inset: -8%;
+    z-index: 0;
+    pointer-events: none;
+    background-color: var(--shunel-art-surface-base);
+    background-image: var(--shunel-artwork);
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    filter:
+      blur(var(--shunel-backdrop-blur))
+      saturate(var(--shunel-backdrop-saturate))
+      brightness(var(--shunel-backdrop-brightness));
+    opacity: var(--shunel-backdrop-opacity);
+    transform: translate3d(var(--shunel-backdrop-tx), var(--shunel-backdrop-ty), 0) scale(var(--shunel-backdrop-scale));
+    transform-origin: center center;
+    transition:
+      opacity var(--shunel-dur-backdrop) var(--shunel-art-ease-fluid),
+      filter var(--shunel-dur-backdrop) var(--shunel-art-ease-fluid),
+      transform var(--shunel-dur-backdrop) var(--shunel-art-ease-fluid);
+  }
+
+  /* Viñeta de contraste para legibilidad garantizada */
   #fullPlayer::after {
-    background: rgba(0, 0, 0, 0.85) !important;
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background: var(--shunel-vignette-radial), var(--shunel-vignette-linear);
+  }
+
+  /* Eleva contenido normal de #fullPlayer sin pisar elementos fixed/sticky explícitos */
+  #fullPlayer > :not([data-shunel-unlayered]) {
+    position: relative;
+    z-index: 1;
   }
 }
 
-/* // Menos transparencia (ajuste de iOS): sin portada desenfocada */
-@media (prefers-reduced-transparency: reduce) {
-  #fullPlayer::before { display: none; }
+@layer shunel.art-states {
+  /* Estados de reproducción unificados */
+  #fullPlayer.is-playing #fullPlayerThumbnail,
+  [data-shunel-player-state="playing"] #fullPlayerThumbnail,
+  body.is-playing #fullPlayerThumbnail {
+    filter: brightness(1) saturate(1.04);
+    box-shadow:
+      0 30px 64px -14px var(--shunel-artwork-shadow-deep),
+      0 12px 36px -4px var(--shunel-artwork-glow-color),
+      inset 0 1.5px 1px var(--shunel-artwork-inner-strong),
+      0 0 0 1px var(--shunel-artwork-border);
+  }
+
+  #fullPlayer.is-paused #fullPlayerThumbnail,
+  [data-shunel-player-state="paused"] #fullPlayerThumbnail {
+    filter: brightness(0.88) saturate(0.9);
+    box-shadow:
+      0 12px 26px -8px var(--shunel-artwork-shadow-color),
+      0 0 0 1px var(--shunel-artwork-border);
+  }
+
+  /* Ciclo de vida de carga */
+  .shunel-artwork-loading {
+    opacity: 0.62;
+    filter: blur(5px);
+    --shunel-art-scale: 0.985;
+    animation: shunel-artwork-pulse 1.6s infinite ease-in-out;
+  }
+
+  .shunel-artwork-ready {
+    opacity: 1;
+    filter: blur(0);
+    --shunel-art-scale: 1;
+    animation: none;
+  }
+
+  .shunel-artwork-error,
+  img[data-shunel-artwork][src=""],
+  img[data-shunel-artwork]:not([src]) {
+    opacity: 0.92;
+    --shunel-art-scale: 1;
+    background-image: var(--shunel-artwork-bg-fallback);
+    box-shadow: inset 0 0 0 1px var(--shunel-artwork-border);
+  }
 }
 
-/* // Navegadores sin color-mix(): brillo neutro */
-@supports not (color: color-mix(in srgb, red 50%, transparent)) {
-  :root { --shunel-artwork-glow-color: rgba(255, 255, 255, 0.12); }
+@layer shunel.art-a11y {
+  @keyframes shunel-artwork-pulse {
+    0%, 100% {
+      opacity: 0.54;
+    }
+    50% {
+      opacity: 0.78;
+    }
+  }
+
+  /* Foco visible accesible en controles interactivos */
+  #currentThumbnail:focus-visible,
+  #fullPlayerThumbnail:focus-visible,
+  [data-shunel-artwork][tabindex]:focus-visible {
+    outline: 2px solid #ffffff;
+    outline-offset: 3px;
+  }
+
+  /* Altura reducida (iPhone SE o teclado abierto) */
+  @media (max-height: 620px) {
+    :root {
+      --shunel-thumb-full: clamp(132px, 28dvh, 200px);
+      --shunel-art-radius-full: 14px;
+    }
+  }
+
+  /* Modo horizontal en dispositivos compactos */
+  @media (orientation: landscape) and (max-height: 540px) {
+    :root {
+      --shunel-thumb-full: clamp(136px, 46dvh, 210px);
+      --shunel-backdrop-blur: 24px;
+    }
+  }
+
+  /* Tablets y Desktop */
+  @media (min-width: 768px) {
+    :root {
+      --shunel-thumb-full: clamp(270px, min(40vw, 44dvh), 420px);
+      --shunel-backdrop-opacity: 0.28;
+    }
+  }
+
+  /* Pantallas ultrawide */
+  @media (min-width: 1800px) {
+    :root {
+      --shunel-thumb-full: clamp(320px, min(32vw, 42dvh), 460px);
+    }
+  }
+
+  /* Pantallas muy angostas (usando vw real al no haber container-type en #fullPlayer) */
+  @media (max-width: 340px) {
+    #fullPlayerThumbnail {
+      width: min(82vw, 220px);
+      height: min(82vw, 220px);
+      border-radius: 16px;
+    }
+  }
+
+  /* Reducción de movimiento */
+  @media (prefers-reduced-motion: reduce) {
+    #currentThumbnail,
+    #fullPlayerThumbnail,
+    [data-shunel-artwork],
+    #fullPlayer::before,
+    #fullPlayer::after,
+    .shunel-artwork-loading,
+    .shunel-artwork-ready {
+      animation: none !important;
+      animation-play-state: paused !important;
+      transition: none !important;
+    }
+
+    #currentThumbnail,
+    #fullPlayerThumbnail,
+    [data-shunel-artwork] {
+      --shunel-art-tx: 0px;
+      --shunel-art-ty: 0px;
+      --shunel-art-scale: 1;
+      --shunel-art-gesture-scale: 1;
+      scale: 1;
+    }
+
+    #fullPlayer::before {
+      --shunel-backdrop-tx: 0px;
+      --shunel-backdrop-ty: 0px;
+      transform: translate3d(0, 0, 0) scale(1.08);
+    }
+  }
+
+  /* Reducción de transparencia (iOS / SO) */
+  @media (prefers-reduced-transparency: reduce) {
+    #fullPlayer::before {
+      display: none;
+    }
+
+    #fullPlayer::after {
+      background: var(--shunel-art-surface-base);
+    }
+  }
+
+  /* Mayor contraste */
+  @media (prefers-contrast: more) {
+    #currentThumbnail,
+    #fullPlayerThumbnail,
+    [data-shunel-artwork] {
+      box-shadow: 0 0 0 2px #ffffff;
+    }
+
+    #fullPlayer::after {
+      background: rgba(0, 0, 0, 0.88);
+    }
+  }
+
+  /* Modo de colores forzados (Windows High Contrast) */
+  @media (forced-colors: active) {
+    #currentThumbnail,
+    #fullPlayerThumbnail,
+    [data-shunel-artwork] {
+      border: 1px solid CanvasText;
+      box-shadow: none;
+    }
+
+    #fullPlayer::before {
+      display: none;
+    }
+  }
 }

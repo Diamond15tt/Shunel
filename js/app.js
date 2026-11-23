@@ -23,7 +23,7 @@ import {
   disableModPack
 } from "./mods.js";
 import { startRadio, getRadioState, stopRadio, playRadioTrack } from "./radio.js";
-import { getRecommendations } from "./recommendations.js";
+import { getRecommendations, resolveRecommendation } from "./recommendations.js";
 import { discoverTracks, discoverByMood } from "./discovery.js";
 import { askShunelAI } from "./ai.js";
 
@@ -67,6 +67,7 @@ let autoplayController = null;
 let aiMessages = [];
 let aiBusy = false;
 let radioTracks = [];
+let unresolvedToken = 0;
 
 const mediaSession = navigator.mediaSession || null;
 
@@ -613,8 +614,25 @@ function finishCurrent(reason) {
 }
 
 // // context: "user" (elegida a mano) | "queue" | "autoplay" | "previous" | "restore"
+async function playUnresolved(track, options) {
+  const token = ++unresolvedToken;
+  ui.toastMessage(`Buscando "${track.title}"...`);
+  try {
+    const resolved = await resolveRecommendation(track);
+    if (token !== unresolvedToken) return;
+    if (!resolved?.videoId) { ui.toastMessage("No encontramos esta canción en YouTube ahora mismo."); return; }
+    selectAndPlayTrack({ ...track, ...resolved, needsResolve: false }, options);
+  } catch (error) {
+    if (token === unresolvedToken) ui.toastMessage(error?.message || "No se pudo buscar la canción.");
+  }
+}
+
 function selectAndPlayTrack(inputTrack, options = {}) {
-  if (!inputTrack?.videoId && !inputTrack?.id) return;
+  if (!inputTrack?.videoId && !inputTrack?.id) {
+    if (inputTrack?.needsResolve && inputTrack.title) void playUnresolved(inputTrack, options);
+    return;
+  }
+  unresolvedToken += 1;
   const { context = "user", reason = "switch", resumeAt = 0 } = options || {};
   const original = normalizeTrack(inputTrack);
   const track = normalizeTrack(applyModToTrack(original));
@@ -694,7 +712,7 @@ function armWatchdog(token) {
 
 document.addEventListener("shunel:play-request", event => {
   const requested = event.detail?.track || event.detail;
-  if (requested?.videoId || requested?.id) {
+  if (requested?.videoId || requested?.id || (requested?.needsResolve && requested?.title)) {
     event.preventDefault();
     selectAndPlayTrack(requested, { context: event.detail?.context || "user" });
   } else if (requested?.title && requested?.artist) {
@@ -721,8 +739,13 @@ async function fetchAutoplayTracks(seed, limit = 5) {
   const controller = new AbortController();
   autoplayController = controller;
   let candidates = [];
+  const exclude = [...queue.getItems(), ...queue.getHistory().slice(-25)];
   try {
-    const recommended = await getRecommendations(normalizeTrack(seed), { signal: controller.signal, limit: 20 });
+    const recommended = await getRecommendations(normalizeTrack(seed), {
+      signal: controller.signal,
+      limit: 20,
+      exclude: exclude.map(item => item?.videoId).filter(Boolean)
+    });
     if (controller.signal.aborted) return [];
     candidates = (Array.isArray(recommended) ? recommended : [])
       .map((track, rank, list) => ({ track: normalizeTrack(track), source: "recs", rank, total: list.length }));
@@ -730,7 +753,6 @@ async function fetchAutoplayTracks(seed, limit = 5) {
     if (error?.name === "AbortError") return [];
     console.info("[Shunel] Recomendaciones no disponibles; usando biblioteca.", error?.message || error);
   }
-  const exclude = [...queue.getItems(), ...queue.getHistory().slice(-25)];
   // // Mezcla: recomendaciones primero, tu biblioteca como respaldo
   let ranked = brain.rankCandidates([...candidates, ...localCandidates()], seed, { limit, exclude });
   // // Sesión muy larga y todo filtrado: relajar y permitir repetidas viejas
@@ -1016,8 +1038,8 @@ function restoreSession() {
 
 /* =========================================================================
    // 17. BÚSQUEDA
-   // Sin búsqueda mientras escribes: cada búsqueda cuesta 100 unidades de
-   // cuota de YouTube Data API.
+   // Sin búsqueda mientras escribes: search.list tiene su propio cupo diario
+   // (100 llamadas por defecto) en YouTube Data API.
    ========================================================================= */
 
 function trackActions(track) {
@@ -1310,7 +1332,7 @@ function renderRadioTracks(tracks, artist = "Radio Shunel") {
   if (!root) return;
   root.replaceChildren();
   radioTracks = Array.isArray(tracks)
-    ? tracks.map(normalizeTrack).filter(track => track?.videoId && !brain.isBlocked(track.videoId))
+    ? tracks.map(normalizeTrack).filter(track => (track?.videoId && !brain.isBlocked(track.videoId)) || (!track?.videoId && track?.needsResolve))
     : [];
   const header = makeElement("div", "shunel-feature-actions");
   header.append(makeElement("p", "muted", radioTracks.length ? `${artist} · ${radioTracks.length} canciones` : "No hay canciones para mostrar."));
@@ -1379,13 +1401,23 @@ async function loadCurrentRecommendations() {
   const root = document.getElementById("shunelRadioResults");
   if (root) root.textContent = "Buscando canciones similares...";
   try {
-    const tracks = await getRecommendations(currentTrack, { signal: controller.signal, limit: 20 });
+    const tracks = await getRecommendations(currentTrack, {
+      signal: controller.signal,
+      limit: 20,
+      lazy: true,
+      exclude: queue.getHistory().slice(-25).map(item => item?.videoId).filter(Boolean)
+    });
     if (controller.signal.aborted) return;
-    // // Ordenadas por el cerebro (gusto + diversidad), no al azar
-    const candidates = tracks.map((track, rank, list) => ({ track: normalizeTrack(track), source: "recs", rank, total: list.length }));
+    // // Con videoId: ordenadas por el cerebro (gusto + diversidad). Sin videoId: se resuelven al tocarlas
+    const playable = tracks.filter(track => track.videoId);
+    const pending = tracks.filter(track => !track.videoId).map(normalizeTrack);
+    const candidates = playable.map((track, rank, list) => ({ track: normalizeTrack(track), source: "recs", rank, total: list.length }));
     const ranked = brain.rankCandidates(candidates, currentTrack, { limit: 15, explore: 0 });
-    renderRadioTracks(ranked.length ? ranked : tracks, "Recomendaciones");
-    if (!tracks.length) ui.toastMessage("No encontramos recomendaciones.");
+    renderRadioTracks([...(ranked.length ? ranked : playable), ...pending].slice(0, 20), "Recomendaciones");
+    if (!tracks.length) {
+      if (root) root.textContent = tracks.degraded ? "Las recomendaciones están limitadas por ahora. Inténtalo más tarde." : "No encontramos recomendaciones.";
+      ui.toastMessage(tracks.degraded ? "Recomendaciones limitadas por ahora." : "No encontramos recomendaciones.");
+    }
   } catch (error) {
     if (error.name !== "AbortError") {
       console.error("[Shunel] Recommendations:", error);

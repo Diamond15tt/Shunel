@@ -1,926 +1,909 @@
+/* ==========================================================================
+   SHUNEL — MOTION SYSTEM (v3.0)
+   Refined / Minimal / iOS-first — Arquitectura en @layer, a11y y GPU-aware
+   ========================================================================== */
 
-/* =========================================
-   SHUNEL — MOTION SYSTEM 2.0
-   Refined / Minimal / iOS-first
-   20 improvements
-========================================= */
+@layer shunel.motion-tokens, shunel.motion-base, shunel.motion-components, shunel.motion-states, shunel.motion-a11y;
 
-:root {
-  /* 01. Timing system unificado */
-  --motion-instant: 100ms;
-  --motion-fast: 160ms;
-  --motion-base: 230ms;
-  --motion-slow: 340ms;
-  --motion-screen: 400ms;
-
-  /* Easing */
-  --ease-standard: cubic-bezier(.2, 0, 0, 1);
-  --ease-enter: cubic-bezier(.16, 1, .3, 1);
-  --ease-exit: cubic-bezier(.4, 0, 1, 1);
-  --ease-emphasized: cubic-bezier(.22, 1, .36, 1);
-
-  /* Motion values */
-  --motion-distance-sm: 5px;
-  --motion-distance-md: 12px;
-  --motion-scale-press: .975;
-
-  --motion-silver: rgba(235, 235, 235, .9);
-}
-
-/* =========================================
-   02. GLOBAL INTERACTION BASE
-========================================= */
-
-button,
-a,
-[role="button"],
-.icon-button,
-.track-action,
-.text-button,
-.bottom-nav-item {
-  -webkit-tap-highlight-color: transparent;
-}
-
-button,
-a,
-[role="button"],
-input,
-textarea,
-select {
-  touch-action: manipulation;
-}
-
-button,
-a,
-[role="button"],
-.icon-button,
-.track-action,
-.text-button {
-  -webkit-user-select: none;
-  user-select: none;
-}
-
-button,
-a,
-[role="button"],
-.icon-button,
-.track-action,
-.text-button {
-  transition:
-    color var(--motion-fast) var(--ease-standard),
-    background-color var(--motion-fast) var(--ease-standard),
-    border-color var(--motion-fast) var(--ease-standard),
-    opacity var(--motion-fast) var(--ease-standard);
-}
-
-/* 03. Respuesta táctil más ligera */
-
-.play-button,
-.icon-button,
-.track-action,
-.control-button,
-.quick-card,
-.discover-card {
-  transition:
-    transform var(--motion-fast) var(--ease-emphasized),
-    opacity var(--motion-fast) ease,
-    background-color var(--motion-fast) ease,
-    color var(--motion-fast) ease;
-}
-
-.play-button:active,
-.icon-button:active,
-.track-action:active,
-.control-button:active,
-.quick-card:active,
-.discover-card:active {
-  transform: scale(var(--motion-scale-press));
-}
-
-.text-button:active {
-  opacity: .65;
-}
-
-/* Evita hover falso en pantallas táctiles */
-
-@media (hover: hover) and (pointer: fine) {
-  .play-button:hover,
-  .icon-button:hover,
-  .track-action:hover,
-  .control-button:hover {
-    color: #fff;
-  }
-}
-
-/* =========================================
-   04. BRAND REVEAL
-========================================= */
-
-.mobile-brand .brand-logo {
-  animation: brandAppear 620ms var(--ease-enter) both;
-  transform-origin: center;
-}
-
-@keyframes brandAppear {
-  from {
-    opacity: 0;
-    transform: translateY(4px) scale(.98);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-.mobile-brand:active .brand-logo {
-  opacity: .82;
-}
-
-/* =========================================
-   05. PAGE TRANSITIONS
-========================================= */
-
-.view {
-  will-change: auto;
-}
-
-.view.active {
-  animation: viewAppear var(--motion-slow) var(--ease-enter) both;
-}
-
-@keyframes viewAppear {
-  from {
-    opacity: 0;
-    transform: translateY(7px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* =========================================
-   06. NAVIGATION
-========================================= */
-
-.bottom-nav-item {
-  position: relative;
-  transition:
-    color var(--motion-fast) ease,
-    opacity var(--motion-fast) ease;
-}
-
-.bottom-nav-icon {
-  display: inline-flex;
-  transform-origin: center;
-  transition:
-    transform var(--motion-base) var(--ease-emphasized),
-    opacity var(--motion-fast) ease;
-}
-
-.bottom-nav-item.active {
-  color: #fff;
-}
-
-.bottom-nav-item.active .bottom-nav-icon {
-  animation: navActivate 230ms var(--ease-emphasized) both;
-}
-
-@keyframes navActivate {
-  0% {
-    transform: scale(.95);
-  }
-
-  65% {
-    transform: scale(1.045);
-  }
-
-  100% {
-    transform: scale(1);
-  }
-}
-
-.bottom-nav-item::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  bottom: -5px;
-  width: 3px;
-  height: 3px;
-  border-radius: 50%;
-  background: currentColor;
-  opacity: 0;
-  transform: translateX(-50%) scale(0);
-  transition:
-    opacity var(--motion-fast) ease,
-    transform var(--motion-base) var(--ease-enter);
-}
-
-.bottom-nav-item.active::after {
-  opacity: .85;
-  transform: translateX(-50%) scale(1);
-}
-
-/* =========================================
-   07. ICON TRANSITIONS
-========================================= */
-
-.play-button svg,
-.control-button svg,
-.icon-button svg,
-.track-action svg,
-.bottom-nav-icon svg {
-  transform-origin: center;
-  transition:
-    transform var(--motion-fast) var(--ease-emphasized),
-    opacity var(--motion-fast) ease,
-    fill var(--motion-fast) ease,
-    stroke var(--motion-fast) ease;
-}
-
-.play-button:active svg {
-  transform: scale(.9);
-}
-
-.icon-button:active svg,
-.track-action:active svg {
-  transform: scale(.94);
-}
-
-/* =========================================
-   08. PLAY / PAUSE STATE
-========================================= */
-
-.play-button svg {
-  transition:
-    transform 190ms var(--ease-emphasized),
-    opacity 140ms ease;
-}
-
-.play-button.is-playing svg {
-  transform: scale(1);
-}
-
-/* =========================================
-   09. PLAYER DOCK
-========================================= */
-
-.player-dock {
-  transition:
-    background-color var(--motion-base) ease,
-    border-color var(--motion-base) ease,
-    box-shadow var(--motion-base) ease;
-}
-
-.player-dock.is-playing {
-  border-color: rgba(255, 255, 255, .12);
-}
-
-.current-art,
-.full-player-art {
-  transform-origin: center;
-  transition:
-    transform 400ms var(--ease-emphasized),
-    filter 300ms ease;
-}
-
-.player-dock.is-playing .current-art {
-  filter: brightness(1.025);
-}
-
-.full-player.is-playing .full-player-art {
-  filter: brightness(1.035);
-}
-
-.current-title,
-.current-channel,
-.full-player-info {
-  transition:
-    opacity 180ms ease,
-    transform 220ms var(--ease-enter);
-}
-
-.song-changing .current-title,
-.song-changing .current-channel {
-  animation: trackInfoChange 260ms var(--ease-enter);
-}
-
-@keyframes trackInfoChange {
-  from {
-    opacity: .45;
-    transform: translateY(3px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* =========================================
-   10. EQUALIZER
-========================================= */
-
-.equalizer {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
-  width: 20px;
-  height: 18px;
-}
-
-.equalizer span {
-  display: block;
-  width: 2px;
-  height: 5px;
-  border-radius: 3px;
-  background: var(--motion-silver);
-  transform-origin: center bottom;
-}
-
-.is-playing .equalizer span {
-  animation: equalizerMotion 760ms ease-in-out infinite alternate;
-}
-
-.equalizer span:nth-child(2) {
-  animation-delay: 170ms;
-}
-
-.equalizer span:nth-child(3) {
-  animation-delay: 340ms;
-}
-
-@keyframes equalizerMotion {
-  from {
-    transform: scaleY(.5);
-    opacity: .6;
-  }
-
-  to {
-    transform: scaleY(1.5);
-    opacity: 1;
-  }
-}
-
-/* =========================================
-   11. PROGRESS AND RANGE
-========================================= */
-
-.progress-row input,
-.full-progress input,
-.player-extra input[type="range"] {
-  accent-color: #e5e5e5;
-  cursor: pointer;
-}
-
-.progress-row input,
-.full-progress input {
-  transition: filter var(--motion-fast) ease;
-}
-
-.progress-row input:active,
-.full-progress input:active,
-.player-extra input[type="range"]:active {
-  filter: drop-shadow(0 0 3px rgba(255, 255, 255, .2));
-}
-
-/* =========================================
-   12. FULL PLAYER
-========================================= */
-
-.full-player {
-  opacity: 0;
-  visibility: hidden;
-  transform: translateY(14px);
-  transition:
-    opacity 240ms ease,
-    transform 330ms var(--ease-enter),
-    visibility 330ms;
-  pointer-events: none;
-}
-
-.full-player.active {
-  opacity: 1;
-  visibility: visible;
-  transform: translateY(0);
-  pointer-events: auto;
-}
-
-.full-player-content {
-  animation: fullPlayerContent 380ms var(--ease-enter) both;
-}
-
-@keyframes fullPlayerContent {
-  from {
-    opacity: 0;
-    transform: translateY(7px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* =========================================
-   13. ARTWORK
-========================================= */
-
-.full-player-art {
-  transition:
-    transform 400ms var(--ease-emphasized),
-    filter 300ms ease;
-}
-
-.full-player.active .full-player-art {
-  animation: artworkAppear 420ms var(--ease-enter) both;
-}
-
-@keyframes artworkAppear {
-  from {
-    opacity: .8;
-    transform: scale(.98);
-  }
-
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-/* =========================================
-   14. TRACK LIST
-========================================= */
-
-.track-row {
-  transition:
-    background-color var(--motion-fast) ease,
-    border-color var(--motion-fast) ease,
-    transform var(--motion-fast) var(--ease-emphasized),
-    opacity var(--motion-fast) ease;
-}
-
-.track-row:active {
-  transform: scale(.995);
-}
-
-.track-art {
-  transform-origin: center;
-  transition:
-    transform 260ms var(--ease-emphasized),
-    filter 260ms ease;
-}
-
-.track-row:active .track-art {
-  transform: scale(.985);
-}
-
-.track-name,
-.track-channel {
-  transition: color var(--motion-fast) ease;
-}
-
-.track-row.is-playing .track-name {
-  color: #fff;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .track-row:hover .track-art {
-    transform: scale(1.025);
-  }
-}
-
-/* Entrada escalonada controlada */
-
-.track-list.is-entering .track-row {
-  animation: trackAppear 300ms var(--ease-enter) both;
-}
-
-.track-list.is-entering .track-row:nth-child(2) {
-  animation-delay: 20ms;
-}
-
-.track-list.is-entering .track-row:nth-child(3) {
-  animation-delay: 40ms;
-}
-
-.track-list.is-entering .track-row:nth-child(4) {
-  animation-delay: 60ms;
-}
-
-.track-list.is-entering .track-row:nth-child(5) {
-  animation-delay: 80ms;
-}
-
-.track-list.is-entering .track-row:nth-child(6) {
-  animation-delay: 100ms;
-}
-
-.track-list.is-entering .track-row:nth-child(7) {
-  animation-delay: 120ms;
-}
-
-.track-list.is-entering .track-row:nth-child(8) {
-  animation-delay: 140ms;
-}
-
-@keyframes trackAppear {
-  from {
-    opacity: 0;
-    transform: translateY(5px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* =========================================
-   15. FAVORITES
-========================================= */
-
-.is-favorite svg,
-.favorite-current.is-favorite svg {
-  fill: currentColor;
-  animation: favoriteOn 260ms var(--ease-emphasized);
-}
-
-@keyframes favoriteOn {
-  0% {
-    transform: scale(.88);
-  }
-
-  65% {
-    transform: scale(1.1);
-  }
-
-  100% {
-    transform: scale(1);
-  }
-}
-
-/* =========================================
-   16. SEARCH
-========================================= */
-
-.search-form {
-  transition:
-    border-color var(--motion-base) ease,
-    background-color var(--motion-base) ease,
-    box-shadow var(--motion-base) ease;
-}
-
-.search-form:focus-within {
-  border-color: rgba(230, 230, 230, .42);
-  box-shadow: 0 0 0 3px rgba(230, 230, 230, .045);
-}
-
-.search-form input {
-  transition: opacity var(--motion-fast) ease;
-}
-
-/* =========================================
-   17. QUEUE PANEL
-========================================= */
-
-.queue-panel {
-  opacity: 0;
-  visibility: hidden;
-  transform: translateY(10px);
-  transition:
-    opacity 210ms ease,
-    transform 280ms var(--ease-enter),
-    visibility 280ms;
-  pointer-events: none;
-}
-
-.queue-panel.open,
-.queue-panel.active {
-  opacity: 1;
-  visibility: visible;
-  transform: translateY(0);
-  pointer-events: auto;
-}
-
-.queue-item {
-  transition:
-    background-color var(--motion-fast) ease,
-    transform var(--motion-fast) var(--ease-emphasized);
-}
-
-.queue-item:active {
-  transform: scale(.995);
-}
-
-/* =========================================
-   18. TOASTS, EMPTY STATES AND SKELETONS
-========================================= */
-
-.toast {
-  transition:
-    opacity 200ms ease,
-    transform 240ms var(--ease-enter);
-}
-
-.toast.visible,
-.toast.show {
-  animation: toastAppear 230ms var(--ease-enter) both;
-}
-
-@keyframes toastAppear {
-  from {
-    opacity: 0;
-    transform: translateY(5px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.empty-state {
-  animation: emptyStateAppear 320ms var(--ease-enter) both;
-}
-
-@keyframes emptyStateAppear {
-  from {
-    opacity: 0;
-    transform: translateY(5px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.skeleton {
-  position: relative;
-  overflow: hidden;
-  background: #191919;
-  isolation: isolate;
-}
-
-.skeleton::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  transform: translateX(-100%);
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgba(255, 255, 255, .045),
-    transparent
-  );
-  animation: skeletonShimmer 1.9s ease-in-out infinite;
-}
-
-@keyframes skeletonShimmer {
-  to {
-    transform: translateX(100%);
-  }
-}
-
-/* =========================================
-   19. HOME, CARDS AND OVERLAYS
-========================================= */
-
-.home-greeting {
-  position: relative;
-  isolation: isolate;
-}
-
-.home-greeting::after {
-  content: "";
-  position: absolute;
-  z-index: -1;
-  top: -35px;
-  right: -40px;
-  width: 170px;
-  height: 170px;
-  border-radius: 50%;
-  background: radial-gradient(
-    circle,
-    rgba(220, 220, 220, .04),
-    transparent 70%
-  );
-  pointer-events: none;
-}
-
-.quick-card,
-.discover-card {
-  transition:
-    transform 200ms var(--ease-emphasized),
-    border-color 200ms ease,
-    background-color 200ms ease;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .quick-card:hover,
-  .discover-card:hover {
-    transform: translateY(-2px);
-    border-color: rgba(255, 255, 255, .15);
-  }
-}
-
-.modal,
-.overlay,
-.player-menu {
-  transition:
-    opacity 220ms ease,
-    visibility 220ms ease;
-}
-
-.modal.active,
-.overlay.active {
-  animation: overlayAppear 220ms ease both;
-}
-
-@keyframes overlayAppear {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
-}
-
-.modal-content,
-.overlay-content {
-  animation: modalContentAppear 280ms var(--ease-enter) both;
-}
-
-@keyframes modalContentAppear {
-  from {
-    opacity: 0;
-    transform: translateY(7px) scale(.995);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-/* =========================================
-   20. LYRICS, VISUALIZER AND ACCESSIBILITY
-========================================= */
-
-.player-lyrics,
-.lyrics-panel {
-  transition:
-    opacity 230ms ease,
-    transform 280ms var(--ease-enter);
-}
-
-.lyric-line {
-  opacity: .45;
-  transition:
-    opacity 190ms ease,
-    color 190ms ease,
-    transform 190ms var(--ease-emphasized);
-}
-
-.lyric-line.active {
-  opacity: 1;
-  color: #fff;
-  transform: scale(1.01);
-}
-
-.player-visualizer .bar,
-.visualizer-bar {
-  transform-origin: center bottom;
-  animation: visualizerMotion 900ms ease-in-out infinite alternate;
-}
-
-.player-visualizer .bar:nth-child(2),
-.visualizer-bar:nth-child(2) {
-  animation-delay: 150ms;
-}
-
-.player-visualizer .bar:nth-child(3),
-.visualizer-bar:nth-child(3) {
-  animation-delay: 300ms;
-}
-
-.player-visualizer .bar:nth-child(4),
-.visualizer-bar:nth-child(4) {
-  animation-delay: 450ms;
-}
-
-@keyframes visualizerMotion {
-  from {
-    transform: scaleY(.4);
-    opacity: .6;
-  }
-
-  to {
-    transform: scaleY(1);
-    opacity: 1;
-  }
-}
-
-.sleep-timer {
-  transition:
-    opacity 200ms ease,
-    transform 240ms var(--ease-enter);
-}
-
-.sleep-timer.active {
-  animation: timerAppear 260ms var(--ease-enter) both;
-}
-
-@keyframes timerAppear {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* Focus visible */
-
-button:focus-visible,
-a:focus-visible,
-[role="button"]:focus-visible,
-input:focus-visible,
-textarea:focus-visible,
-select:focus-visible {
-  outline: 2px solid rgba(235, 235, 235, .75);
-  outline-offset: 3px;
-}
-
-/* Responsive */
-
-@media (max-width: 650px) {
+@layer shunel.motion-tokens {
   :root {
-    --motion-base: 210ms;
-    --motion-slow: 310ms;
-    --motion-screen: 370ms;
+    /* Duraciones unificadas */
+    --motion-instant: 100ms;
+    --motion-fast: 160ms;
+    --motion-base: 230ms;
+    --motion-slow: 320ms;
+    --motion-screen: 380ms;
+
+    /* Curvas de aceleración */
+    --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+    --ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+    --ease-emphasized: cubic-bezier(0.22, 1, 0.36, 1);
+
+    /* Distancias y escalas */
+    --motion-distance-sm: 5px;
+    --motion-distance-md: 12px;
+    --motion-scale-press: 0.975;
+    --motion-scale-hover: 1.025;
+    --motion-scale-icon-press: 0.92;
+    --motion-stagger-step: 20ms;
+    --motion-stagger-max: 160ms;
+
+    /* Colores y superficies de movimiento */
+    --motion-silver: rgba(235, 235, 235, 0.9);
+    --motion-white: #ffffff;
+    --motion-range-accent: #e5e5e5;
+    --motion-skeleton-bg: #191919;
+    --motion-skeleton-shine: rgba(255, 255, 255, 0.045);
+    --motion-hover-surface: rgba(255, 255, 255, 0.055);
+    --motion-row-hover: rgba(255, 255, 255, 0.025);
+    --motion-card-border-hover: rgba(255, 255, 255, 0.15);
+    --motion-dock-playing-border: rgba(255, 255, 255, 0.12);
+    --motion-search-focus-border: rgba(230, 230, 230, 0.45);
+    --motion-search-focus-ring: rgba(230, 230, 230, 0.09);
+    --motion-focus-outline: rgba(248, 250, 252, 0.85);
+    --motion-greeting-glow: rgba(220, 220, 220, 0.04);
+
+    /* Variables de transformación compositable (evitan colisiones) */
+    --motion-tx: 0px;
+    --motion-ty: 0px;
+    --motion-scale: 1;
+    --motion-press-scale: 1;
+    --motion-hover-scale: 1;
+    --motion-state-scale: 1;
+  }
+}
+
+@layer shunel.motion-base {
+  :where(button, a, [role="button"], .icon-button, .track-action, .text-button, .bottom-nav-item) {
+    -webkit-tap-highlight-color: transparent;
   }
 
+  :where(
+    button,
+    a,
+    [role="button"],
+    input,
+    textarea,
+    select,
+    .icon-button,
+    .track-action,
+    .text-button,
+    .bottom-nav-item,
+    .play-button,
+    .control-button,
+    .quick-card,
+    .discover-card
+  ) {
+    touch-action: manipulation;
+  }
+
+  :where(button, .icon-button, .track-action, .text-button, .play-button, .control-button) {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  :where(button, a, [role="button"], .icon-button, .track-action, .text-button) {
+    transition:
+      color var(--motion-fast) var(--ease-standard),
+      background-color var(--motion-fast) var(--ease-standard),
+      border-color var(--motion-fast) var(--ease-standard),
+      opacity var(--motion-fast) var(--ease-standard);
+  }
+}
+
+@layer shunel.motion-components {
+  /* Interacción táctil unificada */
+  :where(.play-button, .icon-button, .track-action, .control-button, .quick-card, .discover-card, .bottom-nav-item) {
+    transform: translate3d(var(--motion-tx), var(--motion-ty), 0);
+    scale: calc(var(--motion-scale) * var(--motion-press-scale) * var(--motion-hover-scale) * var(--motion-state-scale));
+    transition:
+      scale var(--motion-fast) var(--ease-emphasized),
+      transform var(--motion-fast) var(--ease-emphasized),
+      opacity var(--motion-fast) var(--ease-standard),
+      background-color var(--motion-fast) var(--ease-standard),
+      border-color var(--motion-fast) var(--ease-standard),
+      color var(--motion-fast) var(--ease-standard);
+  }
+
+  :where(.play-button, .icon-button, .track-action, .control-button, .quick-card, .discover-card, .bottom-nav-item):active {
+    --motion-press-scale: var(--motion-scale-press);
+  }
+
+  .text-button:active {
+    opacity: 0.65;
+  }
+
+  /* Iconos SVG */
+  :where(.play-button svg, .control-button svg, .icon-button svg, .track-action svg, .bottom-nav-icon svg) {
+    transform-origin: center;
+    transition:
+      transform var(--motion-fast) var(--ease-emphasized),
+      opacity var(--motion-fast) var(--ease-standard),
+      fill var(--motion-fast) var(--ease-standard),
+      stroke var(--motion-fast) var(--ease-standard);
+  }
+
+  .play-button:active svg {
+    transform: scale(var(--motion-scale-icon-press));
+  }
+
+  :where(.icon-button, .track-action):active svg {
+    transform: scale(0.94);
+  }
+
+  .play-button.is-playing svg {
+    transform: scale(1);
+  }
+
+  /* Brand reveal */
+  .mobile-brand .brand-logo {
+    transform-origin: center;
+    animation: brandAppear var(--motion-screen) var(--ease-enter) both;
+  }
+
+  .mobile-brand:active .brand-logo {
+    opacity: 0.82;
+  }
+
+  /* Vistas */
   .view.active {
-    animation-duration: 300ms;
+    animation: viewAppear var(--motion-slow) var(--ease-enter) both;
   }
-}
 
-@media (max-width: 380px) {
-  :root {
-    --motion-distance-md: 9px;
+  /* Navegación inferior */
+  .bottom-nav-item {
+    position: relative;
+  }
+
+  .bottom-nav-icon {
+    display: inline-flex;
+    transform-origin: center;
+    transition:
+      transform var(--motion-base) var(--ease-emphasized),
+      opacity var(--motion-fast) var(--ease-standard);
+  }
+
+  .bottom-nav-item.active,
+  .bottom-nav-item.is-active {
+    color: var(--motion-white);
+  }
+
+  .bottom-nav-item.active .bottom-nav-icon,
+  .bottom-nav-item.is-active .bottom-nav-icon {
+    animation: navActivate var(--motion-base) var(--ease-emphasized) both;
+  }
+
+  .bottom-nav-item::after {
+    content: "";
+    position: absolute;
+    inset-inline-start: 50%;
+    inset-block-end: -5px;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: currentColor;
+    opacity: 0;
+    transform: translate3d(-50%, 0, 0) scale(0);
+    transition:
+      opacity var(--motion-fast) var(--ease-standard),
+      transform var(--motion-base) var(--ease-enter);
+  }
+
+  .bottom-nav-item.active::after,
+  .bottom-nav-item.is-active::after {
+    opacity: 0.85;
+    transform: translate3d(-50%, 0, 0) scale(1);
+  }
+
+  /* Player Dock y metadatos */
+  .player-dock {
+    transition:
+      background-color var(--motion-base) var(--ease-standard),
+      border-color var(--motion-base) var(--ease-standard),
+      box-shadow var(--motion-base) var(--ease-standard);
+  }
+
+  .player-dock.is-playing {
+    border-color: var(--motion-dock-playing-border);
+  }
+
+  :where(.current-art, .full-player-art) {
+    transform-origin: center;
+    transition:
+      transform var(--motion-screen) var(--ease-emphasized),
+      filter var(--motion-slow) var(--ease-standard);
+  }
+
+  .player-dock.is-playing .current-art {
+    filter: brightness(1.03);
+  }
+
+  .full-player.is-playing .full-player-art {
+    filter: brightness(1.04);
+  }
+
+  :where(.current-title, .current-channel, .full-player-info) {
+    transition:
+      opacity var(--motion-fast) var(--ease-standard),
+      transform var(--motion-base) var(--ease-enter);
+  }
+
+  :where(.song-changing .current-title, .song-changing .current-channel, .song-changing .full-player-info) {
+    animation: trackInfoChange var(--motion-base) var(--ease-enter);
+  }
+
+  /* Ecualizador */
+  .equalizer {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    width: 14px;
+    height: 16px;
+  }
+
+  .equalizer span {
+    display: block;
+    width: 2px;
+    height: 10px;
+    border-radius: 999px;
+    background: var(--motion-silver);
+    transform-origin: center bottom;
+    transform: scaleY(0.45);
+    opacity: 0.65;
+  }
+
+  .is-playing .equalizer span {
+    animation: equalizerMotion 760ms var(--ease-standard) infinite alternate;
+  }
+
+  .is-paused .equalizer span {
+    animation-play-state: paused;
+  }
+
+  .equalizer span:nth-child(2) {
+    animation-delay: 170ms;
+  }
+
+  .equalizer span:nth-child(3) {
+    animation-delay: 340ms;
+  }
+
+  /* Controles de progreso y rango */
+  :where(.progress-row input, .full-progress input, .player-extra input[type="range"]) {
+    accent-color: var(--motion-range-accent);
+    cursor: pointer;
+    transition: filter var(--motion-fast) var(--ease-standard);
+  }
+
+  :where(.progress-row input, .full-progress input, .player-extra input[type="range"]):is(:hover, :focus-visible, :active) {
+    filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.25));
+  }
+
+  /* Full Player */
+  .full-player {
+    opacity: 0;
+    visibility: hidden;
+    transform: translate3d(0, var(--motion-distance-md), 0);
+    pointer-events: none;
+    transition:
+      opacity var(--motion-base) var(--ease-standard),
+      transform var(--motion-slow) var(--ease-enter),
+      visibility 0s linear var(--motion-slow);
+  }
+
+  .full-player.active,
+  .full-player.is-open {
+    opacity: 1;
+    visibility: visible;
+    transform: translate3d(0, 0, 0);
+    pointer-events: auto;
+    transition:
+      opacity var(--motion-base) var(--ease-standard),
+      transform var(--motion-slow) var(--ease-enter),
+      visibility 0s linear 0s;
+  }
+
+  :where(.full-player.active, .full-player.is-open) .full-player-content {
+    animation: fullPlayerContent var(--motion-screen) var(--ease-enter) both;
+  }
+
+  :where(.full-player.active, .full-player.is-open) .full-player-art {
+    animation: artworkAppear var(--motion-screen) var(--ease-enter) both;
+  }
+
+  /* Lista de pistas */
+  .track-row {
+    transition:
+      background-color var(--motion-fast) var(--ease-standard),
+      border-color var(--motion-fast) var(--ease-standard),
+      opacity var(--motion-fast) var(--ease-standard);
+  }
+
+  .track-art {
+    transform-origin: center;
+    transition:
+      transform var(--motion-base) var(--ease-emphasized),
+      filter var(--motion-base) var(--ease-standard);
+  }
+
+  .track-row:active .track-art {
+    transform: scale(0.985);
+  }
+
+  :where(.track-name, .track-channel) {
+    transition: color var(--motion-fast) var(--ease-standard);
+  }
+
+  .track-row.is-playing :where(.track-name, .track-channel) {
+    color: var(--motion-white);
+  }
+
+  .track-list.is-entering .track-row {
+    --stagger-index: 0;
+    animation: trackAppear var(--motion-slow) var(--ease-enter) both;
+    animation-delay: min(calc(var(--stagger-index) * var(--motion-stagger-step)), var(--motion-stagger-max));
+  }
+
+  .track-list.is-entering .track-row:nth-child(2) { --stagger-index: 1; }
+  .track-list.is-entering .track-row:nth-child(3) { --stagger-index: 2; }
+  .track-list.is-entering .track-row:nth-child(4) { --stagger-index: 3; }
+  .track-list.is-entering .track-row:nth-child(5) { --stagger-index: 4; }
+  .track-list.is-entering .track-row:nth-child(6) { --stagger-index: 5; }
+  .track-list.is-entering .track-row:nth-child(7) { --stagger-index: 6; }
+  .track-list.is-entering .track-row:nth-child(8) { --stagger-index: 7; }
+
+  /* Favoritos */
+  :where(.is-favorite, .favorite-current.is-favorite) svg[data-favorite-fill="true"] {
+    fill: currentColor;
+  }
+
+  :where(.is-favorite, .favorite-current.is-favorite).is-animating svg {
+    animation: favoriteOn var(--motion-base) var(--ease-emphasized);
+  }
+
+  /* Búsqueda */
+  .search-form {
+    transition:
+      border-color var(--motion-base) var(--ease-standard),
+      background-color var(--motion-base) var(--ease-standard),
+      box-shadow var(--motion-base) var(--ease-standard);
+  }
+
+  .search-form:focus-within {
+    border-color: var(--motion-search-focus-border);
+    box-shadow: 0 0 0 3px var(--motion-search-focus-ring);
+  }
+
+  .search-form input {
+    transition: opacity var(--motion-fast) var(--ease-standard);
+  }
+
+  /* Panel de cola */
+  .queue-panel {
+    opacity: 0;
+    visibility: hidden;
+    transform: translate3d(0, 10px, 0);
+    pointer-events: none;
+    transition:
+      opacity var(--motion-base) var(--ease-standard),
+      transform var(--motion-slow) var(--ease-enter),
+      visibility 0s linear var(--motion-slow);
+  }
+
+  :where(.queue-panel.open, .queue-panel.active, .queue-panel.is-open) {
+    opacity: 1;
+    visibility: visible;
+    transform: translate3d(0, 0, 0);
+    pointer-events: auto;
+    transition:
+      opacity var(--motion-base) var(--ease-standard),
+      transform var(--motion-slow) var(--ease-enter),
+      visibility 0s linear 0s;
+  }
+
+  .queue-item {
+    transition:
+      background-color var(--motion-fast) var(--ease-standard),
+      transform var(--motion-fast) var(--ease-emphasized);
+  }
+
+  .queue-item:active {
+    transform: scale(0.995);
+  }
+
+  /* Toasts, estados vacíos y skeletons */
+  .toast {
+    opacity: 0;
+    transform: translate3d(0, var(--motion-distance-sm), 0);
+    pointer-events: none;
+    transition:
+      opacity var(--motion-base) var(--ease-standard),
+      transform var(--motion-base) var(--ease-enter);
+  }
+
+  :where(.toast.visible, .toast.show, .toast.is-visible) {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+    pointer-events: auto;
+    animation: toastAppear var(--motion-base) var(--ease-enter) both;
+  }
+
+  .empty-state {
+    animation: emptyStateAppear var(--motion-slow) var(--ease-enter) both;
+  }
+
+  .skeleton {
+    position: relative;
+    overflow: hidden;
+    background: var(--motion-skeleton-bg);
+    isolation: isolate;
+  }
+
+  .skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translate3d(-100%, 0, 0);
+    background: linear-gradient(90deg, transparent, var(--motion-skeleton-shine), transparent);
+    animation: skeletonShimmer 1.9s var(--ease-standard) infinite;
+  }
+
+  /* Home, tarjetas, modales y menús */
+  .home-greeting {
+    position: relative;
+    overflow: clip;
+    isolation: isolate;
   }
 
   .home-greeting::after {
-    width: 125px;
-    height: 125px;
+    content: "";
+    position: absolute;
+    z-index: -1;
+    inset-block-start: -35px;
+    inset-inline-end: -40px;
+    width: 170px;
+    height: 170px;
+    border-radius: 50%;
+    background: radial-gradient(circle, var(--motion-greeting-glow), transparent 70%);
+    pointer-events: none;
+  }
+
+  :where(.quick-card, .discover-card) {
+    transition:
+      scale var(--motion-fast) var(--ease-emphasized),
+      transform var(--motion-fast) var(--ease-emphasized),
+      border-color var(--motion-fast) var(--ease-standard),
+      background-color var(--motion-fast) var(--ease-standard);
+  }
+
+  :where(.modal, .overlay, .player-menu) {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition:
+      opacity var(--motion-base) var(--ease-standard),
+      visibility 0s linear var(--motion-base);
+  }
+
+  :where(.modal.active, .overlay.active, .player-menu.active, .player-menu.is-open) {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transition:
+      opacity var(--motion-base) var(--ease-standard),
+      visibility 0s linear 0s;
+    animation: overlayAppear var(--motion-base) var(--ease-standard) both;
+  }
+
+  :where(.modal.active, .overlay.active) :where(.modal-content, .overlay-content) {
+    animation: modalContentAppear var(--motion-slow) var(--ease-enter) both;
+  }
+
+  /* Letras, visualizador y temporizador */
+  :where(.player-lyrics, .lyrics-panel) {
+    transition:
+      opacity var(--motion-base) var(--ease-standard),
+      transform var(--motion-slow) var(--ease-enter);
+  }
+
+  .lyric-line {
+    opacity: 0.6;
+    transition:
+      opacity var(--motion-fast) var(--ease-standard),
+      color var(--motion-fast) var(--ease-standard);
+  }
+
+  .lyric-line.active {
+    opacity: 1;
+    color: var(--motion-white);
+  }
+
+  :where(.player-visualizer .bar, .visualizer-bar) {
+    transform-origin: center bottom;
+    transform: scaleY(0.4);
+    opacity: 0.6;
+  }
+
+  .is-playing :where(.player-visualizer .bar, .visualizer-bar) {
+    animation: visualizerMotion 900ms var(--ease-standard) infinite alternate;
+  }
+
+  .is-paused :where(.player-visualizer .bar, .visualizer-bar) {
+    animation-play-state: paused;
+  }
+
+  :where(.player-visualizer .bar, .visualizer-bar):nth-child(2) { animation-delay: 150ms; }
+  :where(.player-visualizer .bar, .visualizer-bar):nth-child(3) { animation-delay: 300ms; }
+  :where(.player-visualizer .bar, .visualizer-bar):nth-child(4) { animation-delay: 450ms; }
+
+  .sleep-timer {
+    transition:
+      opacity var(--motion-fast) var(--ease-standard),
+      transform var(--motion-base) var(--ease-enter);
+  }
+
+  .sleep-timer.active {
+    animation: timerAppear var(--motion-base) var(--ease-enter) both;
   }
 }
 
-/* Hover solo en dispositivos con puntero */
-
-@media (hover: hover) and (pointer: fine) {
-  .track-row:hover {
-    background-color: rgba(255, 255, 255, .025);
+@layer shunel.motion-states {
+  /* Estados deshabilitados */
+  :where(
+    button:disabled,
+    [aria-disabled="true"],
+    .is-disabled,
+    .icon-button.is-disabled,
+    .track-action.is-disabled,
+    .play-button.is-disabled,
+    .control-button.is-disabled
+  ) {
+    opacity: 0.45;
+    pointer-events: none;
+    --motion-press-scale: 1;
+    --motion-hover-scale: 1;
   }
 
-  .icon-button:hover,
-  .track-action:hover {
-    background-color: rgba(255, 255, 255, .055);
+  /* Interacción en dispositivos con puntero fino y hover */
+  @media (hover: hover) and (pointer: fine) {
+    :where(.play-button, .icon-button, .track-action, .control-button):hover {
+      color: var(--motion-white);
+    }
+
+    :where(.icon-button, .track-action):hover {
+      background-color: var(--motion-hover-surface);
+    }
+
+    .track-row:hover {
+      background-color: var(--motion-row-hover);
+    }
+
+    .track-row:hover .track-art {
+      transform: scale(var(--motion-scale-hover));
+    }
+
+    :where(.quick-card, .discover-card):hover {
+      --motion-ty: -2px;
+      border-color: var(--motion-card-border-hover);
+    }
+  }
+
+  /* Foco visible unificado */
+  :where(
+    button,
+    a,
+    [role="button"],
+    input,
+    textarea,
+    select,
+    .track-row[tabindex],
+    .queue-item[tabindex]
+  ):focus-visible {
+    outline: 2px solid var(--motion-focus-outline);
+    outline-offset: 3px;
+  }
+
+  :where(.play-button, .icon-button, .track-action, .control-button):focus-visible {
+    color: var(--motion-white);
+  }
+
+  :where(.quick-card, .discover-card):focus-visible {
+    --motion-ty: -2px;
+    border-color: var(--motion-card-border-hover);
   }
 }
 
-/* Respeta la preferencia del sistema */
-
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    scroll-behavior: auto !important;
-    animation-duration: .01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: .01ms !important;
+@layer shunel.motion-a11y {
+  @keyframes brandAppear {
+    from {
+      opacity: 0;
+      transform: translate3d(0, 4px, 0) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: translate3d(0, 0, 0) scale(1);
+    }
   }
 
-  .view.active,
-  .full-player-content,
-  .track-list.is-entering .track-row,
-  .full-player.active .full-player-art {
-    animation: none !important;
+  @keyframes viewAppear {
+    from {
+      opacity: 0;
+      transform: translate3d(0, var(--motion-distance-sm), 0);
+    }
+    to {
+      opacity: 1;
+      transform: translate3d(0, 0, 0);
+    }
   }
 
-  .current-art,
-  .full-player-art,
-  .track-art,
-  .bottom-nav-icon {
-    transform: none !important;
+  @keyframes navActivate {
+    0% { transform: scale(0.95); }
+    65% { transform: scale(1.045); }
+    100% { transform: scale(1); }
+  }
+
+  @keyframes trackInfoChange {
+    from {
+      opacity: 0.45;
+      transform: translate3d(0, 3px, 0);
+    }
+    to {
+      opacity: 1;
+      transform: translate3d(0, 0, 0);
+    }
+  }
+
+  @keyframes equalizerMotion {
+    from {
+      transform: scaleY(0.45);
+      opacity: 0.65;
+    }
+    to {
+      transform: scaleY(1.35);
+      opacity: 1;
+    }
+  }
+
+  @keyframes fullPlayerContent {
+    from {
+      opacity: 0;
+      transform: translate3d(0, var(--motion-distance-sm), 0);
+    }
+    to {
+      opacity: 1;
+      transform: translate3d(0, 0, 0);
+    }
+  }
+
+  @keyframes artworkAppear {
+    from {
+      opacity: 0.82;
+      transform: scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  @keyframes trackAppear {
+    from {
+      opacity: 0;
+      transform: translate3d(0, var(--motion-distance-sm), 0);
+    }
+    to {
+      opacity: 1;
+      transform: translate3d(0, 0, 0);
+    }
+  }
+
+  @keyframes favoriteOn {
+    0% { transform: scale(0.88); }
+    65% { transform: scale(1.1); }
+    100% { transform: scale(1); }
+  }
+
+  @keyframes toastAppear {
+    from {
+      opacity: 0;
+      transform: translate3d(0, var(--motion-distance-sm), 0);
+    }
+    to {
+      opacity: 1;
+      transform: translate3d(0, 0, 0);
+    }
+  }
+
+  @keyframes emptyStateAppear {
+    from {
+      opacity: 0;
+      transform: translate3d(0, var(--motion-distance-sm), 0);
+    }
+    to {
+      opacity: 1;
+      transform: translate3d(0, 0, 0);
+    }
+  }
+
+  @keyframes skeletonShimmer {
+    to {
+      transform: translate3d(100%, 0, 0);
+    }
+  }
+
+  @keyframes overlayAppear {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes modalContentAppear {
+    from {
+      opacity: 0;
+      transform: translate3d(0, var(--motion-distance-sm), 0) scale(0.995);
+    }
+    to {
+      opacity: 1;
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+  }
+
+  @keyframes visualizerMotion {
+    from {
+      transform: scaleY(0.4);
+      opacity: 0.6;
+    }
+    to {
+      transform: scaleY(1);
+      opacity: 1;
+    }
+  }
+
+  @keyframes timerAppear {
+    from {
+      opacity: 0;
+      transform: translate3d(0, 4px, 0);
+    }
+    to {
+      opacity: 1;
+      transform: translate3d(0, 0, 0);
+    }
+  }
+
+  /* Responsive */
+  @media (max-width: 650px) {
+    :root {
+      --motion-base: 210ms;
+      --motion-slow: 300ms;
+      --motion-screen: 350ms;
+      --motion-distance-md: 10px;
+    }
+  }
+
+  @media (max-width: 380px) {
+    :root {
+      --motion-distance-sm: 4px;
+      --motion-distance-md: 8px;
+    }
+
+    .home-greeting::after {
+      width: 120px;
+      height: 120px;
+      inset-block-start: -24px;
+      inset-inline-end: -28px;
+    }
+  }
+
+  /* Mayor contraste */
+  @media (prefers-contrast: more) {
+    :root {
+      --motion-focus-outline: #ffffff;
+      --motion-card-border-hover: rgba(255, 255, 255, 0.55);
+      --motion-search-focus-border: rgba(255, 255, 255, 0.85);
+    }
+
+    .lyric-line {
+      opacity: 0.8;
+    }
+  }
+
+  /* Reducción de transparencia */
+  @media (prefers-reduced-transparency: reduce) {
+    .home-greeting::after,
+    .skeleton::after {
+      display: none;
+    }
+
+    :root {
+      --motion-hover-surface: rgba(255, 255, 255, 0.12);
+      --motion-row-hover: rgba(255, 255, 255, 0.08);
+    }
+  }
+
+  /* Colores forzados (Windows High Contrast) */
+  @media (forced-colors: active) {
+    .equalizer span,
+    :where(.player-visualizer .bar, .visualizer-bar) {
+      background: CanvasText;
+    }
+
+    .bottom-nav-item::after {
+      background: Highlight;
+    }
+  }
+
+  /* Reducción de movimiento */
+  @media (prefers-reduced-motion: reduce) {
+    :where(
+      button,
+      a,
+      [role="button"],
+      input,
+      textarea,
+      select,
+      .icon-button,
+      .track-action,
+      .text-button,
+      .bottom-nav-item,
+      .play-button,
+      .control-button,
+      .quick-card,
+      .discover-card,
+      .view,
+      .player-dock,
+      .current-art,
+      .full-player-art,
+      .current-title,
+      .current-channel,
+      .full-player-info,
+      .equalizer,
+      .equalizer span,
+      .progress-row input,
+      .full-progress input,
+      .player-extra input[type="range"],
+      .full-player,
+      .full-player-content,
+      .track-row,
+      .track-art,
+      .track-name,
+      .track-channel,
+      .search-form,
+      .search-form input,
+      .queue-panel,
+      .queue-item,
+      .toast,
+      .empty-state,
+      .skeleton,
+      .skeleton::after,
+      .modal,
+      .overlay,
+      .player-menu,
+      .modal-content,
+      .overlay-content,
+      .player-lyrics,
+      .lyrics-panel,
+      .lyric-line,
+      .player-visualizer .bar,
+      .visualizer-bar,
+      .sleep-timer,
+      .mobile-brand .brand-logo,
+      .bottom-nav-icon
+    ) {
+      animation: none !important;
+      animation-play-state: paused !important;
+      transition: none !important;
+      scroll-behavior: auto !important;
+      --motion-tx: 0px;
+      --motion-ty: 0px;
+      --motion-scale: 1;
+      --motion-press-scale: 1;
+      --motion-hover-scale: 1;
+      --motion-state-scale: 1;
+    }
+
+    :where(.current-art, .full-player-art, .track-art, .bottom-nav-icon, .play-button svg, .control-button svg, .icon-button svg, .track-action svg) {
+      transform: none !important;
+    }
   }
 }
