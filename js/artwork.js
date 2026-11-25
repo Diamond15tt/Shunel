@@ -1,8 +1,8 @@
 
 /* =========================================================
-   SHUNEL — ARTWORK ENGINE v4.2
+   SHUNEL — ARTWORK ENGINE v5.0
    Frontend ES Module
-   Compatible con iOS Safari / PWA
+   iOS Safari / PWA
 
    Fuentes:
    - Mods del usuario
@@ -16,14 +16,21 @@
    - ./metadata.js
    - ./mods.js
 
-   Exports:
+   API pública conservada:
    - applyArtwork
-   - loadArtwork
+   - cleanQueryTitle
    - preloadArtwork
+   - loadArtwork
+   - setArtworkPlaybackState
    - resetArtwork
    - destroyArtwork
    - initArtwork
-   - setArtworkPlaybackState
+   - getArtworkState
+
+   Nota:
+   Los cambios visuales que requieren CSS o HTML no se
+   simulan desde JavaScript. Este motor se encarga de la
+   lógica, las imágenes, las peticiones y el estado.
    ========================================================= */
 
 import { getTrackMetadata } from './metadata.js';
@@ -37,20 +44,29 @@ import {
    CONFIGURACIÓN
    ========================================================= */
 
-const VERSION = '4.2';
+const VERSION = '5.0';
 
 const FALLBACK_ARTWORK = '/assets/logo.png';
 
-const ARTIST_CACHE_KEY = 'shunel_artist_artwork_v4';
+const ARTIST_CACHE_KEY = 'shunel_artist_artwork_v5';
+
+const LEGACY_ARTIST_CACHE_KEY =
+  'shunel_artist_artwork_v4';
 
 const ARTIST_CACHE_TTL =
   10 * 24 * 60 * 60 * 1000;
 
 const ARTIST_CACHE_LIMIT = 90;
 
+const COLOR_CACHE_LIMIT = 100;
+
 const ARTWORK_TIMEOUT = 6500;
 
-const COLOR_TIMEOUT = 450;
+const METADATA_TIMEOUT = 8000;
+
+const COLOR_TIMEOUT = 900;
+
+const IMAGE_TIMEOUT = 6500;
 
 const ITUNES_ENDPOINT =
   'https://itunes.apple.com/search';
@@ -58,14 +74,57 @@ const ITUNES_ENDPOINT =
 const DEEZER_ENDPOINT =
   'https://proxy.cors.dev/https://api.deezer.com';
 
-const IMAGE_SOURCE_PRIORITY = {
+const IMAGE_SOURCE_PRIORITY = Object.freeze({
   mod: 100,
   'musicbrainz-cover-art-archive': 90,
   itunes: 80,
   artist: 60,
   'youtube-thumbnail': 20,
   fallback: 0
-};
+});
+
+const SOURCE_REGISTRY = Object.freeze({
+  mod: {
+    priority: 100,
+    label: 'Mod personalizado'
+  },
+
+  'musicbrainz-cover-art-archive': {
+    priority: 90,
+    label: 'MusicBrainz'
+  },
+
+  itunes: {
+    priority: 80,
+    label: 'iTunes'
+  },
+
+  artist: {
+    priority: 60,
+    label: 'Artista'
+  },
+
+  'youtube-thumbnail': {
+    priority: 20,
+    label: 'YouTube'
+  },
+
+  fallback: {
+    priority: 0,
+    label: 'Imagen predeterminada'
+  }
+});
+
+const RETRY_CONFIG = Object.freeze({
+  attempts: 2,
+  baseDelay: 350,
+  maxDelay: 1200
+});
+
+const CIRCUIT_CONFIG = Object.freeze({
+  failureThreshold: 3,
+  cooldown: 30000
+});
 
 /* =========================================================
    ESTADO
@@ -77,11 +136,15 @@ let activeArtwork = '';
 
 let activeArtworkSource = 'fallback';
 
+let activeAppliedPriority = -1;
+
 let activeRequestId = 0;
 
 let activeRequestKey = '';
 
 let activeController = null;
+
+let activeColorController = null;
 
 let activeColorKey = '';
 
@@ -97,16 +160,6 @@ let destroyed = false;
 
 let visualRafId = 0;
 
-let visualSyncPending = false;
-
-let activePointer = null;
-
-let pointerStartX = 0;
-
-let pointerStartY = 0;
-
-let pointerMoved = false;
-
 let gestureScale = 1;
 
 let songColorCache = new Map();
@@ -119,12 +172,34 @@ let preloadRequests = new Map();
 
 let imageListeners = new WeakMap();
 
+let pointerStates = new WeakMap();
+
 let boundEvents = [];
 
-let visualElements = new Set();
+let mutationObserver = null;
+
+let lastArtworkUpdate = 0;
+
+let lastColorUpdate = 0;
+
+let activeLoadStartedAt = 0;
+
+let metrics = {
+  requests: 0,
+  successful: 0,
+  failed: 0,
+  cancelled: 0,
+  cacheHits: 0,
+  imageFailures: 0,
+  sourceUsage: {},
+  lastDuration: 0,
+  averageDuration: 0
+};
+
+const circuitBreakers = new Map();
 
 /* =========================================================
-   UTILIDADES
+   UTILIDADES GENERALES
    ========================================================= */
 
 function clean(value, max = 220) {
@@ -173,25 +248,98 @@ function isObject(value) {
   );
 }
 
+function now() {
+  return Date.now();
+}
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function isBrowser() {
+  return (
+    typeof window !== 'undefined' &&
+    typeof document !== 'undefined'
+  );
+}
+
+/* =========================================================
+   VALIDACIÓN DE URLS
+   ========================================================= */
+
 function isValidImageUrl(value) {
-  if (typeof value !== 'string' || !value.trim()) {
+  if (
+    typeof value !== 'string' ||
+    !value.trim() ||
+    !isBrowser()
+  ) {
     return false;
   }
 
   try {
-    const url = new URL(value, location.origin);
-
-    return (
-      url.protocol === 'https:' ||
-      url.origin === location.origin
+    const url = new URL(
+      value.trim(),
+      window.location.origin
     );
+
+    if (
+      url.username ||
+      url.password
+    ) {
+      return false;
+    }
+
+    if (
+      url.protocol !== 'https:' &&
+      url.origin !== window.location.origin
+    ) {
+      return false;
+    }
+
+    if (
+      url.protocol !== 'https:' &&
+      url.protocol !== 'http:'
+    ) {
+      return false;
+    }
+
+    if (
+      url.hostname === 'localhost' ||
+      url.hostname === '127.0.0.1' ||
+      url.hostname === '::1'
+    ) {
+      return url.origin === window.location.origin;
+    }
+
+    return true;
   } catch {
     return false;
   }
 }
 
-function createAbortError() {
-  const error = new Error('Artwork request cancelled.');
+function normalizeImageUrl(value) {
+  const url = clean(value, 2000);
+
+  if (!isValidImageUrl(url)) {
+    return '';
+  }
+
+  try {
+    return new URL(
+      url,
+      window.location.origin
+    ).href;
+  } catch {
+    return '';
+  }
+}
+
+/* =========================================================
+   ERRORES Y EVENTOS
+   ========================================================= */
+
+function createAbortError(message = 'Artwork request cancelled.') {
+  const error = new Error(message);
 
   error.name = 'AbortError';
 
@@ -206,19 +354,42 @@ function isAbortError(error) {
 }
 
 function safeDispatch(name, detail = {}) {
+  if (!isBrowser()) {
+    return;
+  }
+
   try {
     window.dispatchEvent(
       new CustomEvent(name, {
         detail: {
           version: VERSION,
+          timestamp: now(),
           ...detail
         }
       })
     );
   } catch {
-    // No interrumpir el reproductor.
+    // Un evento nunca debe interrumpir el reproductor.
   }
 }
+
+function reportError(error, context = '') {
+  if (isAbortError(error)) {
+    return;
+  }
+
+  safeDispatch(
+    'shunel:artwork-error',
+    {
+      context,
+      message: clean(error?.message || 'Unknown error', 300)
+    }
+  );
+}
+
+/* =========================================================
+   INFORMACIÓN DE PISTA
+   ========================================================= */
 
 function getArtist(track) {
   return clean(
@@ -262,10 +433,6 @@ export function cleanQueryTitle(rawTitle, rawArtist = '') {
 
   const artist = clean(rawArtist, 200);
 
-  /*
-   * Eliminar artista al principio.
-   */
-
   if (artist) {
     const variants = [
       artist,
@@ -295,12 +462,6 @@ export function cleanQueryTitle(rawTitle, rawArtist = '') {
     }
   }
 
-  /*
-   * Separar el álbum:
-   *
-   * TURiSTA (Visualizer) I DeBÍ TiRAR MáS FOToS
-   */
-
   const separator = title.match(
     /\s+(?:\||｜|I)\s+(?=[A-ZÁÉÍÓÚÑ0-9])/
   );
@@ -309,9 +470,7 @@ export function cleanQueryTitle(rawTitle, rawArtist = '') {
 
   if (separator) {
     album = title
-      .slice(
-        separator.index + separator[0].length
-      )
+      .slice(separator.index + separator[0].length)
       .trim();
 
     title = title
@@ -373,7 +532,7 @@ export function cleanQueryTitle(rawTitle, rawArtist = '') {
 }
 
 /* =========================================================
-   CLAVE DE PISTA
+   IDENTIDAD DE PISTA
    ========================================================= */
 
 function getTrackKey(track) {
@@ -382,35 +541,44 @@ function getTrackKey(track) {
     getArtist(track)
   );
 
-  return [
+  const parts = [
     normalizeText(identity.title),
     normalizeArtist(getArtist(track)),
     normalizeText(identity.album || getAlbum(track))
-  ].join('::');
+  ];
+
+  if (!parts.some(Boolean)) {
+    return '';
+  }
+
+  return parts.join('::');
 }
 
 /* =========================================================
    SELECTORES
    ========================================================= */
 
+const ARTWORK_SELECTOR = [
+  '#currentThumbnail',
+  '#fullPlayerThumbnail',
+  '.current-art',
+  '.full-player-art',
+  '.mini-player-art',
+  '[data-shunel-artwork]'
+].join(',');
+
 function getArtworkElements() {
+  if (!isBrowser()) {
+    return [];
+  }
+
   return [
-    ...document.querySelectorAll(
-      '#currentThumbnail, #fullPlayerThumbnail, [data-shunel-artwork]'
-    )
+    ...document.querySelectorAll(ARTWORK_SELECTOR)
   ];
 }
 
-function getPrimaryArtworkElement() {
-  return (
-    document.querySelector('#currentThumbnail') ||
-    document.querySelector('#fullPlayerThumbnail') ||
-    document.querySelector('[data-shunel-artwork]')
-  );
-}
-
 /* =========================================================
-   CACHE DE PORTADAS DE ARTISTA
+   CACHE DE ARTISTAS
    ========================================================= */
 
 function getStorage() {
@@ -429,7 +597,15 @@ function readArtistCache() {
   }
 
   try {
-    const raw = storage.getItem(ARTIST_CACHE_KEY);
+    let raw = storage.getItem(ARTIST_CACHE_KEY);
+
+    /*
+     * Migración de la caché v4.
+     */
+
+    if (!raw) {
+      raw = storage.getItem(LEGACY_ARTIST_CACHE_KEY);
+    }
 
     if (!raw) {
       return {};
@@ -441,7 +617,7 @@ function readArtistCache() {
       return {};
     }
 
-    const now = Date.now();
+    const timestamp = now();
     const valid = {};
 
     for (const [key, entry] of Object.entries(data)) {
@@ -449,12 +625,16 @@ function readArtistCache() {
         !isObject(entry) ||
         !isValidImageUrl(entry.url) ||
         !Number.isFinite(entry.expiresAt) ||
-        entry.expiresAt <= now
+        entry.expiresAt <= timestamp
       ) {
         continue;
       }
 
-      valid[key] = entry;
+      valid[key] = {
+        url: normalizeImageUrl(entry.url),
+        savedAt: Number(entry.savedAt) || timestamp,
+        expiresAt: entry.expiresAt
+      };
     }
 
     return valid;
@@ -486,7 +666,7 @@ function writeArtistCache(data) {
       )
     );
   } catch {
-    // La caché es opcional.
+    // La caché no es obligatoria.
   }
 }
 
@@ -498,34 +678,65 @@ function getCachedArtistArtwork(artist) {
   }
 
   const cache = readArtistCache();
+  const entry = cache[key];
 
-  return cache[key]?.url || '';
+  if (!entry) {
+    return '';
+  }
+
+  /*
+   * Actualizar la fecha para mantener los más usados.
+   */
+
+  entry.savedAt = now();
+
+  writeArtistCache(cache);
+
+  metrics.cacheHits++;
+
+  return entry.url;
 }
 
 function saveArtistArtwork(artist, url) {
   const key = normalizeArtist(artist);
+  const normalizedUrl = normalizeImageUrl(url);
 
-  if (!key || !isValidImageUrl(url)) {
+  if (!key || !normalizedUrl) {
     return;
   }
 
   const cache = readArtistCache();
 
   cache[key] = {
-    url,
-    savedAt: Date.now(),
-    expiresAt: Date.now() + ARTIST_CACHE_TTL
+    url: normalizedUrl,
+    savedAt: now(),
+    expiresAt: now() + ARTIST_CACHE_TTL
   };
 
   writeArtistCache(cache);
 }
 
 /* =========================================================
-   CACHÉ DE COLOR POR SESIÓN
+   CACHE LRU DE COLORES
    ========================================================= */
 
 function getCachedSongColor(key) {
-  return songColorCache.get(key) || null;
+  if (!key || !songColorCache.has(key)) {
+    return null;
+  }
+
+  const value = songColorCache.get(key);
+
+  /*
+   * Mover al final: política LRU real.
+   */
+
+  songColorCache.delete(key);
+  songColorCache.set(key, value);
+
+  metrics.cacheHits++;
+
+  return value;
 }
 
 function saveSongColor(key, color) {
@@ -533,12 +744,16 @@ function saveSongColor(key, color) {
     return;
   }
 
+  if (songColorCache.has(key)) {
+    songColorCache.delete(key);
+  }
+
   songColorCache.set(key, color);
 
-  if (songColorCache.size > 100) {
-    const first = songColorCache.keys().next().value;
+  while (songColorCache.size > COLOR_CACHE_LIMIT) {
+    const oldest = songColorCache.keys().next().value;
 
-    songColorCache.delete(first);
+    songColorCache.delete(oldest);
   }
 }
 
@@ -564,12 +779,14 @@ function getTrackMod(track) {
       1000
     );
 
-    if (!isValidImageUrl(artwork)) {
+    const normalizedUrl = normalizeImageUrl(artwork);
+
+    if (!normalizedUrl) {
       return null;
     }
 
     return {
-      artwork,
+      artwork: normalizedUrl,
       track: result
     };
   } catch {
@@ -578,13 +795,7 @@ function getTrackMod(track) {
 }
 
 function getExplicitModArtwork(track) {
-  const mod = getTrackMod(track);
-
-  if (!mod) {
-    return '';
-  }
-
-  return mod.artwork;
+  return getTrackMod(track)?.artwork || '';
 }
 
 function getArtistModArtwork(artist) {
@@ -609,20 +820,331 @@ function getArtistModArtwork(artist) {
       1000
     );
 
-    return isValidImageUrl(url) ? url : '';
+    return normalizeImageUrl(url);
   } catch {
     return '';
   }
 }
 
 /* =========================================================
-   CARGA DE IMAGEN
+   CANCELACIÓN SEGURA
+   ========================================================= */
+
+function raceWithSignal(promise, signal) {
+  if (!signal) {
+    return promise;
+  }
+
+  if (signal.aborted) {
+    return Promise.reject(createAbortError());
+  }
+
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      cleanup();
+      reject(createAbortError());
+    };
+
+    const cleanup = () => {
+      signal.removeEventListener('abort', onAbort);
+    };
+
+    signal.addEventListener(
+      'abort',
+      onAbort,
+      { once: true }
+    );
+
+    promise.then(
+      value => {
+        cleanup();
+        resolve(value);
+      },
+      error => {
+        cleanup();
+        reject(error);
+      }
+    );
+  });
+}
+
+/* =========================================================
+   PETICIONES COMPARTIDAS
+   ========================================================= */
+
+function getSharedRequest(map, key, factory, signal) {
+  if (!key) {
+    return Promise.resolve(null);
+  }
+
+  if (signal?.aborted) {
+    return Promise.reject(createAbortError());
+  }
+
+  let entry = map.get(key);
+
+  if (!entry) {
+    const controller = new AbortController();
+
+    entry = {
+      controller,
+      users: 0,
+      settled: false,
+      promise: null
+    };
+
+    const currentEntry = entry;
+
+    entry.promise = Promise.resolve()
+      .then(() => factory(controller.signal))
+      .finally(() => {
+        currentEntry.settled = true;
+
+        if (map.get(key) === currentEntry) {
+          map.delete(key);
+        }
+      });
+
+    map.set(key, entry);
+  }
+
+  entry.users++;
+
+  const currentEntry = entry;
+
+  return raceWithSignal(
+    entry.promise,
+    signal
+  ).finally(() => {
+    currentEntry.users = Math.max(
+      0,
+      currentEntry.users - 1
+    );
+
+    /*
+     * Si ningún consumidor necesita la petición,
+     * cancelar el trabajo compartido.
+     */
+
+    if (
+      currentEntry.users === 0 &&
+      !currentEntry.settled
+    ) {
+      currentEntry.controller.abort();
+    }
+  });
+}
+
+/* =========================================================
+   CIRCUIT BREAKER Y PETICIONES HTTP
+   ========================================================= */
+
+function getCircuitState(origin) {
+  if (!circuitBreakers.has(origin)) {
+    circuitBreakers.set(origin, {
+      failures: 0,
+      blockedUntil: 0
+    });
+  }
+
+  return circuitBreakers.get(origin);
+}
+
+function assertCircuitAvailable(origin) {
+  const state = getCircuitState(origin);
+
+  if (state.blockedUntil > now()) {
+    throw new Error(
+      'Artwork source temporarily unavailable.'
+    );
+  }
+
+  if (state.blockedUntil && state.blockedUntil <= now()) {
+    state.failures = 0;
+    state.blockedUntil = 0;
+  }
+}
+
+function registerCircuitSuccess(origin) {
+  const state = getCircuitState(origin);
+
+  state.failures = 0;
+  state.blockedUntil = 0;
+}
+
+function registerCircuitFailure(origin) {
+  const state = getCircuitState(origin);
+
+  state.failures++;
+
+  if (
+    state.failures >= CIRCUIT_CONFIG.failureThreshold
+  ) {
+    state.blockedUntil =
+      now() + CIRCUIT_CONFIG.cooldown;
+  }
+}
+
+function delay(ms, signal) {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(createAbortError());
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      cleanup();
+      resolve();
+    }, ms);
+
+    const onAbort = () => {
+      clearTimeout(timer);
+      cleanup();
+      reject(createAbortError());
+    };
+
+    const cleanup = () => {
+      signal?.removeEventListener('abort', onAbort);
+    };
+
+    signal?.addEventListener(
+      'abort',
+      onAbort,
+      { once: true }
+    );
+  });
+}
+
+async function fetchJSON(
+  url,
+  options = {}
+) {
+  const signal = options.signal;
+  const timeout = options.timeout || ARTWORK_TIMEOUT;
+  const attempts = options.attempts ?? RETRY_CONFIG.attempts;
+
+  const parsedUrl = new URL(url);
+
+  const origin = parsedUrl.origin;
+
+  assertCircuitAvailable(origin);
+
+  let lastError = null;
+
+  for (
+    let attempt = 0;
+    attempt <= attempts;
+    attempt++
+  ) {
+    if (signal?.aborted) {
+      throw createAbortError();
+    }
+
+    const controller = new AbortController();
+
+    let timeoutId = null;
+
+    const relayAbort = () => controller.abort();
+
+    signal?.addEventListener(
+      'abort',
+      relayAbort,
+      { once: true }
+    );
+
+    try {
+      timeoutId = setTimeout(
+        () => controller.abort(),
+        timeout
+      );
+
+      const response = await fetch(url, {
+        method: 'GET',
+        signal: controller.signal,
+        headers: {
+          Accept: 'application/json'
+        },
+        cache: options.cache || 'default'
+      });
+
+      if (!response.ok) {
+        const error = new Error(
+          'HTTP ' + response.status
+        );
+
+        error.status = response.status;
+
+        throw error;
+      }
+
+      const data = await response.json();
+
+      registerCircuitSuccess(origin);
+
+      return data;
+    } catch (error) {
+      if (signal?.aborted) {
+        throw createAbortError();
+      }
+
+      lastError = error;
+
+      const status = Number(error?.status || 0);
+
+      const retryable =
+        !status ||
+        status === 408 ||
+        status === 429 ||
+        status >= 500;
+
+      if (!retryable || attempt >= attempts) {
+        break;
+      }
+
+      const backoff = Math.min(
+        RETRY_CONFIG.baseDelay * (2 ** attempt),
+        RETRY_CONFIG.maxDelay
+      );
+
+      try {
+        await delay(backoff, signal);
+      } catch {
+        throw createAbortError();
+      }
+    } finally {
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+      }
+
+      signal?.removeEventListener(
+        'abort',
+        relayAbort
+      );
+    }
+  }
+
+  registerCircuitFailure(origin);
+
+  throw lastError || new Error('Artwork request failed.');
+}
+
+/* =========================================================
+   CARGA Y VALIDACIÓN DE IMÁGENES
    ========================================================= */
 
 function loadImage(url, options = {}) {
   return new Promise((resolve, reject) => {
-    if (!isValidImageUrl(url)) {
+    const normalizedUrl = normalizeImageUrl(url);
+
+    if (!normalizedUrl) {
       reject(new Error('Invalid artwork URL.'));
+      return;
+    }
+
+    const signal = options.signal;
+
+    if (signal?.aborted) {
+      reject(createAbortError());
       return;
     }
 
@@ -636,51 +1158,142 @@ function loadImage(url, options = {}) {
 
     let finished = false;
 
-    const timeout = setTimeout(() => {
-      if (finished) return;
+    const timeoutMs =
+      options.timeout || IMAGE_TIMEOUT;
 
-      finished = true;
+    let timeoutId = null;
+
+    const cleanup = () => {
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+      }
+
+      signal?.removeEventListener(
+        'abort',
+        onAbort
+      );
 
       image.onload = null;
       image.onerror = null;
+    };
 
-      reject(new Error('Artwork image timeout.'));
-    }, options.timeout || ARTWORK_TIMEOUT);
-
-    image.onload = async () => {
-      if (finished) return;
+    const finish = (callback, value) => {
+      if (finished) {
+        return;
+      }
 
       finished = true;
 
-      clearTimeout(timeout);
+      cleanup();
+
+      callback(value);
+    };
+
+    const onAbort = () => {
+      finish(
+        reject,
+        createAbortError()
+      );
+
+      /*
+       * Liberar la descarga cuando Safari lo permita.
+       */
 
       try {
-        if (image.decode) {
-          await image.decode().catch(() => {});
-        }
+        image.src = '';
       } catch {
-        // Safari puede rechazar decode aunque la imagen cargue.
+        // Ignorar errores de limpieza.
+      }
+    };
+
+    timeoutId = setTimeout(() => {
+      finish(
+        reject,
+        new Error('Artwork image timeout.')
+      );
+
+      try {
+        image.src = '';
+      } catch {
+        // Ignorar.
+      }
+    }, timeoutMs);
+
+    signal?.addEventListener(
+      'abort',
+      onAbort,
+      { once: true }
+    );
+
+    image.onload = async () => {
+      if (finished) {
+        return;
       }
 
-      resolve(image);
+      try {
+        if (
+          image.decode &&
+          options.decode !== false
+        ) {
+          await image.decode().catch(() => {});
+        }
+
+        if (
+          !image.naturalWidth ||
+          !image.naturalHeight
+        ) {
+          throw new Error('Invalid image dimensions.');
+        }
+
+        finish(resolve, image);
+      } catch (error) {
+        finish(reject, error);
+      }
     };
 
     image.onerror = () => {
-      if (finished) return;
+      metrics.imageFailures++;
 
-      finished = true;
-
-      clearTimeout(timeout);
-
-      reject(new Error('Artwork image failed.'));
+      finish(
+        reject,
+        new Error('Artwork image failed.')
+      );
     };
 
-    image.src = url;
+    image.src = normalizedUrl;
+
+    if (image.complete && image.naturalWidth > 0) {
+      image.onload?.();
+    }
   });
 }
 
+async function verifyArtwork(url, signal) {
+  const normalizedUrl = normalizeImageUrl(url);
+
+  if (!normalizedUrl) {
+    return false;
+  }
+
+  try {
+    await loadImage(normalizedUrl, {
+      signal,
+      timeout: IMAGE_TIMEOUT,
+      crossOrigin: true
+    });
+
+    return true;
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw error;
+    }
+
+    return false;
+  }
+}
+
 /* =========================================================
-   APLICAR PORTADA AL DOM
+   APLICAR IMAGEN AL DOM
    ========================================================= */
 
 function updateArtworkAttributes(element, source) {
@@ -709,30 +1322,42 @@ function setArtworkImage(element, url) {
   const tag = element.tagName?.toLowerCase();
 
   if (tag === 'img') {
-    element.src = url;
+    if (element.src !== url) {
+      element.src = url;
+    }
 
     element.alt =
       element.alt || 'Portada de la canción';
 
     element.loading = 'eager';
-
     element.decoding = 'async';
 
     return;
   }
 
-  element.style.backgroundImage =
-    `url("${url.replace(/["\\]/g, '\\$&')}")`;
+  /*
+   * Asignar la URL mediante CSSStyleDeclaration
+   * evita construir una cadena CSS manualmente.
+   */
+
+  element.style.backgroundImage = `url(${JSON.stringify(url)})`;
 }
 
 function updateArtworkCss(url) {
-  const value = url
-    ? `url("${url.replace(/["\\]/g, '\\$&')}")`
-    : 'none';
+  if (!isBrowser()) {
+    return;
+  }
 
-  document.documentElement.style.setProperty(
+  const root = document.documentElement;
+
+  if (!url) {
+    root.style.removeProperty('--shunel-artwork');
+    return;
+  }
+
+  root.style.setProperty(
     '--shunel-artwork',
-    value
+    `url(${JSON.stringify(url)})`
   );
 }
 
@@ -757,543 +1382,9 @@ function applyArtworkToElements(url, source) {
 }
 
 function getSourcePriority(source) {
-  return IMAGE_SOURCE_PRIORITY[source] ?? -1;
-}
-
-/* =========================================================
-   APLICAR PORTADA
-   ========================================================= */
-
-export function applyArtwork(
-  url,
-  options = {}
-) {
-  const source = clean(
-    options.source || 'fallback',
-    80
-  );
-
-  if (!isValidImageUrl(url)) {
-    return false;
-  }
-
-  const force = Boolean(options.force);
-
-  const newPriority = getSourcePriority(source);
-
-  const currentPriority = getSourcePriority(
-    activeArtworkSource
-  );
-
-  /*
-   * Un mod explícito siempre tiene prioridad.
-   */
-
-  if (
-    activeArtworkSource === 'mod' &&
-    source !== 'mod' &&
-    !force
-  ) {
-    return false;
-  }
-
-  /*
-   * Evitar que una miniatura de YouTube
-   * reemplace una portada de mejor calidad.
-   */
-
-  if (
-    !force &&
-    newPriority < currentPriority
-  ) {
-    return false;
-  }
-
-  if (
-    activeArtwork === url &&
-    activeArtworkSource === source
-  ) {
-    return true;
-  }
-
-  activeArtwork = url;
-
-  activeArtworkSource = source;
-
-  applyArtworkToElements(
-    url,
-    source
-  );
-
-  safeDispatch(
-    'shunel:artwork-updated',
-    {
-      artwork: url,
-      source,
-      track: activeTrack
-    }
-  );
-
-  if (options.extractColor !== false) {
-    resolveSongColorWithBudget(
-      url,
-      activeRequestKey,
-      activeRequestId
-    );
-  }
-
-  return true;
-}
-
-/* =========================================================
-   FALLBACK Y MINIATURA DE YOUTUBE
-   ========================================================= */
-
-function getYouTubeThumbnail(track) {
-  const explicit = clean(
-    track?.thumbnail ||
-    track?.thumbnails?.high?.url ||
-    track?.thumbnails?.medium?.url ||
-    track?.snippet?.thumbnails?.high?.url ||
-    '',
-    1000
-  );
-
-  if (isValidImageUrl(explicit)) {
-    return explicit;
-  }
-
-  const videoId = clean(
-    track?.videoId ||
-    track?.id?.videoId ||
-    track?.youtubeId ||
-    '',
-    100
-  );
-
-  if (
-    videoId &&
-    /^[a-zA-Z0-9_-]{11}$/.test(videoId)
-  ) {
-    return (
-      'https://i.ytimg.com/vi/' +
-      videoId +
-      '/hqdefault.jpg'
-    );
-  }
-
-  return '';
-}
-
-function applyFallback(track) {
-  const youtube = getYouTubeThumbnail(track);
-
-  if (youtube) {
-    return applyArtwork(
-      youtube,
-      {
-        source: 'youtube-thumbnail',
-        force: false,
-        extractColor: true
-      }
-    );
-  }
-
-  return applyArtwork(
-    FALLBACK_ARTWORK,
-    {
-      source: 'fallback',
-      force: false,
-      extractColor: false
-    }
-  );
-}
-
-/* =========================================================
-   BÚSQUEDA DE iTUNES
-   ========================================================= */
-
-function scoreCandidate(
-  result,
-  identity,
-  artist,
-  albumHint
-) {
-  const title = normalizeText(
-    result?.trackName ||
-    result?.collectionName ||
-    ''
-  );
-
-  const expectedTitle = normalizeText(
-    identity.title
-  );
-
-  const candidateArtist = normalizeArtist(
-    result?.artistName
-  );
-
-  const expectedArtist = normalizeArtist(
-    artist
-  );
-
-  const candidateAlbum = normalizeText(
-    result?.collectionName
-  );
-
-  const expectedAlbum = normalizeText(
-    albumHint
-  );
-
-  let score = 0;
-
-  if (!title || !expectedTitle) {
-    return -1000;
-  }
-
-  if (title === expectedTitle) {
-    score += 100;
-  } else if (
-    title.includes(expectedTitle) ||
-    expectedTitle.includes(title)
-  ) {
-    score += 55;
-  } else {
-    return -1000;
-  }
-
-  if (expectedArtist) {
-    if (candidateArtist === expectedArtist) {
-      score += 65;
-    } else if (
-      candidateArtist.includes(expectedArtist) ||
-      expectedArtist.includes(candidateArtist)
-    ) {
-      score += 35;
-    } else {
-      score -= 50;
-    }
-  }
-
-  if (expectedAlbum) {
-    if (candidateAlbum === expectedAlbum) {
-      score += 45;
-    } else if (
-      candidateAlbum.includes(expectedAlbum) ||
-      expectedAlbum.includes(candidateAlbum)
-    ) {
-      score += 25;
-    }
-  }
-
-  const collectionType = String(
-    result?.collectionType || ''
-  ).toLowerCase();
-
-  if (collectionType === 'album') {
-    score += 12;
-  } else if (collectionType === 'single') {
-    score += 8;
-  }
-
-  const artwork = clean(
-    result?.artworkUrl100 ||
-    result?.artworkUrl60 ||
-    '',
-    1000
-  );
-
-  if (artwork) {
-    score += 20;
-  }
-
-  return score;
-}
-
-function upgradeArtworkUrl(url) {
-  if (!url) {
-    return '';
-  }
-
-  return String(url)
-    .replace(/\/[0-9]+x[0-9]+bb\./i, '/1000x1000bb.')
-    .replace(/\/[0-9]+x[0-9]+bb-/i, '/1000x1000bb-');
-}
-
-async function searchITunes(track, signal) {
-  const artist = getArtist(track);
-
-  const identity = cleanQueryTitle(
-    getTitle(track),
-    artist
-  );
-
-  if (!identity.title) {
-    return null;
-  }
-
-  const query = [
-    artist,
-    identity.title
-  ]
-    .filter(Boolean)
-    .join(' ');
-
-  const url = new URL(ITUNES_ENDPOINT);
-
-  url.search = new URLSearchParams({
-    term: query,
-    entity: 'song',
-    limit: '15',
-    media: 'music',
-    country: 'US'
-  }).toString();
-
-  const response = await fetch(url.toString(), {
-    signal,
-    headers: {
-      Accept: 'application/json'
-    }
-  });
-
-  if (!response.ok) {
-    throw new Error(
-      'iTunes HTTP ' + response.status
-    );
-  }
-
-  const data = await response.json();
-
-  if (!Array.isArray(data?.results)) {
-    return null;
-  }
-
-  const ranked = data.results
-    .map(result => ({
-      result,
-      score: scoreCandidate(
-        result,
-        identity,
-        artist,
-        identity.album || getAlbum(track)
-      )
-    }))
-    .filter(item => item.score >= 100)
-    .sort((a, b) => b.score - a.score);
-
-  for (const item of ranked) {
-    const artwork = upgradeArtworkUrl(
-      item.result?.artworkUrl100 ||
-      item.result?.artworkUrl60
-    );
-
-    if (isValidImageUrl(artwork)) {
-      return {
-        artwork,
-        score: item.score,
-        album: clean(
-          item.result.collectionName,
-          180
-        ),
-        artist: clean(
-          item.result.artistName,
-          180
-        ),
-        source: 'itunes'
-      };
-    }
-  }
-
-  return null;
-}
-
-/* =========================================================
-   BÚSQUEDA DE ARTISTA EN DEEZER
-   ========================================================= */
-
-async function searchDeezerArtist(artist, signal) {
-  const normalized = normalizeArtist(artist);
-
-  if (!normalized) {
-    return '';
-  }
-
-  const cacheKey = normalized;
-
-  const cached = getCachedArtistArtwork(artist);
-
-  if (cached) {
-    return cached;
-  }
-
-  if (artistRequests.has(cacheKey)) {
-    return artistRequests.get(cacheKey).promise;
-  }
-
-  const controller = new AbortController();
-
-  const relayAbort = () => controller.abort();
-
-  signal?.addEventListener(
-    'abort',
-    relayAbort,
-    { once: true }
-  );
-
-  const promise = (async () => {
-    try {
-      const url =
-        DEEZER_ENDPOINT +
-        '/search/artist?' +
-        new URLSearchParams({
-          q: artist,
-          limit: '5'
-        });
-
-      const response = await fetch(url, {
-        signal: controller.signal,
-        headers: {
-          Accept: 'application/json'
-        }
-      });
-
-      if (!response.ok) {
-        return '';
-      }
-
-      const data = await response.json();
-
-      const artists = Array.isArray(data?.data)
-        ? data.data
-        : [];
-
-      const match = artists.find(item => {
-        return (
-          normalizeArtist(item?.name) === normalized
-        );
-      }) || artists[0];
-
-      const artwork = clean(
-        match?.picture_xl ||
-        match?.picture_big ||
-        match?.picture_medium ||
-        '',
-        1000
-      );
-
-      if (isValidImageUrl(artwork)) {
-        saveArtistArtwork(artist, artwork);
-
-        return artwork;
-      }
-
-      return '';
-    } finally {
-      signal?.removeEventListener(
-        'abort',
-        relayAbort
-      );
-
-      const current = artistRequests.get(cacheKey);
-
-      if (current?.promise === promise) {
-        artistRequests.delete(cacheKey);
-      }
-    }
-  })();
-
-  artistRequests.set(cacheKey, {
-    promise,
-    controller
-  });
-
-  return promise;
-}
-
-/* =========================================================
-   METADATA / MUSICBRAINZ
-   ========================================================= */
-
-async function searchMusicMetadata(track, signal) {
-  const metadata = await getTrackMetadata(
-    track,
-    {
-      signal,
-      timeout: 8000
-    }
-  );
-
-  if (
-    !metadata ||
-    !isValidImageUrl(metadata.artwork)
-  ) {
-    return null;
-  }
-
-  return {
-    artwork: metadata.artwork,
-    album: metadata.album || '',
-    artist: metadata.artist || '',
-    source: 'musicbrainz-cover-art-archive'
-  };
-}
-
-/* =========================================================
-   DEDUPLICACIÓN DE BÚSQUEDAS DE ÁLBUM
-   ========================================================= */
-
-function getAlbumRequest(key, factory) {
-  const existing = albumRequests.get(key);
-
-  if (existing) {
-    return existing.promise;
-  }
-
-  const controller = new AbortController();
-
-  const promise = Promise.resolve()
-    .then(() => factory(controller.signal))
-    .finally(() => {
-      const current = albumRequests.get(key);
-
-      if (current?.promise === promise) {
-        albumRequests.delete(key);
-      }
-    });
-
-  albumRequests.set(key, {
-    promise,
-    controller
-  });
-
-  return promise;
-}
-
-/* =========================================================
-   CANCELACIÓN DE PISTA
-   ========================================================= */
-
-function cancelActiveRequest() {
-  if (activeController) {
-    activeController.abort();
-    activeController = null;
-  }
-
-  activeRequestId++;
-
-  /*
-   * Las peticiones compartidas de artista o álbum
-   * no se cancelan aquí.
-   *
-   * Cada una tiene su propio controlador.
-   */
-}
-
-function isCurrentRequest(requestId, key) {
   return (
-    !destroyed &&
-    requestId === activeRequestId &&
-    key === activeRequestKey
+    IMAGE_SOURCE_PRIORITY[source] ??
+    IMAGE_SOURCE_PRIORITY.fallback
   );
 }
 
@@ -1302,6 +1393,10 @@ function isCurrentRequest(requestId, key) {
    ========================================================= */
 
 function colorFromImage(image) {
+  if (!isBrowser()) {
+    return null;
+  }
+
   const canvas = document.createElement('canvas');
 
   canvas.width = 24;
@@ -1351,13 +1446,12 @@ function colorFromImage(image) {
       const g = pixels[index + 1];
       const b = pixels[index + 2];
 
-      /*
-       * Ignorar píxeles casi blancos o negros.
-       */
-
       const brightness = (r + g + b) / 3;
 
-      if (brightness < 18 || brightness > 245) {
+      if (
+        brightness < 18 ||
+        brightness > 245
+      ) {
         continue;
       }
 
@@ -1383,8 +1477,8 @@ function colorFromImage(image) {
     };
   } catch {
     /*
-     * Canvas puede bloquear getImageData cuando
-     * el servidor remoto no permite CORS.
+     * Algunos servidores no permiten leer píxeles
+     * por CORS. La portada sigue funcionando.
      */
 
     return null;
@@ -1392,12 +1486,11 @@ function colorFromImage(image) {
 }
 
 function setSongColors(color) {
-  if (!color) {
+  if (!color || !isBrowser()) {
     return;
   }
 
   activeSongColor = color.primary;
-
   activeSecondaryColor = color.secondary;
 
   const root = document.documentElement;
@@ -1412,11 +1505,14 @@ function setSongColors(color) {
     color.secondary
   );
 
+  lastColorUpdate = now();
+
   safeDispatch(
     'shunel:artwork-color-updated',
     {
       color: color.primary,
-      secondary: color.secondary
+      secondary: color.secondary,
+      rgb: color.rgb
     }
   );
 }
@@ -1424,7 +1520,8 @@ function setSongColors(color) {
 async function extractDominantSongColor(
   url,
   key,
-  requestId
+  requestId,
+  signal
 ) {
   if (!url || !key) {
     return null;
@@ -1443,8 +1540,13 @@ async function extractDominantSongColor(
   try {
     const image = await loadImage(url, {
       timeout: COLOR_TIMEOUT,
-      crossOrigin: true
+      crossOrigin: true,
+      signal
     });
+
+    if (!isCurrentRequest(requestId, key)) {
+      return null;
+    }
 
     const color = colorFromImage(image);
 
@@ -1452,243 +1554,591 @@ async function extractDominantSongColor(
       return null;
     }
 
-    /*
-     * No guardar ni aplicar colores de una pista
-     * que ya dejó de estar activa.
-     */
-
-    if (!isCurrentRequest(requestId, key)) {
-      return null;
-    }
-
     saveSongColor(key, color);
 
-    setSongColors(color);
+    if (isCurrentRequest(requestId, key)) {
+      setSongColors(color);
+    }
 
     return color;
-  } catch {
+  } catch (error) {
+    if (!isAbortError(error)) {
+      safeDispatch(
+        'shunel:artwork-color-error',
+        {
+          artwork: url,
+          message: clean(error?.message || '', 200)
+        }
+      );
+    }
+
     return null;
   }
 }
 
-/* =========================================================
-   PRESUPUESTO PARA EXTRACCIÓN DE COLOR
-   ========================================================= */
+function cancelColorRequest() {
+  if (activeColorController) {
+    activeColorController.abort();
+    activeColorController = null;
+  }
+}
 
-async function resolveSongColorWithBudget(
+function resolveSongColorWithBudget(
   url,
   key,
   requestId
 ) {
-  let timer = null;
+  cancelColorRequest();
 
-  try {
-    await Promise.race([
-      extractDominantSongColor(
-        url,
-        key,
-        requestId
-      ),
+  const controller = new AbortController();
 
-      new Promise(resolve => {
-        timer = setTimeout(
-          resolve,
-          COLOR_TIMEOUT
-        );
-      })
-    ]);
-  } finally {
-    if (timer !== null) {
-      clearTimeout(timer);
+  activeColorController = controller;
+
+  return extractDominantSongColor(
+    url,
+    key,
+    requestId,
+    controller.signal
+  ).finally(() => {
+    if (activeColorController === controller) {
+      activeColorController = null;
     }
-  }
-}
-
-/* =========================================================
-   SINCRONIZACIÓN VISUAL
-   ========================================================= */
-
-function syncArtworkVisuals() {
-  visualSyncPending = false;
-
-  for (const element of getArtworkElements()) {
-    element.style.setProperty(
-      '--shunel-art-gesture-scale',
-      String(gestureScale)
-    );
-
-    element.classList.toggle(
-      'is-playing',
-      isPlaying
-    );
-  }
-}
-
-function scheduleVisualSync() {
-  if (visualRafId || destroyed) {
-    return;
-  }
-
-  visualRafId = requestAnimationFrame(() => {
-    visualRafId = 0;
-
-    if (destroyed) {
-      return;
-    }
-
-    syncArtworkVisuals();
   });
 }
 
 /* =========================================================
-   GESTOS TÁCTILES Y POINTER
+   APLICAR PORTADA
    ========================================================= */
 
-function onPointerDown(event) {
-  if (
-    event.pointerType === 'mouse' &&
-    event.button !== 0
-  ) {
-    return;
+export function applyArtwork(url, options = {}) {
+  const normalizedUrl = normalizeImageUrl(url);
+
+  if (!normalizedUrl) {
+    return false;
   }
 
-  activePointer = event.pointerId;
-
-  pointerStartX = event.clientX;
-  pointerStartY = event.clientY;
-
-  pointerMoved = false;
-}
-
-function onPointerMove(event) {
-  if (
-    activePointer === null ||
-    event.pointerId !== activePointer
-  ) {
-    return;
-  }
-
-  const dx = event.clientX - pointerStartX;
-  const dy = event.clientY - pointerStartY;
-
-  if (
-    Math.abs(dx) > 8 ||
-    Math.abs(dy) > 8
-  ) {
-    pointerMoved = true;
-  }
-
-  if (!pointerMoved) {
-    return;
-  }
-
-  const distance = Math.min(
-    Math.abs(dx) + Math.abs(dy),
-    70
+  const source = clean(
+    options.source || 'fallback',
+    80
   );
 
-  gestureScale = Math.max(
-    0.96,
-    1 - distance / 1800
+  const force = Boolean(options.force);
+
+  const priority = getSourcePriority(source);
+
+  /*
+   * Si se proporciona una solicitud, impedir que
+   * una respuesta antigua cambie la portada actual.
+   */
+
+  if (
+    options.requestId !== undefined &&
+    options.requestId !== activeRequestId
+  ) {
+    return false;
+  }
+
+  if (
+    options.requestKey !== undefined &&
+    options.requestKey !== activeRequestKey
+  ) {
+    return false;
+  }
+
+  /*
+   * La prioridad se reinicia por pista.
+   * No se compara con la prioridad de la canción anterior.
+   */
+
+  if (
+    !force &&
+    priority < activeAppliedPriority
+  ) {
+    return false;
+  }
+
+  if (
+    activeArtwork === normalizedUrl &&
+    activeArtworkSource === source
+  ) {
+    return true;
+  }
+
+  activeArtwork = normalizedUrl;
+
+  activeArtworkSource = source;
+
+  activeAppliedPriority = priority;
+
+  applyArtworkToElements(
+    normalizedUrl,
+    source
   );
 
-  scheduleVisualSync();
-}
+  lastArtworkUpdate = now();
 
-function onPointerUp(event) {
-  if (
-    activePointer === null ||
-    event.pointerId !== activePointer
-  ) {
-    return;
-  }
+  metrics.sourceUsage[source] =
+    (metrics.sourceUsage[source] || 0) + 1;
 
-  activePointer = null;
+  safeDispatch(
+    'shunel:artwork-updated',
+    {
+      artwork: normalizedUrl,
+      source,
+      sourceLabel: SOURCE_REGISTRY[source]?.label || source,
+      track: activeTrack,
+      requestId: activeRequestId
+    }
+  );
 
-  gestureScale = 1;
-
-  scheduleVisualSync();
-}
-
-function onPointerCancel() {
-  activePointer = null;
-
-  gestureScale = 1;
-
-  scheduleVisualSync();
-}
-
-function bindGestureEvents(element) {
-  if (!element || imageListeners.has(element)) {
-    return;
-  }
-
-  const listeners = {
-    pointerdown: onPointerDown,
-    pointermove: onPointerMove,
-    pointerup: onPointerUp,
-    pointercancel: onPointerCancel
-  };
-
-  for (const [event, handler] of Object.entries(listeners)) {
-    element.addEventListener(
-      event,
-      handler,
-      { passive: true }
+  if (options.extractColor !== false) {
+    resolveSongColorWithBudget(
+      normalizedUrl,
+      activeRequestKey,
+      activeRequestId
     );
   }
 
-  element.style.touchAction = 'pan-y';
-
-  imageListeners.set(
-    element,
-    listeners
-  );
-}
-
-function unbindGestureEvents(element) {
-  const listeners = imageListeners.get(element);
-
-  if (!listeners) {
-    return;
-  }
-
-  for (const [event, handler] of Object.entries(listeners)) {
-    element.removeEventListener(
-      event,
-      handler
-    );
-  }
-
-  imageListeners.delete(element);
+  return true;
 }
 
 /* =========================================================
-   ACCESIBILIDAD
+   YOUTUBE Y FALLBACK
    ========================================================= */
 
-function prepareAccessibility() {
-  for (const element of getArtworkElements()) {
-    if (element.tagName?.toLowerCase() === 'img') {
-      if (!element.hasAttribute('alt')) {
-        element.alt = 'Portada de la canción';
+function getYouTubeThumbnail(track) {
+  const explicit = clean(
+    track?.thumbnail ||
+    track?.thumbnails?.high?.url ||
+    track?.thumbnails?.medium?.url ||
+    track?.snippet?.thumbnails?.high?.url ||
+    '',
+    1000
+  );
+
+  const normalizedExplicit =
+    normalizeImageUrl(explicit);
+
+  if (normalizedExplicit) {
+    return normalizedExplicit;
+  }
+
+  const videoId = clean(
+    track?.videoId ||
+    track?.id?.videoId ||
+    track?.youtubeId ||
+    '',
+    100
+  );
+
+  if (
+    videoId &&
+    /^[a-zA-Z0-9_-]{11}$/.test(videoId)
+  ) {
+    return (
+      'https://i.ytimg.com/vi/' +
+      videoId +
+      '/hqdefault.jpg'
+    );
+  }
+
+  return '';
+}
+
+function applyFallback(track, requestId, key) {
+  const youtube = getYouTubeThumbnail(track);
+
+  if (youtube) {
+    return applyArtwork(
+      youtube,
+      {
+        source: 'youtube-thumbnail',
+        force: true,
+        requestId,
+        requestKey: key
       }
+    );
+  }
 
-      element.decoding = 'async';
+  return applyArtwork(
+    FALLBACK_ARTWORK,
+    {
+      source: 'fallback',
+      force: true,
+      extractColor: false,
+      requestId,
+      requestKey: key
+    }
+  );
+}
+
+/* =========================================================
+   PUNTUACIÓN DE RESULTADOS
+   ========================================================= */
+
+function tokenSimilarity(a, b) {
+  const first = new Set(
+    normalizeText(a).split(' ').filter(Boolean)
+  );
+
+  const second = new Set(
+    normalizeText(b).split(' ').filter(Boolean)
+  );
+
+  if (!first.size || !second.size) {
+    return 0;
+  }
+
+  let intersection = 0;
+
+  for (const token of first) {
+    if (second.has(token)) {
+      intersection++;
+    }
+  }
+
+  return (
+    intersection /
+    Math.max(first.size, second.size)
+  );
+}
+
+function scoreCandidate(
+  result,
+  identity,
+  artist,
+  albumHint
+) {
+  const title = normalizeText(
+    result?.trackName ||
+    result?.collectionName ||
+    ''
+  );
+
+  const expectedTitle = normalizeText(
+    identity.title
+  );
+
+  const candidateArtist = normalizeArtist(
+    result?.artistName
+  );
+
+  const expectedArtist = normalizeArtist(
+    artist
+  );
+
+  const candidateAlbum = normalizeText(
+    result?.collectionName
+  );
+
+  const expectedAlbum = normalizeText(
+    albumHint
+  );
+
+  if (!title || !expectedTitle) {
+    return -1000;
+  }
+
+  const similarity = tokenSimilarity(
+    title,
+    expectedTitle
+  );
+
+  let score = 0;
+
+  if (title === expectedTitle) {
+    score += 100;
+  } else if (
+    title.includes(expectedTitle) ||
+    expectedTitle.includes(title)
+  ) {
+    score += 55;
+  } else if (similarity >= 0.75) {
+    score += Math.round(similarity * 60);
+  } else {
+    return -1000;
+  }
+
+  if (expectedArtist) {
+    if (candidateArtist === expectedArtist) {
+      score += 65;
+    } else if (
+      candidateArtist.includes(expectedArtist) ||
+      expectedArtist.includes(candidateArtist)
+    ) {
+      score += 35;
+    } else if (
+      tokenSimilarity(candidateArtist, expectedArtist) >= 0.7
+    ) {
+      score += 20;
     } else {
-      element.setAttribute(
-        'role',
-        'img'
-      );
+      score -= 50;
+    }
+  }
 
-      element.setAttribute(
-        'aria-label',
-        'Portada de la canción'
-      );
+  if (expectedAlbum) {
+    if (candidateAlbum === expectedAlbum) {
+      score += 45;
+    } else if (
+      candidateAlbum.includes(expectedAlbum) ||
+      expectedAlbum.includes(candidateAlbum)
+    ) {
+      score += 25;
+    }
+  }
+
+  const collectionType = String(
+    result?.collectionType || ''
+  ).toLowerCase();
+
+  if (collectionType === 'album') {
+    score += 12;
+  } else if (collectionType === 'single') {
+    score += 8;
+  }
+
+  if (
+    result?.artworkUrl100 ||
+    result?.artworkUrl60
+  ) {
+    score += 20;
+  }
+
+  return score;
+}
+
+/* =========================================================
+   iTUNES
+   ========================================================= */
+
+function upgradeArtworkUrl(url) {
+  if (!url) {
+    return '';
+  }
+
+  return String(url)
+    .replace(
+      /\/[0-9]+x[0-9]+bb\./i,
+      '/1000x1000bb.'
+    )
+    .replace(
+      /\/[0-9]+x[0-9]+bb-/i,
+      '/1000x1000bb-'
+    );
+}
+
+async function searchITunes(track, signal) {
+  const artist = getArtist(track);
+
+  const identity = cleanQueryTitle(
+    getTitle(track),
+    artist
+  );
+
+  if (!identity.title) {
+    return null;
+  }
+
+  const query = [
+    artist,
+    identity.title
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  const url = new URL(ITUNES_ENDPOINT);
+
+  url.search = new URLSearchParams({
+    term: query,
+    entity: 'song',
+    limit: '20',
+    media: 'music',
+    country: 'US'
+  }).toString();
+
+  const data = await fetchJSON(
+    url.toString(),
+    {
+      signal,
+      timeout: ARTWORK_TIMEOUT
+    }
+  );
+
+  if (!Array.isArray(data?.results)) {
+    return null;
+  }
+
+  const ranked = data.results
+    .map(result => ({
+      result,
+      score: scoreCandidate(
+        result,
+        identity,
+        artist,
+        identity.album || getAlbum(track)
+      )
+    }))
+    .filter(item => item.score >= 100)
+    .sort((a, b) => b.score - a.score);
+
+  for (const item of ranked) {
+    const artwork = normalizeImageUrl(
+      upgradeArtworkUrl(
+        item.result?.artworkUrl100 ||
+        item.result?.artworkUrl60
+      )
+    );
+
+    if (!artwork) {
+      continue;
     }
 
-    bindGestureEvents(element);
+    return {
+      artwork,
+      score: item.score,
+      album: clean(
+        item.result.collectionName,
+        180
+      ),
+      artist: clean(
+        item.result.artistName,
+        180
+      ),
+      source: 'itunes'
+    };
   }
+
+  return null;
+}
+
+/* =========================================================
+   DEEZER / PORTADA DE ARTISTA
+   ========================================================= */
+
+async function searchDeezerArtist(artist, signal) {
+  const normalized = normalizeArtist(artist);
+
+  if (!normalized) {
+    return '';
+  }
+
+  const cached = getCachedArtistArtwork(artist);
+
+  if (cached) {
+    return cached;
+  }
+
+  return getSharedRequest(
+    artistRequests,
+    normalized,
+    async sharedSignal => {
+      const url =
+        DEEZER_ENDPOINT +
+        '/search/artist?' +
+        new URLSearchParams({
+          q: artist,
+          limit: '5'
+        });
+
+      const data = await fetchJSON(
+        url,
+        {
+          signal: sharedSignal,
+          timeout: ARTWORK_TIMEOUT
+        }
+      );
+
+      const artists = Array.isArray(data?.data)
+        ? data.data
+        : [];
+
+      const match = artists.find(item => {
+        return (
+          normalizeArtist(item?.name) === normalized
+        );
+      }) || artists[0];
+
+      const artwork = normalizeImageUrl(
+        match?.picture_xl ||
+        match?.picture_big ||
+        match?.picture_medium ||
+        ''
+      );
+
+      if (artwork) {
+        saveArtistArtwork(artist, artwork);
+      }
+
+      return artwork;
+    },
+    signal
+  );
+}
+
+/* =========================================================
+   MUSICBRAINZ / COVER ART ARCHIVE
+   ========================================================= */
+
+async function searchMusicMetadata(track, signal) {
+  const metadata = await getTrackMetadata(
+    track,
+    {
+      signal,
+      timeout: METADATA_TIMEOUT
+    }
+  );
+
+  if (
+    !metadata ||
+    !isValidImageUrl(metadata.artwork)
+  ) {
+    return null;
+  }
+
+  return {
+    artwork: normalizeImageUrl(metadata.artwork),
+    album: clean(metadata.album || '', 180),
+    artist: clean(metadata.artist || '', 180),
+    source: 'musicbrainz-cover-art-archive'
+  };
+}
+
+/* =========================================================
+   DEDUPLICACIÓN DE METADATA
+   ========================================================= */
+
+function getAlbumRequest(key, factory, signal) {
+  return getSharedRequest(
+    albumRequests,
+    key,
+    factory,
+    signal
+  );
+}
+
+/* =========================================================
+   ESTADO DE PETICIÓN
+   ========================================================= */
+
+function cancelActiveRequest() {
+  if (activeController) {
+    activeController.abort();
+    activeController = null;
+  }
+
+  cancelColorRequest();
+
+  activeRequestId++;
+
+  metrics.cancelled++;
+}
+
+function isCurrentRequest(requestId, key) {
+  return (
+    !destroyed &&
+    requestId === activeRequestId &&
+    key === activeRequestKey
+  );
 }
 
 /* =========================================================
@@ -1696,7 +2146,10 @@ function prepareAccessibility() {
    ========================================================= */
 
 export async function preloadArtwork(track) {
-  if (!isObject(track)) {
+  if (
+    !isObject(track) ||
+    destroyed
+  ) {
     return null;
   }
 
@@ -1707,90 +2160,134 @@ export async function preloadArtwork(track) {
   }
 
   if (preloadRequests.has(key)) {
-    return preloadRequests.get(key);
+    return preloadRequests.get(key).promise;
   }
 
-  const promise = (async () => {
-    const controller = new AbortController();
+  const controller = new AbortController();
 
+  const entry = {
+    controller,
+    promise: null
+  };
+
+  entry.promise = (async () => {
     try {
-      /*
-       * Precalentar metadatos sin modificar
-       * la portada que está en reproducción.
-       */
-
       const metadata = await getTrackMetadata(
         track,
         {
-          signal: controller.signal
+          signal: controller.signal,
+          timeout: METADATA_TIMEOUT
         }
       );
 
-      if (
-        metadata?.artwork &&
-        isValidImageUrl(metadata.artwork)
-      ) {
-        const image = new Image();
-
-        image.src = metadata.artwork;
-
-        return metadata.artwork;
+      if (controller.signal.aborted) {
+        throw createAbortError();
       }
 
-      return getYouTubeThumbnail(track) || null;
-    } catch {
-      return getYouTubeThumbnail(track) || null;
+      let artwork = normalizeImageUrl(
+        metadata?.artwork
+      );
+
+      if (!artwork) {
+        artwork = getYouTubeThumbnail(track);
+      }
+
+      if (!artwork) {
+        return null;
+      }
+
+      /*
+       * Descargar y decodificar sin modificar
+       * la portada que está reproduciéndose.
+       */
+
+      await loadImage(artwork, {
+        signal: controller.signal,
+        timeout: IMAGE_TIMEOUT,
+        crossOrigin: true
+      });
+
+      return artwork;
+    } catch (error) {
+      if (!isAbortError(error)) {
+        const youtube = getYouTubeThumbnail(track);
+
+        return youtube || null;
+      }
+
+      return null;
+    } finally {
+      if (preloadRequests.get(key) === entry) {
+        preloadRequests.delete(key);
+      }
     }
-  })().finally(() => {
-    preloadRequests.delete(key);
-  });
+  })();
 
-  preloadRequests.set(key, promise);
+  preloadRequests.set(key, entry);
 
-  return promise;
+  return entry.promise;
 }
 
 /* =========================================================
-   CARGA PRINCIPAL DE PORTADA
+   CARGA PRINCIPAL
    ========================================================= */
 
-export async function loadArtwork(
-  track,
-  options = {}
-) {
-  if (!isObject(track) || destroyed) {
+export async function loadArtwork(track, options = {}) {
+  if (
+    !isObject(track) ||
+    destroyed
+  ) {
     return null;
   }
 
-  const requestId = ++activeRequestId;
+  const key = getTrackKey(track);
+
+  if (!key) {
+    return null;
+  }
+
+  /*
+   * Cancelar la solicitud anterior.
+   */
 
   if (activeController) {
     activeController.abort();
   }
 
+  cancelColorRequest();
+
   const controller = new AbortController();
 
   activeController = controller;
 
-  const key = getTrackKey(track);
+  const requestId = ++activeRequestId;
 
   activeRequestKey = key;
-
   activeTrack = track;
-
   activeColorKey = key;
 
   activeSongColor = null;
   activeSecondaryColor = null;
+
+  activeAppliedPriority = -1;
+
+  activeLoadStartedAt = now();
+
+  metrics.requests++;
 
   const forceRefresh = Boolean(
     options.forceRefresh ||
     options.refresh
   );
 
+  const isCurrent = () => (
+    isCurrentRequest(requestId, key) &&
+    !controller.signal.aborted
+  );
+
   /*
-   * Reiniciar prioridad para una nueva canción,
-   * conservando la portada anterior mientras carga.
+   * Mostrar una portada temporal mientras se resuelve
+   * la imagen definitiva.
    */
 
   const explicitMod = getExplicitModArtwork(track);
@@ -1800,31 +2297,28 @@ export async function loadArtwork(
       explicitMod,
       {
         source: 'mod',
-        force: true
+        force: true,
+        requestId,
+        requestKey: key
       }
     );
 
     return {
       artwork: explicitMod,
-      source: 'mod'
+      source: 'mod',
+      found: true
     };
   }
 
+  applyFallback(
+    track,
+    requestId,
+    key
+  );
+
   /*
-   * Miniatura original como fallback temporal.
+   * Preparar identidad de álbum.
    */
-
-  const youtube = getYouTubeThumbnail(track);
-
-  if (youtube) {
-    applyArtwork(
-      youtube,
-      {
-        source: 'youtube-thumbnail',
-        force: true
-      }
-    );
-  }
 
   const identity = cleanQueryTitle(
     getTitle(track),
@@ -1833,131 +2327,99 @@ export async function loadArtwork(
 
   const albumKey = [
     normalizeArtist(getArtist(track)),
-    normalizeText(identity.album || getAlbum(track))
+    normalizeText(identity.album || getAlbum(track)),
+    normalizeText(identity.title)
   ].join('::');
 
-  const isCurrent = () =>
-    isCurrentRequest(requestId, key) &&
-    !controller.signal.aborted;
+  let bestResult = null;
 
-  const sources = [];
+  let bestPriority = activeAppliedPriority;
 
   /*
    * 1. MusicBrainz / Cover Art Archive.
    */
 
-  sources.push(async () => {
-    return getAlbumRequest(
-      albumKey + '::musicbrainz',
-      signal => searchMusicMetadata(
-        track,
-        signal
-      )
-    );
-  });
+  try {
+    if (isCurrent()) {
+      const result = await getAlbumRequest(
+        albumKey + '::musicbrainz',
+        signal => searchMusicMetadata(
+          track,
+          signal
+        ),
+        controller.signal
+      );
+
+      if (
+        isCurrent() &&
+        result?.artwork
+      ) {
+        const valid = await verifyArtwork(
+          result.artwork,
+          controller.signal
+        );
+
+        if (valid && isCurrent()) {
+          bestResult = result;
+          bestPriority = getSourcePriority(result.source);
+
+          applyArtwork(
+            result.artwork,
+            {
+              source: result.source,
+              requestId,
+              requestKey: key
+            }
+          );
+        }
+      }
+    }
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw error;
+    }
+
+    reportError(error, 'musicbrainz');
+  }
 
   /*
    * 2. iTunes.
-   */
-
-  sources.push(async () => {
-    return searchITunes(
-      track,
-      controller.signal
-    );
-  });
-
-  /*
-   * 3. Portada de artista.
-   */
-
-  sources.push(async () => {
-    const artist = getArtist(track);
-
-    const cached = getCachedArtistArtwork(artist);
-
-    if (cached) {
-      return {
-        artwork: cached,
-        source: 'artist'
-      };
-    }
-
-    const modArtwork = getArtistModArtwork(artist);
-
-    if (modArtwork) {
-      return {
-        artwork: modArtwork,
-        source: 'artist'
-      };
-    }
-
-    const artwork = await searchDeezerArtist(
-      artist,
-      controller.signal
-    );
-
-    if (!artwork) {
-      return null;
-    }
-
-    return {
-      artwork,
-      source: 'artist'
-    };
-  });
-
-  /*
-   * Ejecutar las fuentes en orden de prioridad.
    *
-   * Una portada de artista no reemplaza una portada
-   * oficial que ya se haya encontrado.
+   * Se consulta incluso si hay una portada de artista,
+   * porque iTunes puede ofrecer una portada de álbum.
    */
 
-  let bestResult = null;
-
-  for (const sourceSearch of sources) {
-    if (!isCurrent()) {
-      throw createAbortError();
-    }
-
+  if (
+    isCurrent() &&
+    bestPriority < getSourcePriority('itunes')
+  ) {
     try {
-      const result = await sourceSearch();
-
-      if (
-        !result ||
-        !isValidImageUrl(result.artwork)
-      ) {
-        continue;
-      }
-
-      if (!isCurrent()) {
-        throw createAbortError();
-      }
-
-      bestResult = result;
-
-      const source = result.source || 'fallback';
-
-      const applied = applyArtwork(
-        result.artwork,
-        {
-          source,
-          force: false
-        }
+      const result = await searchITunes(
+        track,
+        controller.signal
       );
 
-      if (applied) {
-        /*
-         * MusicBrainz e iTunes tienen prioridad
-         * sobre una imagen de artista.
-         */
+      if (
+        result?.artwork &&
+        isCurrent()
+      ) {
+        const valid = await verifyArtwork(
+          result.artwork,
+          controller.signal
+        );
 
-        if (
-          source === 'musicbrainz-cover-art-archive' ||
-          source === 'itunes'
-        ) {
-          break;
+        if (valid && isCurrent()) {
+          bestResult = result;
+          bestPriority = getSourcePriority('itunes');
+
+          applyArtwork(
+            result.artwork,
+            {
+              source: 'itunes',
+              requestId,
+              requestKey: key
+            }
+          );
         }
       }
     } catch (error) {
@@ -1965,9 +2427,69 @@ export async function loadArtwork(
         throw error;
       }
 
-      /*
-       * Si una fuente falla, continuar con la siguiente.
-       */
+      reportError(error, 'itunes');
+    }
+  }
+
+  /*
+   * 3. Portada de artista.
+   */
+
+  if (
+    isCurrent() &&
+    bestPriority < getSourcePriority('artist')
+  ) {
+    try {
+      const artist = getArtist(track);
+
+      let artwork = '';
+
+      if (!forceRefresh) {
+        artwork = getCachedArtistArtwork(artist);
+      }
+
+      if (!artwork) {
+        artwork = getArtistModArtwork(artist);
+      }
+
+      if (!artwork) {
+        artwork = await searchDeezerArtist(
+          artist,
+          controller.signal
+        );
+      }
+
+      if (
+        artwork &&
+        isCurrent()
+      ) {
+        const valid = await verifyArtwork(
+          artwork,
+          controller.signal
+        );
+
+        if (valid && isCurrent()) {
+          bestResult = {
+            artwork,
+            source: 'artist'
+          };
+
+          applyArtwork(
+            artwork,
+            {
+              source: 'artist',
+              requestId,
+              requestKey: key
+            }
+          );
+        }
+      }
+    } catch (error) {
+      if (isAbortError(error)) {
+        throw error;
+      }
+
+      reportError(error, 'artist');
     }
   }
 
@@ -1976,27 +2498,52 @@ export async function loadArtwork(
   }
 
   /*
-   * Si no se encontró una portada superior,
-   * conservar la miniatura original de YouTube.
+   * La miniatura de YouTube o el fallback local
+   * se conservan si no se encuentra algo mejor.
    */
 
-  if (!bestResult && !activeArtwork) {
-    applyFallback(track);
-  }
+  const duration = now() - activeLoadStartedAt;
+
+  metrics.successful += bestResult ? 1 : 0;
+  metrics.failed += bestResult ? 0 : 1;
+
+  metrics.lastDuration = duration;
+
+  const completed =
+    metrics.successful + metrics.failed;
+
+  metrics.averageDuration =
+    completed > 0
+      ? (
+          metrics.averageDuration * (completed - 1) +
+          duration
+        ) / completed
+      : duration;
 
   const result = {
     artwork: activeArtwork,
     source: activeArtworkSource,
-    found: Boolean(bestResult)
+    found: Boolean(bestResult),
+    duration,
+    requestId
   };
 
+  /*
+   * El evento shunel:artwork-updated se emite una sola
+   * vez por cada cambio real de imagen, desde applyArtwork.
+   */
+
   safeDispatch(
-    'shunel:artwork-updated',
+    'shunel:artwork-resolved',
     {
       ...result,
       track
     }
   );
+
+  if (activeController === controller) {
+    activeController = null;
+  }
 
   return result;
 }
@@ -2022,6 +2569,284 @@ export function setArtworkPlaybackState(state) {
 }
 
 /* =========================================================
+   SINCRONIZACIÓN VISUAL
+   ========================================================= */
+
+function syncArtworkVisuals() {
+  for (const element of getArtworkElements()) {
+    element.style.setProperty(
+      '--shunel-art-gesture-scale',
+      String(gestureScale)
+    );
+
+    element.classList.toggle(
+      'is-playing',
+      isPlaying
+    );
+  }
+}
+
+function scheduleVisualSync() {
+  if (
+    visualRafId ||
+    destroyed ||
+    !isBrowser()
+  ) {
+    return;
+  }
+
+  visualRafId = requestAnimationFrame(() => {
+    visualRafId = 0;
+
+    if (destroyed) {
+      return;
+    }
+
+    syncArtworkVisuals();
+  });
+}
+
+/* =========================================================
+   GESTOS POINTER
+   ========================================================= */
+
+function onPointerDown(event) {
+  if (
+    event.pointerType === 'mouse' &&
+    event.button !== 0
+  ) {
+    return;
+  }
+
+  pointerStates.set(event.currentTarget, {
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startY: event.clientY,
+    moved: false
+  });
+}
+
+function onPointerMove(event) {
+  const element = event.currentTarget;
+  const state = pointerStates.get(element);
+
+  if (
+    !state ||
+    state.pointerId !== event.pointerId
+  ) {
+    return;
+  }
+
+  const dx = event.clientX - state.startX;
+  const dy = event.clientY - state.startY;
+
+  if (
+    Math.abs(dx) > 8 ||
+    Math.abs(dy) > 8
+  ) {
+    state.moved = true;
+  }
+
+  if (!state.moved) {
+    return;
+  }
+
+  const distance = Math.min(
+    Math.abs(dx) + Math.abs(dy),
+    70
+  );
+
+  const scale = clamp(
+    1 - distance / 1800,
+    0.96,
+    1
+  );
+
+  element.style.setProperty(
+    '--shunel-art-gesture-scale',
+    String(scale)
+  );
+}
+
+function onPointerUp(event) {
+  const element = event.currentTarget;
+  const state = pointerStates.get(element);
+
+  if (
+    !state ||
+    state.pointerId !== event.pointerId
+  ) {
+    return;
+  }
+
+  pointerStates.delete(element);
+
+  element.style.setProperty(
+    '--shunel-art-gesture-scale',
+    '1'
+  );
+}
+
+function onPointerCancel(event) {
+  const element = event.currentTarget;
+
+  pointerStates.delete(element);
+
+  element.style.setProperty(
+    '--shunel-art-gesture-scale',
+    '1'
+  );
+}
+
+function bindGestureEvents(element) {
+  if (
+    !element ||
+    imageListeners.has(element)
+  ) {
+    return;
+  }
+
+  const listeners = {
+    pointerdown: onPointerDown,
+    pointermove: onPointerMove,
+    pointerup: onPointerUp,
+    pointercancel: onPointerCancel
+  };
+
+  for (const [event, handler] of Object.entries(listeners)) {
+    element.addEventListener(
+      event,
+      handler,
+      { passive: true }
+    );
+  }
+
+  element.style.touchAction = 'pan-y';
+
+  imageListeners.set(
+    element,
+    listeners
+  );
+
+  visualElements.add(element);
+}
+
+function unbindGestureEvents(element) {
+  const listeners = imageListeners.get(element);
+
+  if (!listeners) {
+    return;
+  }
+
+  for (const [event, handler] of Object.entries(listeners)) {
+    element.removeEventListener(
+      event,
+      handler
+    );
+  }
+
+  imageListeners.delete(element);
+  pointerStates.delete(element);
+  visualElements.delete(element);
+}
+
+/* =========================================================
+   ACCESIBILIDAD
+   ========================================================= */
+
+function prepareElementAccessibility(element) {
+  if (!element) {
+    return;
+  }
+
+  if (element.tagName?.toLowerCase() === 'img') {
+    if (!element.hasAttribute('alt')) {
+      element.alt = 'Portada de la canción';
+    }
+
+    element.decoding = 'async';
+  } else {
+    element.setAttribute('role', 'img');
+
+    element.setAttribute(
+      'aria-label',
+      'Portada de la canción'
+    );
+  }
+
+  bindGestureEvents(element);
+}
+
+function prepareAccessibility() {
+  for (const element of getArtworkElements()) {
+    prepareElementAccessibility(element);
+  }
+}
+
+/* =========================================================
+   OBSERVAR PORTADAS DINÁMICAS
+   ========================================================= */
+
+function observeArtworkElements() {
+  if (
+    typeof MutationObserver === 'undefined' ||
+    !document.body
+  ) {
+    return;
+  }
+
+  mutationObserver?.disconnect();
+
+  mutationObserver = new MutationObserver(records => {
+    for (const record of records) {
+      for (const node of record.addedNodes) {
+        if (node.nodeType !== Node.ELEMENT_NODE) {
+          continue;
+        }
+
+        const element = node;
+
+        if (element.matches?.(ARTWORK_SELECTOR)) {
+          prepareElementAccessibility(element);
+
+          if (activeArtwork) {
+            setArtworkImage(element, activeArtwork);
+
+            updateArtworkAttributes(
+              element,
+              activeArtworkSource
+            );
+          }
+        }
+
+        for (const child of element.querySelectorAll?.(
+          ARTWORK_SELECTOR
+        ) || []) {
+          prepareElementAccessibility(child);
+
+          if (activeArtwork) {
+            setArtworkImage(child, activeArtwork);
+
+            updateArtworkAttributes(
+              child,
+              activeArtworkSource
+            );
+          }
+        }
+      }
+    }
+  });
+
+  mutationObserver.observe(
+    document.body,
+    {
+      childList: true,
+      subtree: true
+    }
+  );
+}
+
+/* =========================================================
    RESET
    ========================================================= */
 
@@ -2031,15 +2856,13 @@ export function resetArtwork(options = {}) {
   activeTrack = null;
 
   activeRequestKey = '';
-
   activeColorKey = '';
 
   activeArtwork = '';
-
   activeArtworkSource = 'fallback';
+  activeAppliedPriority = -1;
 
   activeSongColor = null;
-
   activeSecondaryColor = null;
 
   gestureScale = 1;
@@ -2064,25 +2887,39 @@ export function resetArtwork(options = {}) {
       element.src = FALLBACK_ARTWORK;
     } else {
       element.style.backgroundImage =
-        `url("${FALLBACK_ARTWORK}")`;
+        `url(${JSON.stringify(FALLBACK_ARTWORK)})`;
     }
+
+    element.style.setProperty(
+      '--shunel-art-gesture-scale',
+      '1'
+    );
   }
 
   updateArtworkCss(FALLBACK_ARTWORK);
 
-  document.documentElement.style.removeProperty(
-    '--song-color'
-  );
+  if (isBrowser()) {
+    document.documentElement.style.removeProperty(
+      '--song-color'
+    );
 
-  document.documentElement.style.removeProperty(
-    '--shunel-song-secondary'
-  );
+    document.documentElement.style.removeProperty(
+      '--shunel-song-secondary'
+    );
+  }
 
   scheduleVisualSync();
+
+  safeDispatch(
+    'shunel:artwork-reset',
+    {
+      clearColors: Boolean(options.clearColors)
+    }
+  );
 }
 
 /* =========================================================
-   EVENTOS
+   EVENTOS DE LA APLICACIÓN
    ========================================================= */
 
 function listen(target, eventName, handler) {
@@ -2114,10 +2951,7 @@ function handleTrackChange(event) {
 
   loadArtwork(track).catch(error => {
     if (!isAbortError(error)) {
-      console.warn(
-        '[Shunel Artwork] Track artwork failed:',
-        error
-      );
+      reportError(error, 'track-change');
     }
   });
 }
@@ -2128,7 +2962,11 @@ function handlePlayRequest(event) {
     event?.detail?.song;
 
   if (isObject(track)) {
-    loadArtwork(track).catch(() => {});
+    loadArtwork(track).catch(error => {
+      if (!isAbortError(error)) {
+        reportError(error, 'play-request');
+      }
+    });
   }
 }
 
@@ -2159,17 +2997,16 @@ function handleModsChanged() {
     return;
   }
 
-  /*
-   * Al retirar un mod, volver a resolver
-   * la portada sin dejar la imagen personalizada.
-   */
-
   loadArtwork(
     activeTrack,
     {
       forceRefresh: true
     }
-  ).catch(() => {});
+  ).catch(error => {
+    if (!isAbortError(error)) {
+      reportError(error, 'mods-changed');
+    }
+  });
 }
 
 function handlePreloadArtwork(event) {
@@ -2220,15 +3057,23 @@ function bindApplicationEvents() {
    ========================================================= */
 
 export function initArtwork() {
-  if (initialized && !destroyed) {
+  if (
+    initialized &&
+    !destroyed
+  ) {
     return true;
   }
 
-  destroyed = false;
+  if (!isBrowser()) {
+    return false;
+  }
 
+  destroyed = false;
   initialized = true;
 
   prepareAccessibility();
+
+  observeArtworkElements();
 
   bindApplicationEvents();
 
@@ -2238,8 +3083,19 @@ export function initArtwork() {
     null;
 
   if (isObject(currentTrack)) {
-    loadArtwork(currentTrack).catch(() => {});
+    loadArtwork(currentTrack).catch(error => {
+      if (!isAbortError(error)) {
+        reportError(error, 'initialization');
+      }
+    });
   }
+
+  safeDispatch(
+    'shunel:artwork-initialized',
+    {
+      version: VERSION
+    }
+  );
 
   return true;
 }
@@ -2250,25 +3106,26 @@ export function initArtwork() {
 
 export function destroyArtwork() {
   destroyed = true;
-
   initialized = false;
 
   cancelActiveRequest();
 
-  /*
-   * Cancelar RAF usando el ID numérico real.
-   */
-
   if (visualRafId) {
     cancelAnimationFrame(visualRafId);
-
     visualRafId = 0;
   }
 
-  visualSyncPending = false;
+  /*
+   * Detener observador del DOM.
+   */
+
+  if (mutationObserver) {
+    mutationObserver.disconnect();
+    mutationObserver = null;
+  }
 
   /*
-   * Eliminar listeners globales.
+   * Eliminar eventos globales.
    */
 
   for (const item of boundEvents) {
@@ -2281,15 +3138,15 @@ export function destroyArtwork() {
   boundEvents = [];
 
   /*
-   * Eliminar listeners de gestos.
+   * Eliminar eventos de cada portada conocida.
    */
 
-  for (const element of getArtworkElements()) {
+  for (const element of visualElements) {
     unbindGestureEvents(element);
   }
 
   /*
-   * Cancelar solicitudes propias.
+   * Cancelar solicitudes compartidas.
    */
 
   for (const request of albumRequests.values()) {
@@ -2300,25 +3157,35 @@ export function destroyArtwork() {
     request.controller?.abort();
   }
 
+  /*
+   * Cancelar precargas.
+   */
+
   for (const request of preloadRequests.values()) {
-    request?.controller?.abort?.();
+    request.controller?.abort();
   }
 
   albumRequests.clear();
-
   artistRequests.clear();
-
   preloadRequests.clear();
 
   activeController = null;
+  activeColorController = null;
 
   activePointer = null;
 
   visualElements.clear();
+
+  safeDispatch(
+    'shunel:artwork-destroyed',
+    {
+      version: VERSION
+    }
+  );
 }
 
 /* =========================================================
-   INFORMACIÓN DE DEPURACIÓN
+   DIAGNÓSTICO Y MÉTRICAS
    ========================================================= */
 
 export function getArtworkState() {
@@ -2328,6 +3195,12 @@ export function getArtworkState() {
     artwork: activeArtwork,
 
     source: activeArtworkSource,
+
+    sourceLabel:
+      SOURCE_REGISTRY[activeArtworkSource]?.label ||
+      activeArtworkSource,
+
+    priority: activeAppliedPriority,
 
     track: activeTrack,
 
@@ -2339,7 +3212,33 @@ export function getArtworkState() {
 
     initialized,
 
-    destroyed
+    destroyed,
+
+    color: activeSongColor,
+
+    secondaryColor: activeSecondaryColor,
+
+    metrics: {
+      ...metrics,
+      sourceUsage: {
+        ...metrics.sourceUsage
+      }
+    },
+
+    cache: {
+      colors: songColorCache.size,
+      artists: Object.keys(readArtistCache()).length,
+      albumRequests: albumRequests.size,
+      artistRequests: artistRequests.size,
+      preloadRequests: preloadRequests.size
+    },
+
+    timing: {
+      lastArtworkUpdate,
+      lastColorUpdate,
+      lastDuration: metrics.lastDuration,
+      averageDuration: Math.round(metrics.averageDuration)
+    }
   };
 }
 
