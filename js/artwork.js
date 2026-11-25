@@ -174,6 +174,8 @@ let imageListeners = new WeakMap();
 
 let pointerStates = new WeakMap();
 
+const visualElements = new Set();
+
 let boundEvents = [];
 
 let mutationObserver = null;
