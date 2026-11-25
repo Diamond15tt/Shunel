@@ -1194,170 +1194,830 @@
    09. ACCESIBILIDAD
    ========================================================================== */
 
-@layer shunel.art-a11y {
+@layer shunel.art-a11y 
+/* =========================================================
+   SHUNEL 2.0 — ARTWORK SYSTEM
+   Dark Editorial · Liquid Glass · iOS Safari
 
-  /* Foco */
+   Responsabilidad:
+   - Portada del mini reproductor.
+   - Portada del reproductor completo.
+   - Iluminación ambiental.
+   - Sombras y profundidad.
+   - Estados de carga y error.
+   - Materiales Liquid Glass.
+   - Adaptación móvil.
+   - Accesibilidad.
+
+   Conserva los selectores originales de Shunel.
+========================================================= */
+
+
+/* =========================================================
+   01. VARIABLES
+========================================================= */
+
+:root {
+  --shunel-art-accent: #6699e8;
+
+  --shunel-art-surface-base: #080d18;
+  --shunel-art-raised: #101b30;
+
+  --shunel-art-radius-mini: 11px;
+  --shunel-art-radius-full: 24px;
+
+  --shunel-artwork-border:
+    rgba(255, 255, 255, .10);
+
+  --shunel-artwork-border-strong:
+    rgba(255, 255, 255, .20);
+
+  --shunel-artwork-inner-highlight:
+    rgba(255, 255, 255, .16);
+
+  --shunel-art-tx: 0px;
+  --shunel-art-ty: 0px;
+
+  --shunel-art-scale: 1;
+  --shunel-art-state-scale: 1;
+  --shunel-art-gesture-scale: 1;
+
+  --shunel-backdrop-tx: 0px;
+  --shunel-backdrop-ty: 0px;
+  --shunel-backdrop-rot: 0deg;
+
+  --shunel-art-blur: 48px;
+  --shunel-art-saturation: 145%;
+
+  --shunel-art-shadow:
+    0 24px 60px rgba(0, 0, 0, .46);
+
+  --shunel-art-shadow-mini:
+    0 5px 16px rgba(0, 0, 0, .34);
+
+  --shunel-art-transition:
+    .32s cubic-bezier(.22, 1, .36, 1);
+
+  --shunel-art-transition-fast:
+    .18s ease;
+}
+
+
+/* =========================================================
+   02. BASE
+========================================================= */
+
+#currentThumbnail,
+#fullPlayerThumbnail,
+.current-art,
+.full-player-art,
+[data-shunel-artwork] {
+  display: block;
+
+  max-width: 100%;
+  aspect-ratio: 1 / 1;
+
+  object-fit: cover;
+  object-position: center;
+
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+
+  transform:
+    translate3d(
+      var(--shunel-art-tx),
+      var(--shunel-art-ty),
+      0
+    )
+    scale(
+      calc(
+        var(--shunel-art-scale) *
+        var(--shunel-art-state-scale) *
+        var(--shunel-art-gesture-scale)
+      )
+    );
+
+  transition:
+    transform var(--shunel-art-transition),
+    opacity var(--shunel-art-transition),
+    filter var(--shunel-art-transition),
+    box-shadow var(--shunel-art-transition);
+
+  -webkit-user-drag: none;
+  user-select: none;
+}
+
+
+/* =========================================================
+   03. MINI PLAYER
+========================================================= */
+
+#currentThumbnail,
+.current-art,
+.mini-player .mini-player-art {
+  width: 48px;
+  height: 48px;
+
+  flex: 0 0 48px;
+
+  border-radius: var(--shunel-art-radius-mini);
+
+  box-shadow:
+    var(--shunel-art-shadow-mini),
+    0 0 0 1px var(--shunel-artwork-border);
+
+  background: var(--shunel-art-raised);
+}
+
+#currentThumbnail,
+.current-art {
+  isolation: isolate;
+}
+
+#currentThumbnail:active,
+.current-art:active {
+  --shunel-art-gesture-scale: .96;
+}
+
+
+/* =========================================================
+   04. FULL PLAYER
+========================================================= */
+
+#fullPlayer,
+.full-player {
+  --shunel-art-local-accent:
+    var(--shunel-art-accent);
+
+  position: relative;
+  isolation: isolate;
+
+  background: var(--shunel-art-surface-base);
+
+  overflow: hidden;
+}
+
+/* Iluminación ambiental */
+
+#fullPlayer::before,
+.full-player::before {
+  content: "";
+
+  position: absolute;
+  inset: -22%;
+
+  z-index: -2;
+  pointer-events: none;
+
+  background:
+    radial-gradient(
+      ellipse at 50% 36%,
+      color-mix(
+        in srgb,
+        var(--shunel-art-local-accent) 35%,
+        transparent
+      ),
+      transparent 62%
+    );
+
+  opacity: .78;
+
+  filter: blur(var(--shunel-art-blur));
+
+  transform:
+    translate3d(
+      var(--shunel-backdrop-tx),
+      var(--shunel-backdrop-ty),
+      0
+    )
+    rotate(var(--shunel-backdrop-rot))
+    scale(1.1);
+
+  transition:
+    opacity var(--shunel-art-transition),
+    transform var(--shunel-art-transition);
+
+  will-change: auto;
+}
+
+/* Capa de oscurecimiento */
+
+#fullPlayer::after,
+.full-player::after {
+  content: "";
+
+  position: absolute;
+  inset: 0;
+
+  z-index: -1;
+  pointer-events: none;
+
+  background:
+    linear-gradient(
+      180deg,
+      rgba(8, 13, 24, .12),
+      rgba(8, 13, 24, .48) 55%,
+      rgba(8, 13, 24, .88)
+    );
+}
+
+
+/* =========================================================
+   05. PORTADA PRINCIPAL
+========================================================= */
+
+#fullPlayerThumbnail,
+.full-player-art {
+  width: min(82vw, 420px);
+  height: auto;
+
+  max-width: 100%;
+
+  margin-inline: auto;
+
+  border-radius: var(--shunel-art-radius-full);
+
+  background: var(--shunel-art-raised);
+
+  box-shadow:
+    0 26px 65px rgba(0, 0, 0, .48),
+    0 8px 28px
+      color-mix(
+        in srgb,
+        var(--shunel-art-accent) 16%,
+        transparent
+      ),
+    inset 0 1px 0 rgba(255, 255, 255, .08);
+
+  outline: 1px solid rgba(255, 255, 255, .055);
+
+  outline-offset: -1px;
+}
+
+#fullPlayerThumbnail:active,
+.full-player-art:active {
+  --shunel-art-gesture-scale: .985;
+}
+
+/* Reproducción activa */
+
+body.is-playing #fullPlayerThumbnail,
+body.is-playing .full-player-art {
+  box-shadow:
+    0 30px 70px rgba(0, 0, 0, .52),
+    0 10px 38px
+      color-mix(
+        in srgb,
+        var(--shunel-art-accent) 24%,
+        transparent
+      ),
+    0 0 0 1px rgba(255, 255, 255, .09);
+}
+
+
+/* =========================================================
+   06. MARCO DE ARTWORK
+========================================================= */
+
+.shunel-artwork-frame {
+  position: relative;
+
+  isolation: isolate;
+
+  overflow: hidden;
+
+  border: 1px solid var(--shunel-artwork-border);
+
+  border-radius: var(--shunel-art-radius-full);
+
+  background: var(--shunel-art-raised);
+
+  box-shadow: var(--shunel-art-shadow);
+}
+
+/* Reflejo superior */
+
+.shunel-artwork-frame::before {
+  content: "";
+
+  position: absolute;
+  inset: 0;
+
+  z-index: 2;
+
+  pointer-events: none;
+
+  border-radius: inherit;
+
+  background:
+    linear-gradient(
+      145deg,
+      rgba(255, 255, 255, .12),
+      transparent 24%,
+      transparent 76%,
+      rgba(255, 255, 255, .025)
+    );
+}
+
+/* Brillo interior */
+
+.shunel-artwork-frame::after {
+  content: "";
+
+  position: absolute;
+  inset: 0;
+
+  z-index: 3;
+
+  pointer-events: none;
+
+  border-radius: inherit;
+
+  box-shadow:
+    inset 0 1px 0
+      var(--shunel-artwork-inner-highlight),
+    inset 0 0 0 1px
+      rgba(255, 255, 255, .025);
+}
+
+
+/* =========================================================
+   07. FONDO ARTÍSTICO
+========================================================= */
+
+[data-shunel-artwork-backdrop] {
+  position: absolute;
+
+  inset: -18%;
+
+  z-index: -1;
+
+  pointer-events: none;
+
+  background:
+    radial-gradient(
+      ellipse at center,
+      var(--shunel-art-accent),
+      transparent 68%
+    );
+
+  opacity: .22;
+
+  filter:
+    blur(var(--shunel-art-blur))
+    saturate(var(--shunel-art-saturation));
+
+  transform:
+    translate3d(
+      var(--shunel-backdrop-tx),
+      var(--shunel-backdrop-ty),
+      0
+    )
+    rotate(var(--shunel-backdrop-rot));
+
+  transition:
+    background var(--shunel-art-transition),
+    opacity var(--shunel-art-transition),
+    transform var(--shunel-art-transition);
+}
+
+
+/* =========================================================
+   08. LIQUID GLASS
+========================================================= */
+
+[data-shunel-artwork-glass] {
+  position: relative;
+
+  isolation: isolate;
+
+  overflow: hidden;
+
+  background:
+    linear-gradient(
+      145deg,
+      rgba(255, 255, 255, .12),
+      rgba(255, 255, 255, .025)
+    ),
+    rgba(13, 20, 35, .40);
+
+  border: 1px solid rgba(255, 255, 255, .13);
+
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .17),
+    0 12px 30px rgba(0, 0, 0, .22);
+
+  -webkit-backdrop-filter:
+    blur(22px) saturate(155%);
+
+  backdrop-filter:
+    blur(22px) saturate(155%);
+}
+
+
+/* =========================================================
+   09. ESTADOS DE CARGA
+========================================================= */
+
+.shunel-artwork-loading {
+  position: relative;
+
+  overflow: hidden;
+
+  background:
+    linear-gradient(
+      110deg,
+      #101b30 20%,
+      #1a2941 38%,
+      #101b30 56%
+    );
+
+  background-size: 220% 100%;
+
+  animation:
+    shunel-artwork-shimmer 1.8s ease-in-out infinite;
+}
+
+@keyframes shunel-artwork-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+
+  to {
+    background-position: -100% 0;
+  }
+}
+
+/* Imagen lista */
+
+.shunel-artwork-ready {
+  opacity: 1;
+  filter: none;
+}
+
+/* Imagen con error */
+
+.shunel-artwork-error {
+  background:
+    radial-gradient(
+      circle at center,
+      #1b2940,
+      #080d18 75%
+    );
+
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, .08);
+}
+
+
+/* =========================================================
+   10. ESTADOS DE INTERACCIÓN
+========================================================= */
+
+#currentThumbnail:focus-visible,
+#fullPlayerThumbnail:focus-visible,
+.current-art:focus-visible,
+.full-player-art:focus-visible,
+[data-shunel-artwork][tabindex]:focus-visible {
+  outline:
+    2px solid var(--shunel-art-accent);
+
+  outline-offset: 4px;
+}
+
+#currentThumbnail:focus-visible,
+.current-art:focus-visible,
+.mini-player .mini-player-art:focus-visible {
+  border-radius: var(--shunel-art-radius-mini);
+}
+
+[data-shunel-artwork][data-shunel-artwork-shape="circle"] {
+  border-radius: 50%;
+}
+
+[data-shunel-artwork][data-shunel-artwork-shape="circle"]:focus-visible {
+  border-radius: 50%;
+}
+
+
+/* =========================================================
+   11. CAMBIO DE CANCIÓN
+========================================================= */
+
+#fullPlayerThumbnail,
+.full-player-art {
+  transition:
+    opacity .28s ease,
+    transform .36s cubic-bezier(.22, 1, .36, 1),
+    filter .32s ease,
+    box-shadow .32s ease;
+}
+
+/* El estado .song-changing debe ser activado por JS */
+
+.song-changing #fullPlayerThumbnail,
+.song-changing .full-player-art {
+  opacity: .72;
+  filter: brightness(.88);
+}
+
+
+/* =========================================================
+   12. FORMAS ALTERNATIVAS
+========================================================= */
+
+[data-shunel-artwork][data-shunel-artwork-shape="circle"] {
+  border-radius: 50%;
+  overflow: hidden;
+}
+
+[data-shunel-artwork][data-shunel-artwork-shape="rounded"] {
+  border-radius: var(--shunel-art-radius-full);
+}
+
+
+/* =========================================================
+   13. PANTALLAS PEQUEÑAS
+========================================================= */
+
+@media (max-width: 380px) {
+  #fullPlayerThumbnail,
+  .full-player-art {
+    width: min(78vw, 350px);
+
+    border-radius: 19px;
+  }
+
+  .shunel-artwork-frame {
+    border-radius: 19px;
+  }
+
+  #currentThumbnail,
+  .current-art,
+  .mini-player .mini-player-art {
+    width: 44px;
+    height: 44px;
+
+    flex-basis: 44px;
+  }
+}
+
+
+/* =========================================================
+   14. PANTALLAS GRANDES
+========================================================= */
+
+@media (min-width: 700px) {
+  #fullPlayerThumbnail,
+  .full-player-art {
+    width: min(44vh, 440px);
+  }
+}
+
+
+/* =========================================================
+   15. ORIENTACIÓN HORIZONTAL
+========================================================= */
+
+@media (orientation: landscape) and (max-height: 500px) {
+  #fullPlayerThumbnail,
+  .full-player-art {
+    width: min(48vh, 250px);
+  }
+
+  .shunel-artwork-frame {
+    max-width: 250px;
+  }
+}
+
+
+/* =========================================================
+   16. HOVER EN DISPOSITIVOS COMPATIBLES
+========================================================= */
+
+@media (hover: hover) and (pointer: fine) {
+  #fullPlayerThumbnail:hover,
+  .full-player-art:hover {
+    --shunel-art-state-scale: 1.015;
+  }
+
+  #currentThumbnail:hover,
+  .current-art:hover {
+    --shunel-art-state-scale: 1.04;
+  }
+}
+
+
+/* =========================================================
+   17. FALLBACKS
+========================================================= */
+
+@supports not (backdrop-filter: blur(1px)) {
+  [data-shunel-artwork-glass] {
+    background: rgba(16, 27, 48, .96);
+
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+@supports not (color: color-mix(in srgb, white, black)) {
+  #fullPlayer::before,
+  .full-player::before {
+    background:
+      radial-gradient(
+        ellipse at 50% 36%,
+        rgba(102, 153, 232, .25),
+        transparent 62%
+      );
+  }
+
+  #fullPlayerThumbnail,
+  .full-player-art {
+    box-shadow:
+      0 26px 65px rgba(0, 0, 0, .48),
+      0 8px 28px rgba(102, 153, 232, .14);
+  }
+}
+
+
+/* =========================================================
+   18. REDUCIR MOVIMIENTO
+========================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+  #currentThumbnail,
+  #fullPlayerThumbnail,
+  .current-art,
+  .full-player-art,
+  [data-shunel-artwork],
+  [data-shunel-artwork-backdrop],
+  [data-shunel-artwork-glass],
+  .shunel-artwork-frame,
+  #fullPlayer::before,
+  #fullPlayer::after,
+  .full-player::before,
+  .full-player::after,
+  .shunel-artwork-loading,
+  .shunel-artwork-ready,
+  .shunel-artwork-error {
+    animation: none !important;
+
+    animation-play-state: paused !important;
+
+    transition: none !important;
+
+    will-change: auto;
+  }
+
+  #currentThumbnail,
+  #fullPlayerThumbnail,
+  .current-art,
+  .full-player-art,
+  [data-shunel-artwork] {
+    --shunel-art-tx: 0px;
+    --shunel-art-ty: 0px;
+
+    --shunel-art-scale: 1;
+    --shunel-art-state-scale: 1;
+    --shunel-art-gesture-scale: 1;
+
+    scale: 1;
+
+    transform: translate3d(0, 0, 0);
+  }
+
+  #fullPlayer::before,
+  .full-player::before {
+    --shunel-backdrop-tx: 0px;
+    --shunel-backdrop-ty: 0px;
+    --shunel-backdrop-rot: 0deg;
+
+    transform:
+      translate3d(0, 0, 0)
+      scale(1.1);
+  }
+}
+
+
+/* =========================================================
+   19. REDUCIR TRANSPARENCIA
+========================================================= */
+
+@media (prefers-reduced-transparency: reduce) {
+  #fullPlayer::before,
+  .full-player::before,
+  [data-shunel-artwork-backdrop] {
+    display: none;
+  }
+
+  #fullPlayer::after,
+  .full-player::after {
+    background: var(--shunel-art-surface-base);
+  }
+
+  [data-shunel-artwork-glass],
+  .shunel-artwork-frame {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+
+    background: var(--shunel-art-raised);
+  }
+}
+
+
+/* =========================================================
+   20. MAYOR CONTRASTE
+========================================================= */
+
+@media (prefers-contrast: more) {
+  :root {
+    --shunel-artwork-border:
+      rgba(255, 255, 255, .45);
+
+    --shunel-artwork-border-strong:
+      rgba(255, 255, 255, .75);
+
+    --shunel-artwork-inner-highlight:
+      rgba(255, 255, 255, .55);
+  }
+
+  #currentThumbnail,
+  #fullPlayerThumbnail,
+  .current-art,
+  .full-player-art,
+  [data-shunel-artwork] {
+    box-shadow:
+      0 0 0 2px var(--shunel-art-accent);
+  }
+
+  #fullPlayer::after,
+  .full-player::after {
+    background: rgba(0, 0, 0, .92);
+  }
+}
+
+
+/* =========================================================
+   21. COLORES FORZADOS
+========================================================= */
+
+@media (forced-colors: active) {
+  #currentThumbnail,
+  #fullPlayerThumbnail,
+  .current-art,
+  .full-player-art,
+  [data-shunel-artwork],
+  [data-shunel-artwork-glass],
+  .shunel-artwork-frame {
+    border: 1px solid CanvasText;
+
+    box-shadow: none;
+
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
 
   #currentThumbnail:focus-visible,
   #fullPlayerThumbnail:focus-visible,
   .current-art:focus-visible,
   .full-player-art:focus-visible,
   [data-shunel-artwork][tabindex]:focus-visible {
-    outline:
-      2px solid var(--shunel-art-accent);
-
-    outline-offset: 3px;
-
-    border-radius:
-      var(--shunel-art-radius-full);
+    outline: 2px solid Highlight;
   }
 
-  #currentThumbnail:focus-visible,
-  .current-art:focus-visible,
-  .mini-player .mini-player-art:focus-visible {
-    border-radius:
-      var(--shunel-art-radius-mini);
-  }
-
-  [data-shunel-artwork][data-shunel-artwork-shape="circle"]:focus-visible {
-    border-radius: 50%;
-  }
-
-  /* Reducir movimiento */
-
-  @media (prefers-reduced-motion: reduce) {
-
-    #currentThumbnail,
-    #fullPlayerThumbnail,
-    .current-art,
-    .full-player-art,
-    [data-shunel-artwork],
-    [data-shunel-artwork-backdrop],
-    [data-shunel-artwork-glass],
-    .shunel-artwork-frame,
-    #fullPlayer::before,
-    #fullPlayer::after,
-    .shunel-artwork-loading,
-    .shunel-artwork-ready,
-    .shunel-artwork-error {
-      animation: none !important;
-
-      animation-play-state: paused !important;
-
-      transition: none !important;
-
-      will-change: auto;
-    }
-
-    #currentThumbnail,
-    #fullPlayerThumbnail,
-    .current-art,
-    .full-player-art,
-    [data-shunel-artwork] {
-      --shunel-art-tx: 0px;
-      --shunel-art-ty: 0px;
-
-      --shunel-art-scale: 1;
-      --shunel-art-state-scale: 1;
-      --shunel-art-gesture-scale: 1;
-
-      scale: 1;
-
-      transform:
-        translate3d(0, 0, 0);
-    }
-
-    #fullPlayer::before {
-      --shunel-backdrop-tx: 0px;
-      --shunel-backdrop-ty: 0px;
-      --shunel-backdrop-rot: 0deg;
-
-      transform:
-        translate3d(0, 0, 0)
-        scale(1.1);
-    }
-  }
-
-  /* Reducir transparencia */
-
-  @media (prefers-reduced-transparency: reduce) {
-
-    #fullPlayer::before,
-    [data-shunel-artwork-backdrop] {
-      display: none;
-    }
-
-    #fullPlayer::after {
-      background:
-        var(--shunel-art-surface-base);
-    }
-
-    [data-shunel-artwork-glass],
-    .shunel-artwork-frame {
-      -webkit-backdrop-filter: none;
-      backdrop-filter: none;
-
-      background:
-        var(--shunel-art-raised);
-    }
-  }
-
-  /* Mayor contraste */
-
-  @media (prefers-contrast: more) {
-
-    :root {
-      --shunel-artwork-border:
-        rgba(255, 255, 255, 0.45);
-
-      --shunel-artwork-border-strong:
-        rgba(255, 255, 255, 0.75);
-
-      --shunel-artwork-inner-highlight:
-        rgba(255, 255, 255, 0.55);
-    }
-
-    #currentThumbnail,
-    #fullPlayerThumbnail,
-    [data-shunel-artwork] {
-      box-shadow:
-        0 0 0 2px var(--shunel-art-accent);
-    }
-
-    #fullPlayer::after {
-      background:
-        rgba(0, 0, 0, 0.92);
-    }
-  }
-
-  /* Colores forzados */
-
-  @media (forced-colors: active) {
-
-    #currentThumbnail,
-    #fullPlayerThumbnail,
-    [data-shunel-artwork],
-    [data-shunel-artwork-glass],
-    .shunel-artwork-frame {
-      border:
-        1px solid CanvasText;
-
-      box-shadow: none;
-
-      -webkit-backdrop-filter: none;
-      backdrop-filter: none;
-    }
-
-    #currentThumbnail:focus-visible,
-    #fullPlayerThumbnail:focus-visible,
-    [data-shunel-artwork][tabindex]:focus-visible {
-      outline:
-        2px solid Highlight;
-    }
-
-    #fullPlayer::before,
-    [data-shunel-artwork-backdrop] {
-      display: none;
-    }
+  #fullPlayer::before,
+  #fullPlayer::after,
+  .full-player::before,
+  .full-player::after,
+  [data-shunel-artwork-backdrop] {
+    display: none;
   }
 }
+
+
+/* =========================================================
+   22. SEGURIDAD
+========================================================= */
+
+#currentThumbnail,
+#fullPlayerThumbnail,
+.current-art,
+.full-player-art,
+[data-shunel-artwork] {
+  -webkit-user-drag: none;
+}
+
+#currentThumbnail[hidden],
+#fullPlayerThumbnail[hidden],
+.current-art[hidden],
+.full-player-art[hidden],
+[data-shunel-artwork][hidden] {
+  display: none !important;
+}
+
+
+/* =========================================================
+   FIN — SHUNEL ARTWORK SYSTEM 2.0
+========================================================= */
+
