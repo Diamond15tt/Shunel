@@ -21,6 +21,7 @@ const CONFIG = Object.freeze({
   maxLyricsLength: 250_000,
   maxLines: 12_000,
   maxResponseBytes: 1_500_000,
+  youtubeMaxBytes: 4_000_000,
   requestTimeoutMs: 8_000,
   liriqoTimeoutMs: 11_000,
   youtubeTimeoutMs: 9_000,
@@ -30,7 +31,10 @@ const CONFIG = Object.freeze({
   cacheMaxEntries: 100,
   minMatchScore: 62,
   earlySyncedScore: 68,
-  earlySyncedQuality: 58
+  earlySyncedQuality: 58,
+  trustedProviderScore: 70,
+  minTimedLines: 2,
+  minTimingRatio: 0.5
 });
 
 const PROVIDER_NAMES = [
@@ -41,6 +45,9 @@ const PROVIDER_NAMES = [
   "Lyrics.ovh",
   "YouTube"
 ];
+
+const WORD_LEVELS = new Set(["syllable", "word", "character"]);
+const KNOWN_LEVELS = new Set(["syllable", "word", "character", "line", "plain"]);
 
 const memoryCache = new Map();
 
@@ -53,6 +60,8 @@ class LyricsHttpError extends Error {
   }
 }
 
+/* ---------- Texto ---------- */
+
 function clean(value, maxLength = 500) {
   return String(value ?? "")
     .replace(/[\u0000-\u001F\u007F]/g, " ")
@@ -62,41 +71,76 @@ function clean(value, maxLength = 500) {
 }
 
 function normalizeText(value) {
-  return clean(value, 500)
+  const base = clean(value, 500)
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/\b(feat|ft|featuring)\b.*$/i, "")
-    .replace(/\b(official|video|lyrics?|letra|audio|visualizer)\b/gi, "")
+    .toLowerCase();
+
+  const result = base
+    .replace(/\([^)]*\)|\[[^\]]*\]|\{[^}]*\}/g, " ")
+    .replace(
+      /\s[-–—|]\s*(?:\d{4}\s+)?(?:remaster(?:ed)?|live|version|edit|mix|acoustic|mono|stereo|deluxe|radio|single|bonus|explicit|clean)\b.*$/i,
+      " "
+    )
+    .replace(/\b(feat|ft|featuring)\b.*$/i, " ")
+    .replace(
+      /\b(official\s+(?:music\s+)?(?:video|audio|lyric\s+video)|lyrics?\s+video|lyric\s+video|video\s+oficial|audio\s+oficial|letra|lyrics|visuali[sz]er)\b/gi,
+      " "
+    )
     .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return result || base.replace(/[^\p{L}\p{N}]+/gu, " ").replace(/\s+/g, " ").trim();
+}
+
+function normalizeArtist(value) {
+  return normalizeText(value)
+    .replace(/\b(topic|vevo|official|oficial)\b/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
 
 function decodeEntities(value) {
+  // &amp; va al final para no decodificar dos veces (&amp;quot; -> &quot;).
   return String(value ?? "")
-    .replace(/&amp;/gi, "&")
-    .replace(/&quot;/gi, '"')
-    .replace(/&apos;|&#39;/gi, "'")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
     .replace(/&#(\d+);/g, (_, raw) => {
-      const code = Number(raw);
       try {
-        return String.fromCodePoint(code);
+        return String.fromCodePoint(Number(raw));
       } catch {
         return "";
       }
     })
     .replace(/&#x([a-f\d]+);/gi, (_, raw) => {
-      const code = Number.parseInt(raw, 16);
       try {
-        return String.fromCodePoint(code);
+        return String.fromCodePoint(Number.parseInt(raw, 16));
       } catch {
         return "";
       }
-    });
+    })
+    .replace(/&quot;/gi, '"')
+    .replace(/&apos;|&#39;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&amp;/gi, "&");
 }
+
+function stripLrcTags(text) {
+  return String(text ?? "")
+    .split(/\r?\n/)
+    .map(line =>
+      line
+        .replace(/^\s*(?:\[\d{1,3}:\d{2}(?:[.:]\d{1,3})?\]\s*)+/, "")
+        .replace(/<\d{1,3}:\d{2}(?:[.:]\d{1,3})?>/g, "")
+        .replace(/\s+$/, "")
+    )
+    .filter(line => !/^\s*\[(ar|ti|al|by|re|ve|offset|length|kana|la|tool):/i.test(line))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/* ---------- Validación ---------- */
 
 function validVideoId(value) {
   return /^[A-Za-z0-9_-]{11}$/.test(value);
@@ -125,6 +169,8 @@ function validLyrics(value) {
 
   return visible.length >= 15;
 }
+
+/* ---------- Señales, tiempos y red ---------- */
 
 function parseRetryAfter(response) {
   const raw = response.headers.get("retry-after");
@@ -244,7 +290,8 @@ async function fetchText(url, options = {}) {
     signal,
     timeoutMs = CONFIG.requestTimeoutMs,
     headers = {},
-    retries = CONFIG.maxRetries
+    retries = CONFIG.maxRetries,
+    maxBytes = CONFIG.maxResponseBytes
   } = options;
 
   const parsedUrl = new URL(url);
@@ -262,9 +309,11 @@ async function fetchText(url, options = {}) {
     const combined = combineSignals([signal, timeoutController.signal]);
 
     try {
+      // Se siguen redirecciones (muchos proveedores y YouTube las usan),
+      // pero el destino final debe seguir siendo HTTPS.
       const response = await fetch(parsedUrl, {
         method: "GET",
-        redirect: "error",
+        redirect: "follow",
         signal: combined.signal,
         headers: {
           "User-Agent": CONFIG.userAgent,
@@ -272,6 +321,11 @@ async function fetchText(url, options = {}) {
           ...headers
         }
       });
+
+      if (response.url && new URL(response.url).protocol !== "https:") {
+        await response.body?.cancel().catch(() => {});
+        throw new LyricsHttpError("Redirección no segura rechazada.", 502);
+      }
 
       if (!response.ok) {
         const retryable = response.status === 429 || response.status >= 500;
@@ -293,20 +347,21 @@ async function fetchText(url, options = {}) {
         );
       }
 
-      return await readBodyLimited(response);
+      return await readBodyLimited(response, maxBytes);
     } catch (error) {
-      lastError = error;
-
       if (signal?.aborted) throw abortError();
+
+      let failure = error;
       if (timeoutController.signal.aborted) {
-        lastError = new LyricsHttpError("Tiempo de espera agotado.", 504, true);
+        failure = new LyricsHttpError("Tiempo de espera agotado.", 504, true);
       }
 
-      const retryable = error?.retryable || error?.status === 429 ||
-        error?.status >= 500 || error?.name === "TypeError" ||
-        error?.name === "AbortError";
+      lastError = failure;
 
-      if (!retryable || attempt >= retries) throw lastError;
+      const retryable = failure?.retryable || failure?.status === 429 ||
+        failure?.status >= 500 || failure?.name === "TypeError";
+
+      if (!retryable || attempt >= retries) throw failure;
 
       await sleep(350 * (attempt + 1) + Math.floor(Math.random() * 180), signal);
     } finally {
@@ -328,16 +383,50 @@ async function fetchJson(url, options = {}) {
   }
 }
 
-function normalizeTimestamp(value, duration = 0) {
-  const raw = Number(value);
-  if (!Number.isFinite(raw) || raw < 0) return null;
+/* Une base + ruta SIN perder el prefijo de la base
+ * (new URL("/search", "https://x/api") descartaba "/api"). */
+function makeUrl(base, path, params = {}) {
+  const joined = `${String(base).replace(/\/+$/, "")}/${String(path).replace(/^\/+/, "")}`;
+  const url = new URL(joined);
 
-  if (duration > 0 && raw > duration * 1.5) {
-    return raw / 1_000;
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== "") {
+      url.searchParams.set(key, String(value));
+    }
   }
 
-  if (raw >= 100_000) return raw / 1_000;
-  return raw;
+  return url.toString();
+}
+
+/* ---------- Tiempos y LRC ---------- */
+
+function startOf(item) {
+  return item.start ?? item.time ?? item.timestamp ?? item.offset ??
+    item.startTime ?? item.start_time;
+}
+
+function endOf(item) {
+  return item.end ?? item.endTime ?? item.end_time;
+}
+
+/* La unidad (segundos o milisegundos) se decide UNA vez para toda la lista.
+ * Ninguna canción dura más de 2 h, así que un máximo > 7200 implica ms. */
+function detectTimeScale(values) {
+  let max = -Infinity;
+
+  for (const value of values) {
+    const number = Number(value);
+    if (Number.isFinite(number) && number >= 0 && number > max) max = number;
+  }
+
+  if (max === -Infinity) return 1;
+  return max > 7_200 ? 0.001 : 1;
+}
+
+function toSeconds(value, scale) {
+  const raw = Number(value);
+  if (!Number.isFinite(raw) || raw < 0) return null;
+  return raw * scale;
 }
 
 function formatLrcTime(seconds) {
@@ -381,25 +470,30 @@ function inspectLrc(text) {
 function normalizeTimedEntries(entries, duration = 0) {
   if (!Array.isArray(entries)) return [];
 
+  const list = entries
+    .slice(0, CONFIG.maxLines)
+    .filter(item => item && typeof item === "object");
+
+  const scale = detectTimeScale(list.map(startOf));
   const output = [];
 
-  for (const item of entries.slice(0, CONFIG.maxLines)) {
-    if (!item || typeof item !== "object") continue;
-
-    const rawStart = item.start ?? item.time ?? item.timestamp ??
-      item.offset ?? item.startTime ?? item.start_time;
-
-    const start = normalizeTimestamp(rawStart, duration);
+  for (const item of list) {
+    const start = toSeconds(startOf(item), scale);
     const text = decodeEntities(item.text ?? item.word ?? "").trim();
 
     if (start === null || !text || text.length > 1_000) continue;
-    if (duration > 0 && start > duration + 30) continue;
+    if (duration > 0 && start > duration * 1.25 + 30) continue;
 
     output.push({ time: start, text });
   }
 
   output.sort((a, b) => a.time - b.time);
-  return output;
+
+  return output.filter((line, index) =>
+    index === 0 ||
+    line.time !== output[index - 1].time ||
+    line.text !== output[index - 1].text
+  );
 }
 
 function entriesToLrc(entries, duration = 0) {
@@ -408,23 +502,36 @@ function entriesToLrc(entries, duration = 0) {
     .join("\n");
 }
 
-function normalizeWordTimings(entries, duration = 0) {
+/* nestedOnly: solo toma palabras que vengan dentro de line.words / line.syllables. */
+function normalizeWordTimings(entries, duration = 0, nestedOnly = false) {
   if (!Array.isArray(entries)) return [];
 
-  return entries.slice(0, CONFIG.maxLines).flatMap(item => {
-    if (!item || typeof item !== "object") return [];
+  const flat = [];
 
-    const start = normalizeTimestamp(
-      item.start ?? item.time ?? item.timestamp,
-      duration
-    );
-    const end = normalizeTimestamp(
-      item.end ?? item.endTime ?? item.end_time,
-      duration
-    );
+  for (const item of entries.slice(0, CONFIG.maxLines)) {
+    if (!item || typeof item !== "object") continue;
+
+    const nested = item.words ?? item.syllables;
+    if (Array.isArray(nested)) {
+      for (const word of nested.slice(0, 500)) {
+        if (word && typeof word === "object") flat.push(word);
+      }
+    } else if (!nestedOnly) {
+      flat.push(item);
+    }
+
+    if (flat.length >= CONFIG.maxLines * 4) break;
+  }
+
+  const scale = detectTimeScale(flat.map(startOf));
+
+  return flat.flatMap(item => {
+    const start = toSeconds(startOf(item), scale);
+    const end = toSeconds(endOf(item), scale);
     const text = decodeEntities(item.text ?? item.word ?? "").trim();
 
     if (start === null || !text || text.length > 200) return [];
+    if (duration > 0 && start > duration * 1.25 + 30) return [];
 
     return [{
       text,
@@ -437,9 +544,23 @@ function normalizeWordTimings(entries, duration = 0) {
 function createResult(lyrics, source, synced = false, metadata = {}) {
   if (!validLyrics(lyrics)) return null;
 
-  const text = lyrics.trim();
-  const info = inspectLrc(text);
-  const hasTimestamps = Boolean(synced && info.valid && info.timedLineCount);
+  const raw = lyrics.trim();
+  const info = inspectLrc(raw);
+
+  const hasTimestamps = Boolean(
+    synced &&
+    info.valid &&
+    info.timedLineCount >= CONFIG.minTimedLines &&
+    info.ratio >= CONFIG.minTimingRatio
+  );
+
+  // Con tiempos: se quitan solo etiquetas inline <mm:ss.xx>.
+  // Sin tiempos: se quitan todas las etiquetas LRC para no mostrarlas en pantalla.
+  const text = hasTimestamps
+    ? raw.replace(/<\d{1,3}:\d{2}(?:[.:]\d{1,3})?>/g, "")
+    : stripLrcTags(raw);
+
+  if (!validLyrics(text)) return null;
 
   return {
     text,
@@ -447,8 +568,10 @@ function createResult(lyrics, source, synced = false, metadata = {}) {
     synced: hasTimestamps,
     syncedLyrics: hasTimestamps ? text : "",
     plainLyrics: hasTimestamps ? "" : text,
-    syncLevel: metadata.syncLevel || (hasTimestamps ? "line" : "plain"),
-    wordTimings: Array.isArray(metadata.wordTimings) ? metadata.wordTimings : [],
+    syncLevel: hasTimestamps ? (metadata.syncLevel || "line") : "plain",
+    wordTimings: hasTimestamps && Array.isArray(metadata.wordTimings)
+      ? metadata.wordTimings
+      : [],
     language: metadata.language || null,
     duration: Number.isFinite(metadata.duration) ? metadata.duration : null,
     metadata: {
@@ -456,26 +579,39 @@ function createResult(lyrics, source, synced = false, metadata = {}) {
       timedLineCount: info.timedLineCount,
       timingRatio: info.ratio,
       provider: source,
-      matchScore: Number.isFinite(metadata.matchScore) ? metadata.matchScore : null
+      matchScore: Number.isFinite(metadata.matchScore)
+        ? metadata.matchScore
+        : CONFIG.trustedProviderScore
     }
   };
 }
 
-function similarityScore(target, candidate) {
+/* ---------- Coincidencia y ranking ---------- */
+
+function similarityScore(target, candidate, lenient = false) {
   if (!target || !candidate) return 0;
   if (target === candidate) return 1;
 
-  const a = new Set(target.split(" "));
-  const b = new Set(candidate.split(" "));
+  const a = new Set(target.split(" ").filter(Boolean));
+  const b = new Set(candidate.split(" ").filter(Boolean));
   const intersection = [...a].filter(word => b.has(word)).length;
   const union = new Set([...a, ...b]).size;
-  const jaccard = union ? intersection / union : 0;
+  let score = union ? intersection / union : 0;
 
-  if (candidate.includes(target) || target.includes(candidate)) {
-    return Math.max(0.82, jaccard);
+  if (lenient) {
+    score = Math.max(
+      score,
+      (0.9 * intersection) / Math.max(1, Math.min(a.size, b.size))
+    );
   }
 
-  return jaccard;
+  if (candidate.includes(target) || target.includes(candidate)) {
+    const ratio = Math.min(target.length, candidate.length) /
+      Math.max(target.length, candidate.length);
+    score = Math.max(score, 0.6 + 0.35 * ratio);
+  }
+
+  return Math.min(1, score);
 }
 
 function matchScore(target, candidate) {
@@ -483,22 +619,36 @@ function matchScore(target, candidate) {
     normalizeText(target.title),
     normalizeText(candidate.title)
   );
-  const artistScore = target.artist
-    ? similarityScore(normalizeText(target.artist), normalizeText(candidate.artist))
+
+  if (titleScore < 0.5) return Math.round(titleScore * 40);
+
+  const hasArtist = Boolean(target.artist && candidate.artist);
+  const artistScore = hasArtist
+    ? similarityScore(normalizeArtist(target.artist), normalizeArtist(candidate.artist), true)
     : 0.45;
 
   let score = titleScore * 68 + artistScore * 27;
 
   const candidateDuration = Number(candidate.duration);
-  if (target.duration > 0 && validDuration(candidateDuration)) {
-    const difference = Math.abs(target.duration - candidateDuration) / target.duration;
+  let difference = null;
 
-    if (difference <= 0.02) score += 5;
-    else if (difference <= 0.06) score += 3;
+  if (target.duration > 0 && validDuration(candidateDuration)) {
+    difference = Math.abs(target.duration - candidateDuration) / target.duration;
+
+    if (difference <= 0.01) score += 6;
+    else if (difference <= 0.03) score += 4;
+    else if (difference <= 0.06) score += 2;
     else if (difference > 0.2) score -= 14;
+    else if (difference > 0.1) score -= 6;
   }
 
-  return Math.round(score);
+  // Artista distinto: solo se acepta si el título es casi exacto y la duración coincide.
+  if (hasArtist && artistScore < 0.2) {
+    const rescued = titleScore >= 0.95 && difference !== null && difference <= 0.03;
+    if (!rescued) score = Math.min(score, 55);
+  }
+
+  return Math.max(0, Math.min(100, Math.round(score)));
 }
 
 function resultQuality(item) {
@@ -528,41 +678,38 @@ function selectBestResult(results) {
     })[0] || null;
 }
 
-function makeUrl(base, path, params = {}) {
-  const url = new URL(path, base);
-  for (const [key, value] of Object.entries(params)) {
-    if (value !== undefined && value !== null && value !== "") {
-      url.searchParams.set(key, String(value));
-    }
-  }
-  return url.toString();
+function isGoodEnough(item) {
+  return Boolean(
+    item?.synced &&
+    resultQuality(item) >= CONFIG.earlySyncedQuality &&
+    (item.metadata?.matchScore ?? 0) >= CONFIG.earlySyncedScore
+  );
 }
 
-async function searchLrclib(target, signal) {
-  const url = makeUrl(PROVIDERS.lrclib, "/search", {
-    track_name: target.title,
-    artist_name: target.artist,
-    duration: target.duration ? Math.round(target.duration) : undefined
-  });
+/* ---------- Proveedores ---------- */
 
-  const data = await fetchJson(url, { signal, timeoutMs: CONFIG.requestTimeoutMs });
+function pickLrclib(target, data) {
   if (!Array.isArray(data)) return null;
 
-  const candidates = data.map(item => {
-    const score = matchScore(target, {
-      title: item.trackName,
-      artist: item.artistName,
-      duration: item.duration
-    });
-    return { item, score };
-  }).filter(candidate =>
-    candidate.score >= CONFIG.minMatchScore &&
-    (validLyrics(candidate.item.syncedLyrics) || validLyrics(candidate.item.plainLyrics))
-  ).sort((a, b) => {
-    const syncA = validLyrics(a.item.syncedLyrics) ? 1 : 0;
-    const syncB = validLyrics(b.item.syncedLyrics) ? 1 : 0;
-    return (syncB - syncA) || (b.score - a.score);
-  });
+  const candidates = data
+    .filter(item => item && typeof item === "object" && !item.instrumental)
+    .map(item => ({
+      item,
+      score: matchScore(target, {
+        title: item.trackName,
+        artist: item.artistName,
+        duration: item.duration
+      })
+    }))
+    .filter(candidate =>
+      candidate.score >= CONFIG.minMatchScore &&
+      (validLyrics(candidate.item.syncedLyrics) || validLyrics(candidate.item.plainLyrics))
+    )
+    .map(candidate => ({
+      ...candidate,
+      rank: candidate.score + (validLyrics(candidate.item.syncedLyrics) ? 6 : 0)
+    }))
+    .sort((a, b) => b.rank - a.rank);
 
   const best = candidates[0];
   if (!best) return null;
@@ -578,6 +725,30 @@ async function searchLrclib(target, signal) {
       matchScore: best.score
     }
   );
+}
+
+async function searchLrclib(target, signal) {
+  const queries = [{ track_name: target.title, artist_name: target.artist }];
+  if (target.artist) queries.push({ q: `${target.artist} ${target.title}` });
+
+  for (const params of queries) {
+    throwIfAborted(signal);
+
+    const data = await fetchJson(makeUrl(PROVIDERS.lrclib, "/search", params), {
+      signal,
+      timeoutMs: CONFIG.requestTimeoutMs
+    });
+
+    const result = pickLrclib(target, data);
+    if (result) return result;
+  }
+
+  return null;
+}
+
+function normalizeLevel(value) {
+  const level = String(value || "").toLowerCase();
+  return KNOWN_LEVELS.has(level) ? level : "line";
 }
 
 async function searchLiriqo(target, videoId, signal) {
@@ -615,41 +786,35 @@ async function searchLiriqo(target, videoId, signal) {
   const rank = { syllable: 6, word: 5, character: 5, line: 4, plain: 1 };
 
   unique.sort((a, b) =>
-    (rank[String(b.syncLevel).toLowerCase()] || 0) -
-    (rank[String(a.syncLevel).toLowerCase()] || 0)
+    (rank[normalizeLevel(b.syncLevel)] || 0) -
+    (rank[normalizeLevel(a.syncLevel)] || 0)
   );
 
   for (const item of unique) {
-    const timed = normalizeTimedEntries(item.timed, target.duration);
-    const lrc = entriesToLrc(timed, target.duration);
+    const level = normalizeLevel(item.syncLevel);
+    const wordLevel = WORD_LEVELS.has(level);
+    const source = `LiriQo · ${clean(item.upstreamProvider || item.provider || "Proveedor", 60)}`;
 
-    if (validLyrics(lrc)) {
-      const words = normalizeWordTimings(item.timed, target.duration);
-      return createResult(
-        lrc,
-        `LiriQo · ${clean(item.upstreamProvider || item.provider || "Proveedor", 60)}`,
-        true,
-        {
-          syncLevel: rank[String(item.syncLevel).toLowerCase()]
-            ? String(item.syncLevel).toLowerCase()
-            : "line",
-          wordTimings: words,
-          duration: target.duration || null
-        }
-      );
+    // 1) Un LRC ya armado por líneas siempre tiene prioridad.
+    if (typeof item.lrc === "string" && inspectLrc(item.lrc).timedLineCount > 0) {
+      const result = createResult(item.lrc, source, true, {
+        syncLevel: level === "plain" ? "line" : level,
+        wordTimings: wordLevel ? normalizeWordTimings(item.timed, target.duration) : [],
+        duration: target.duration || null
+      });
+      if (result?.synced) return result;
     }
 
-    if (validLyrics(item.lrc) && inspectLrc(item.lrc).timedLineCount > 0) {
-      return createResult(
-        item.lrc,
-        `LiriQo · ${clean(item.upstreamProvider || item.provider || "Proveedor", 60)}`,
-        true,
-        {
-          syncLevel: String(item.syncLevel || "line").toLowerCase(),
-          wordTimings: normalizeWordTimings(item.timed, target.duration),
-          duration: target.duration || null
-        }
-      );
+    // 2) `timed` solo se convierte a LRC si son LÍNEAS.
+    //    En nivel palabra/sílaba cada entrada es una palabra: convertirla
+    //    daba una línea por palabra.
+    if (!wordLevel && Array.isArray(item.timed)) {
+      const lrc = entriesToLrc(item.timed, target.duration);
+      const result = createResult(lrc, source, true, {
+        syncLevel: "line",
+        duration: target.duration || null
+      });
+      if (result?.synced) return result;
     }
   }
 
@@ -666,38 +831,120 @@ async function searchLiriqo(target, videoId, signal) {
   return null;
 }
 
+function looksLikeWordEntries(lines) {
+  if (!Array.isArray(lines) || lines.length < 40) return false;
+
+  const sample = lines
+    .slice(0, 200)
+    .map(line => String(line?.text ?? line?.word ?? "").trim())
+    .filter(Boolean);
+
+  if (!sample.length) return false;
+
+  const average = sample.reduce((sum, text) => sum + text.split(/\s+/).length, 0) /
+    sample.length;
+
+  return average < 1.3;
+}
+
 async function searchLrcmux(target, signal) {
-  const url = makeUrl(PROVIDERS.lrcmux, "/get", {
-    title: target.title,
-    artist: target.artist,
-    level: "word",
-    format: "json",
-    duration: target.duration ? Math.round(target.duration) : undefined
-  });
+  let lastError = null;
 
-  const data = await fetchJson(url, { signal, timeoutMs: 9_000 });
-  if (!data || typeof data !== "object" || !Array.isArray(data.lines)) return null;
+  for (const level of ["word", "line"]) {
+    throwIfAborted(signal);
 
-  const lrc = entriesToLrc(data.lines, target.duration);
-  const source = `LRCMux · ${clean(data.meta?.source?.name || "Proveedor", 60)}`;
-
-  if (validLyrics(lrc)) {
-    return createResult(lrc, source, true, {
-      syncLevel: "word",
-      wordTimings: normalizeWordTimings(data.lines, target.duration),
-      duration: target.duration || null
+    const url = makeUrl(PROVIDERS.lrcmux, "/get", {
+      title: target.title,
+      artist: target.artist,
+      level,
+      format: "json",
+      duration: target.duration ? Math.round(target.duration) : undefined
     });
+
+    let data;
+    try {
+      data = await fetchJson(url, { signal, timeoutMs: 9_000 });
+    } catch (error) {
+      if (signal?.aborted || error?.name === "AbortError") throw error;
+      lastError = error;
+      continue;
+    }
+
+    if (!data || typeof data !== "object" || !Array.isArray(data.lines)) continue;
+
+    // Si cada "línea" es una palabra suelta, se pide el nivel por línea.
+    if (looksLikeWordEntries(data.lines)) continue;
+
+    const lrc = entriesToLrc(data.lines, target.duration);
+    const source = `LRCMux · ${clean(data.meta?.source?.name || "Proveedor", 60)}`;
+
+    if (validLyrics(lrc)) {
+      const words = normalizeWordTimings(data.lines, target.duration, true);
+      const result = createResult(lrc, source, true, {
+        syncLevel: words.length ? "word" : "line",
+        wordTimings: words,
+        duration: target.duration || null
+      });
+      if (result?.synced) return result;
+    }
+
+    const plain = data.lines
+      .map(line => decodeEntities(line?.text || "").trim())
+      .filter(Boolean)
+      .join("\n");
+
+    const plainResult = createResult(plain, source, false);
+    if (plainResult) return plainResult;
   }
 
-  const plain = data.lines
-    .map(line => decodeEntities(line?.text || "").trim())
-    .filter(Boolean)
-    .join("\n");
+  if (lastError) throw lastError;
+  return null;
+}
+
+/* Formatos de Better Lyrics: LRC normal, o KRC/QRC "[inicio_ms,duracion]texto<..>". */
+function parseBetterLyrics(raw, providerLabel, target) {
+  const lyrics = decodeEntities(raw);
+  const source = `Better Lyrics · ${providerLabel}`;
+
+  if (inspectLrc(lyrics).timedLineCount >= CONFIG.minTimedLines) {
+    const result = createResult(lyrics, source, true, {
+      syncLevel: "line",
+      duration: target.duration || null
+    });
+    if (result?.synced) return result;
+  }
+
+  const krcLines = lyrics.split(/\r?\n/).flatMap(line => {
+    const match = line.match(/^\s*\[(\d+),(\d+)\](.*)$/);
+    if (!match) return [];
+
+    const text = match[3]
+      .replace(/<\d+,\d+(?:,\d+)?>/g, "")
+      .replace(/\(\d+,\d+(?:,\d+)?\)/g, "")
+      .trim();
+
+    return text ? [{ time: Number(match[1]), text }] : [];
+  });
+
+  if (krcLines.length >= 3) {
+    const lrc = entriesToLrc(krcLines, target.duration);
+    const result = createResult(lrc, source, true, {
+      syncLevel: "line",
+      duration: target.duration || null
+    });
+    if (result?.synced) return result;
+  }
+
+  const plain = lyrics
+    .replace(/<[^>]*>/g, "")
+    .replace(/\(\d+,\d+(?:,\d+)?\)|\[\d+,\d+\]/g, "");
 
   return createResult(plain, source, false);
 }
 
 async function searchBetterLyrics(target, signal) {
+  let fallbackPlain = null;
+
   for (const provider of ["kugou", "qq"]) {
     throwIfAborted(signal);
 
@@ -718,28 +965,25 @@ async function searchBetterLyrics(target, signal) {
 
     if (!validLyrics(data?.lyrics)) continue;
 
-    const lyrics = decodeEntities(data.lyrics);
-    if (provider === "kugou" && inspectLrc(lyrics).timedLineCount > 0) {
-      return createResult(lyrics, "Better Lyrics · KuGou", true, {
-        syncLevel: "line",
-        duration: target.duration || null
-      });
-    }
-
-    const plain = lyrics
-      .replace(/<[^>]*>/g, "\n")
-      .replace(/\(\d+,\d+\)|\[\d+,\d+\]/g, "")
-      .trim();
-
-    const resultValue = createResult(
-      plain,
-      `Better Lyrics · ${provider === "qq" ? "QQ Music" : "KuGou"}`,
-      false
+    const result = parseBetterLyrics(
+      data.lyrics,
+      provider === "qq" ? "QQ Music" : "KuGou",
+      target
     );
-    if (resultValue) return resultValue;
+
+    if (result?.synced) return result;
+    if (result && !fallbackPlain) fallbackPlain = result;
   }
 
-  return null;
+  return fallbackPlain;
+}
+
+function cleanPlainOvh(text) {
+  return String(text ?? "")
+    .replace(/\r\n?/g, "\n")
+    .replace(/^\s*Paroles de la chanson[^\n]*\n+/i, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 async function searchLyricsOvh(target, signal) {
@@ -748,8 +992,10 @@ async function searchLyricsOvh(target, signal) {
   const url = `${PROVIDERS.lyricsOvh}/${encodeURIComponent(target.artist)}/${encodeURIComponent(target.title)}`;
   const data = await fetchJson(url, { signal, timeoutMs: CONFIG.requestTimeoutMs });
 
-  return createResult(data?.lyrics, "Lyrics.ovh", false);
+  return createResult(cleanPlainOvh(data?.lyrics), "Lyrics.ovh", false);
 }
+
+/* ---------- YouTube ---------- */
 
 function extractArrayAfter(html, marker) {
   const markerIndex = html.indexOf(marker);
@@ -784,31 +1030,52 @@ function extractArrayAfter(html, marker) {
 }
 
 function extractYoutubeCaptionLines(xml, duration = 0) {
-  if (typeof xml !== "string" || xml.length > CONFIG.maxLyricsLength) return [];
+  if (typeof xml !== "string" || xml.length > CONFIG.maxLyricsLength * 2) return [];
 
   const entries = [];
-  const regex = /<text\b([^>]*)>([\s\S]*?)<\/text>/gi;
+  const stripTags = value =>
+    decodeEntities(value.replace(/<[^>]+>/g, "").replace(/\s+/g, " ")).trim();
+
+  // Formato clásico: <text start="1.2" dur="3">...</text> (segundos)
+  const legacy = /<text\b([^>]*)>([\s\S]*?)<\/text>/gi;
   let match;
 
-  while ((match = regex.exec(xml)) && entries.length < CONFIG.maxLines) {
-    const attributes = match[1] || "";
-    const startRaw = attributes.match(/\bstart=["']([\d.]+)["']/i)?.[1];
-    const durRaw = attributes.match(/\bdur=["']([\d.]+)["']/i)?.[1];
+  while ((match = legacy.exec(xml)) && entries.length < CONFIG.maxLines) {
+    const startRaw = (match[1] || "").match(/\bstart=["']([\d.]+)["']/i)?.[1];
     if (!startRaw) continue;
 
     const start = Number(startRaw);
-    const segmentDuration = Number(durRaw || 0);
-    const text = decodeEntities(
-      match[2].replace(/<[^>]+>/g, "").replace(/\s+/g, " ")
-    ).trim();
+    const text = stripTags(match[2]);
 
     if (!Number.isFinite(start) || start < 0 || !text || text.length > 1_000) continue;
-    if (duration > 0 && start > duration + 30) continue;
+    if (duration > 0 && start > duration * 1.25 + 30) continue;
 
-    entries.push({ time: start, duration: segmentDuration, text });
+    entries.push({ time: start, text });
   }
 
-  return entries.sort((a, b) => a.time - b.time);
+  // Formato srv3: <p t="1200" d="3000">...</p> (milisegundos)
+  if (!entries.length) {
+    const modern = /<p\b([^>]*)>([\s\S]*?)<\/p>/gi;
+
+    while ((match = modern.exec(xml)) && entries.length < CONFIG.maxLines) {
+      const startRaw = (match[1] || "").match(/\bt=["'](\d+)["']/i)?.[1];
+      if (!startRaw) continue;
+
+      const start = Number(startRaw) / 1_000;
+      const text = stripTags(match[2]);
+
+      if (!Number.isFinite(start) || start < 0 || !text || text.length > 1_000) continue;
+      if (duration > 0 && start > duration * 1.25 + 30) continue;
+
+      entries.push({ time: start, text });
+    }
+  }
+
+  entries.sort((a, b) => a.time - b.time);
+
+  return entries.filter((line, index) =>
+    index === 0 || line.text !== entries[index - 1].text
+  );
 }
 
 async function searchYoutube(videoId, target, signal) {
@@ -819,7 +1086,11 @@ async function searchYoutube(videoId, target, signal) {
     signal,
     timeoutMs: CONFIG.youtubeTimeoutMs,
     retries: 0,
-    headers: { "Accept-Language": "es,en;q=0.8" }
+    maxBytes: CONFIG.youtubeMaxBytes,
+    headers: {
+      "Accept-Language": "es,en;q=0.8",
+      Cookie: "SOCS=CAI"
+    }
   });
 
   const rawTracks = extractArrayAfter(html, '"captionTracks":');
@@ -834,9 +1105,13 @@ async function searchYoutube(videoId, target, signal) {
 
   if (!Array.isArray(tracks) || !tracks.length) return null;
 
-  const preferred = tracks.find(track => /^es(-|$)/i.test(track.languageCode || "")) ||
-    tracks.find(track => /^en(-|$)/i.test(track.languageCode || "")) ||
-    tracks[0];
+  // Los subtítulos automáticos (asr) no son letras: se descartan.
+  const manual = tracks.filter(track => track && track.kind !== "asr");
+  if (!manual.length) return null;
+
+  const preferred = manual.find(track => /^es(-|$)/i.test(track.languageCode || "")) ||
+    manual.find(track => /^en(-|$)/i.test(track.languageCode || "")) ||
+    manual[0];
 
   if (!preferred?.baseUrl) return null;
 
@@ -861,6 +1136,8 @@ async function searchYoutube(videoId, target, signal) {
     duration: target.duration || null
   });
 }
+
+/* ---------- Caché ---------- */
 
 function makeCacheKey(target, videoId) {
   return [
@@ -894,12 +1171,14 @@ function setCache(key, value) {
   }
 }
 
+/* ---------- Ejecución de proveedores ---------- */
+
 async function runProvider(name, callback, diagnostics, signal) {
   const startedAt = Date.now();
 
   try {
     throwIfAborted(signal);
-    const value = await callback();
+    const value = await callback(signal);
 
     diagnostics[name] = {
       success: Boolean(value),
@@ -918,6 +1197,15 @@ async function runProvider(name, callback, diagnostics, signal) {
       return null;
     }
 
+    if (error?.status === 404) {
+      diagnostics[name] = {
+        success: false,
+        durationMs: Date.now() - startedAt,
+        status: "not_found"
+      };
+      return null;
+    }
+
     diagnostics[name] = {
       success: false,
       durationMs: Date.now() - startedAt,
@@ -929,16 +1217,60 @@ async function runProvider(name, callback, diagnostics, signal) {
   }
 }
 
+/* Lanza todos los proveedores en paralelo y termina en cuanto uno devuelve
+ * un resultado suficientemente bueno (cancelando el resto), o cuando todos
+ * acaban. Nunca descarta lo ya encontrado si se agota el tiempo. */
+async function runRound(tasks, signal, diagnostics) {
+  const results = [];
+  if (!tasks.length) return results;
+
+  const roundController = new AbortController();
+  const combined = combineSignals([signal, roundController.signal]);
+
+  let resolveEarly;
+  const early = new Promise(resolve => { resolveEarly = resolve; });
+
+  const all = Promise.all(tasks.map(async ([name, callback]) => {
+    const value = await runProvider(name, callback, diagnostics, combined.signal);
+
+    if (value) {
+      results.push(value);
+      if (isGoodEnough(value)) resolveEarly();
+    }
+
+    return value;
+  }));
+
+  try {
+    await Promise.race([all, early]);
+  } finally {
+    roundController.abort();
+    combined.cleanup();
+  }
+
+  return [...results];
+}
+
 function getQueryValue(query, key) {
   const value = query?.[key];
   return Array.isArray(value) ? value[0] : value;
 }
 
+function setCors(res) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+}
+
 function sendJson(res, status, payload) {
+  // Los errores nunca deben quedar cacheados en el CDN.
+  if (status >= 400) res.setHeader("Cache-Control", "no-store");
   res.status(status).json(payload);
 }
 
 export default async function handler(req, res) {
+  setCors(res);
+
   if (req.method === "OPTIONS") {
     res.setHeader("Allow", "GET, OPTIONS");
     return res.status(204).end();
@@ -949,8 +1281,8 @@ export default async function handler(req, res) {
     return sendJson(res, 405, { error: "Método no permitido." });
   }
 
-  const title = clean(getQueryValue(req.query, "title"), CONFIG.maxTitleLength);
-  const artist = clean(getQueryValue(req.query, "artist"), CONFIG.maxArtistLength);
+  let title = clean(getQueryValue(req.query, "title"), CONFIG.maxTitleLength);
+  let artist = clean(getQueryValue(req.query, "artist"), CONFIG.maxArtistLength);
   const requestedVideoId = clean(getQueryValue(req.query, "videoId"), CONFIG.maxVideoIdLength);
   const videoId = validVideoId(requestedVideoId) ? requestedVideoId : "";
   const requestedDuration = Number(getQueryValue(req.query, "duration"));
@@ -960,6 +1292,15 @@ export default async function handler(req, res) {
     return sendJson(res, 400, {
       error: "Se necesita el título o un videoId válido."
     });
+  }
+
+  // Títulos de YouTube tipo "Artista - Canción" cuando no llega el artista.
+  if (title && !artist) {
+    const parts = title.split(/\s+[-–—]\s+/);
+    if (parts.length >= 2 && parts[0] && parts.slice(1).join(" - ")) {
+      artist = clean(parts[0], CONFIG.maxArtistLength);
+      title = clean(parts.slice(1).join(" - "), CONFIG.maxTitleLength);
+    }
   }
 
   const target = { title, artist, duration };
@@ -992,66 +1333,73 @@ export default async function handler(req, res) {
   const combined = combineSignals([clientController.signal, totalController.signal]);
   const signal = combined.signal;
 
-  res.setHeader("Cache-Control", "public, s-maxage=3600, stale-while-revalidate=86400");
-  res.setHeader("X-Shunel-Lyrics-Cache", "MISS");
+  const plan = (tasks, name, enabled, callback) => {
+    if (enabled) {
+      tasks.push([name, callback]);
+    } else {
+      diagnostics[name] = { success: false, durationMs: 0, status: "skipped" };
+    }
+  };
+
+  const respondOk = (result) => {
+    // Si se agotó el tiempo total, el resultado puede ser parcial: no se cachea.
+    const partial = totalController.signal.aborted;
+
+    if (partial) {
+      res.setHeader("Cache-Control", "no-store");
+    } else {
+      res.setHeader("Cache-Control", "public, s-maxage=3600, stale-while-revalidate=86400");
+      setCache(cacheKey, result);
+    }
+
+    res.setHeader("X-Shunel-Lyrics-Cache", "MISS");
+
+    return sendJson(res, 200, {
+      ...result,
+      diagnostics: {
+        providers: diagnostics,
+        totalDurationMs: Date.now() - startedAt
+      }
+    });
+  };
 
   try {
-    const firstRound = await Promise.all([
-      runProvider("LRCLIB", () => title ? searchLrclib(target, signal) : null, diagnostics, signal),
-      runProvider("LiriQo", () => searchLiriqo(target, videoId, signal), diagnostics, signal),
-      runProvider("LRCMux", () => title && artist ? searchLrcmux(target, signal) : null, diagnostics, signal),
-      runProvider("Better Lyrics", () => title && artist ? searchBetterLyrics(target, signal) : null, diagnostics, signal)
-    ]);
+    const firstTasks = [];
+    plan(firstTasks, "LRCLIB", Boolean(title), s => searchLrclib(target, s));
+    plan(firstTasks, "LiriQo", Boolean(title || videoId), s => searchLiriqo(target, videoId, s));
+    plan(firstTasks, "LRCMux", Boolean(title && artist), s => searchLrcmux(target, s));
+    plan(firstTasks, "Better Lyrics", Boolean(title && artist), s => searchBetterLyrics(target, s));
 
-    if (signal.aborted) {
-      if (totalController.signal.aborted && !clientController.signal.aborted) {
-        return sendJson(res, 504, { error: "La búsqueda de letras superó el tiempo máximo." });
-      }
-      return;
+    const firstRound = await runRound(firstTasks, signal, diagnostics);
+
+    if (clientController.signal.aborted) return;
+
+    let best = selectBestResult(firstRound);
+    if (best && isGoodEnough(best)) return respondOk(best);
+
+    let secondRound = [];
+
+    if (!totalController.signal.aborted) {
+      const secondTasks = [];
+      plan(secondTasks, "Lyrics.ovh", Boolean(title && artist), s => searchLyricsOvh(target, s));
+      plan(secondTasks, "YouTube", Boolean(videoId), s => searchYoutube(videoId, target, s));
+
+      secondRound = await runRound(secondTasks, signal, diagnostics);
+
+      if (clientController.signal.aborted) return;
     }
 
-    const bestFirstRound = selectBestResult(firstRound);
+    best = selectBestResult([...firstRound, ...secondRound]);
+    if (best) return respondOk(best);
 
-    if (
-      bestFirstRound?.synced &&
-      resultQuality(bestFirstRound) >= CONFIG.earlySyncedQuality &&
-      (bestFirstRound.metadata?.matchScore ?? 100) >= CONFIG.earlySyncedScore
-    ) {
-      const payload = {
-        ...bestFirstRound,
+    if (totalController.signal.aborted) {
+      return sendJson(res, 504, {
+        error: "La búsqueda de letras superó el tiempo máximo.",
         diagnostics: {
           providers: diagnostics,
           totalDurationMs: Date.now() - startedAt
         }
-      };
-      setCache(cacheKey, payload);
-      return sendJson(res, 200, payload);
-    }
-
-    const secondRound = await Promise.all([
-      runProvider("Lyrics.ovh", () => title && artist ? searchLyricsOvh(target, signal) : null, diagnostics, signal),
-      runProvider("YouTube", () => videoId ? searchYoutube(videoId, target, signal) : null, diagnostics, signal)
-    ]);
-
-    if (signal.aborted) {
-      if (totalController.signal.aborted && !clientController.signal.aborted) {
-        return sendJson(res, 504, { error: "La búsqueda de letras superó el tiempo máximo." });
-      }
-      return;
-    }
-
-    const best = selectBestResult([...firstRound, ...secondRound]);
-
-    if (best) {
-      const payload = {
-        ...best,
-        diagnostics: {
-          providers: diagnostics,
-          totalDurationMs: Date.now() - startedAt
-        }
-      };
-      setCache(cacheKey, payload);
-      return sendJson(res, 200, payload);
+      });
     }
 
     const failedProviders = PROVIDER_NAMES.filter(name =>

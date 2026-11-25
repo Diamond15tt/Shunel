@@ -1,9 +1,8 @@
-
 /* =========================================================
-   SHUNEL — LYRICS ENGINE 3.0
+   SHUNEL — LYRICS ENGINE 3.1
    Multi-source integration
    Universal LRC / Enhanced LRC parser
-   Word synchronization
+   Word synchronization (etiquetas <mm:ss> o wordTimings del backend)
    Smart cache / Retry / Abort
    Binary search / Smart scrolling
    Safari & iOS compatible
@@ -12,15 +11,19 @@
 const CONFIG = Object.freeze({
   API_URL: "/api/lyrics",
 
-  CACHE_PREFIX: "shun&& el_lyrics_v3_",
+  CACHE_PREFIX: "shunel_lyrics_v4_",
+  LEGACY_CACHE_PREFIXES: ["shun&& el_lyrics_v3_", "shunel_lyrics_v3_"],
   CACHE_TTL: 7 * 24 * 60 * 60 * 1000,
+  CACHE_TTL_PLAIN: 60 * 60 * 1000,
   CACHE_MAX_ITEMS: 60,
 
-  REQUEST_TIMEOUT: 12000,
-  MAX_RETRIES: 2,
+  // El backend puede tardar hasta 18 s: el cliente debe esperar más que eso.
+  REQUEST_TIMEOUT: 20000,
+  MAX_RETRIES: 1,
 
   SCROLL_RESUME_DELAY: 4000,
-  SCROLL_CENTER_TOLERANCE: 0.32,
+  SCROLL_CENTER_TOLERANCE: 0.08,
+  BACKWARD_JITTER: 0.25,
 
   MAX_LYRICS_LENGTH: 250000,
   MAX_LINES: 12000
@@ -31,6 +34,7 @@ const CONFIG = Object.freeze({
 ========================================================= */
 
 let parsedLines = [];
+let lineElements = [];
 let activeLineIndex = -1;
 let activeWordIndex = -1;
 
@@ -58,6 +62,20 @@ const WORD_TIME_TAG =
 const LINE_TIME_TAG =
   /\[(\d{1,3}):(\d{2})(?:[.:](\d{1,3}))?\]/g;
 
+// Solo las etiquetas de tiempo al INICIO de la línea cuentan como tiempo de línea.
+const LEADING_LINE_TAGS =
+  /^\s*((?:\[\d{1,3}:\d{2}(?:[.:]\d{1,3})?\]\s*)+)(.*)$/;
+
+const INLINE_WORD_TAG_TEST =
+  /<\d{1,3}:\d{2}(?:[.:]\d{1,3})?>/;
+
+class LyricsTimeoutError extends Error {
+  constructor() {
+    super("Tiempo de espera agotado.");
+    this.name = "TimeoutError";
+  }
+}
+
 /* =========================================================
    UTILIDADES GENERALES
 ========================================================= */
@@ -74,7 +92,7 @@ function escapeHTML(value) {
 function normalizeText(value) {
   return String(value ?? "")
     .normalize("NFKC")
-    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .replace(/[​-‍﻿]/g, "")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -83,35 +101,9 @@ function normalizeSearchText(value) {
   return normalizeText(value)
     .toLocaleLowerCase()
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[̀-ͯ]/g, "")
     .replace(/[^\p{L}\p{N}\s]/gu, " ")
     .replace(/\s+/g, " ")
-    .trim();
-}
-
-function cleanTrackTitle(title) {
-  return String(title || "")
-    .replace(/\([^)]*official[^)]*\)/gi, "")
-    .replace(/\[[^\]]*official[^\]]*\]/gi, "")
-    .replace(/\([^)]*video[^)]*\)/gi, "")
-    .replace(/\[[^\]]*video[^\]]*\]/gi, "")
-    .replace(/\([^)]*lyrics?[^)]*\)/gi, "")
-    .replace(/\[[^\]]*lyrics?[^\]]*\]/gi, "")
-    .replace(/\([^)]*letra[^)]*\)/gi, "")
-    .replace(/\[[^\]]*letra[^\]]*\]/gi, "")
-    .replace(/\([^)]*visualizer[^)]*\)/gi, "")
-    .replace(/\[[^\]]*visualizer[^\]]*\]/gi, "")
-    .replace(/\([^)]*audio[^)]*\)/gi, "")
-    .replace(/\[[^\]]*audio[^\]]*\]/gi, "")
-    .replace(/\s*[-–—]\s*topic$/i, "")
-    .replace(/\s{2,}/g, " ")
-    .trim();
-}
-
-function cleanArtistName(artist) {
-  return normalizeText(artist)
-    .replace(/\s*-\s*topic$/i, "")
-    .replace(/\s*\(official\)$/i, "")
     .trim();
 }
 
@@ -120,49 +112,176 @@ function clamp(value, min, max) {
 }
 
 function isFiniteNumber(value) {
-  return Number.isFinite(Number(value));
+  return value !== null &&
+    value !== undefined &&
+    value !== "" &&
+    Number.isFinite(Number(value));
 }
 
-function getTrackDuration(track) {
-  const value = Number(
-    track?.durationSeconds ??
-    track?.duration ??
-    track?.length ??
-    0
-  );
+/* =========================================================
+   IDENTIDAD DE LA PISTA (título / artista / duración)
+========================================================= */
 
-  if (!Number.isFinite(value) || value <= 0) {
-    return 0;
-  }
+const GENERIC_CHANNEL =
+  /(vevo|topic|official|oficial|records?|music|musica|música|entertainment|tv)\s*$/i;
 
-  // Evitar convertir duraciones expresadas en segundos.
-  return value > 100000 ? value / 1000 : value;
+const NOISE_IN_BRACKETS =
+  /\s*[(\[{][^)\]}]*\b(?:official|oficial|video|vídeo|videoclip|audio|lyrics?|lyric|letra|visuali[sz]er|hd|4k|mv|clip)\b[^)\]}]*[)\]}]/gi;
+
+const FEAT_IN_BRACKETS =
+  /\s*[(\[]\s*(?:feat|ft|featuring)\.?[^)\]]*[)\]]/gi;
+
+const TRAILING_NOISE =
+  /\s*[|:–—-]?\s*(?:official\s+(?:music\s+)?(?:video|audio|lyric\s+video)|lyric\s+video|lyrics?\s+video|video\s+oficial|audio\s+oficial|videoclip(?:\s+oficial)?|letra(?:\s+oficial)?|lyrics?)\s*$/i;
+
+const VERSION_LIKE =
+  /^(?:\d{4}\s+)?(?:remaster|live|version|mix|edit|acoustic|en vivo|remix|mono|stereo|radio|instrumental|demo)/i;
+
+function cleanTrackTitle(title) {
+  const original = normalizeText(title);
+
+  let value = original
+    .replace(NOISE_IN_BRACKETS, "")
+    .replace(FEAT_IN_BRACKETS, "")
+    .replace(/\s*\|.*$/, "")
+    .replace(TRAILING_NOISE, "")
+    .replace(/\s*[-–—]\s*topic$/i, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
+  return value || original;
 }
 
-function getTrackArtist(track) {
-  return cleanArtistName(
+function cleanArtistName(artist) {
+  return normalizeText(artist)
+    .replace(/\s*[-–—]\s*topic$/i, "")
+    .replace(/\s*vevo$/i, "")
+    .replace(/\s*\((?:official|oficial)[^)]*\)$/i, "")
+    .replace(/\s+(?:official|oficial)(?:\s+(?:channel|canal))?$/i, "")
+    .trim();
+}
+
+/* Los títulos de YouTube suelen ser "Artista - Canción" y el artista
+   suele ser el canal ("BadBunnyVEVO"). Se separa el título aquí. */
+export function getTrackIdentity(track) {
+  const rawArtist = normalizeText(
     track?.artist ||
     track?.channelTitle ||
     track?.channel ||
     track?.author ||
     ""
   );
+
+  let artist = cleanArtistName(rawArtist);
+  let title = cleanTrackTitle(track?.title || track?.name || "");
+
+  const parts = title.split(/\s+[-–—]\s+/);
+
+  if (parts.length >= 2) {
+    const head = parts[0].trim();
+    const rest = parts.slice(1).join(" - ").trim();
+
+    if (head && rest) {
+      const normalizedHead =
+        normalizeSearchText(head).replace(/\s/g, "");
+      const normalizedArtist =
+        normalizeSearchText(artist).replace(/\s/g, "");
+
+      const related = Boolean(
+        normalizedArtist &&
+        normalizedHead &&
+        (
+          normalizedArtist.includes(normalizedHead) ||
+          normalizedHead.includes(normalizedArtist)
+        )
+      );
+
+      const generic = !artist || GENERIC_CHANNEL.test(rawArtist);
+      const versionLike = VERSION_LIKE.test(rest);
+
+      if (related || generic || !versionLike) {
+        artist = head;
+        title = rest;
+      }
+    }
+  }
+
+  return { title, artist };
 }
 
-function getTrackTitle(track) {
-  return cleanTrackTitle(
-    track?.title ||
-    track?.name ||
-    ""
-  );
+function parseDurationValue(value) {
+  if (typeof value === "string") {
+    const text = value.trim();
+
+    const iso = text.match(
+      /^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?$/i
+    );
+
+    if (iso && (iso[1] || iso[2] || iso[3])) {
+      return (
+        Number(iso[1] || 0) * 3600 +
+        Number(iso[2] || 0) * 60 +
+        Number(iso[3] || 0)
+      );
+    }
+
+    const clock = text.match(/^(?:(\d+):)?(\d{1,2}):(\d{2})$/);
+
+    if (clock) {
+      return (
+        Number(clock[1] || 0) * 3600 +
+        Number(clock[2]) * 60 +
+        Number(clock[3])
+      );
+    }
+  }
+
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number : 0;
+}
+
+export function getTrackDuration(track) {
+  const seconds = parseDurationValue(track?.durationSeconds);
+  if (seconds > 0) return seconds;
+
+  const milliseconds = parseDurationValue(track?.durationMs);
+  if (milliseconds > 0) return milliseconds / 1000;
+
+  const raw = [track?.duration, track?.length]
+    .map(parseDurationValue)
+    .find(value => value > 0) || 0;
+
+  if (!raw) return 0;
+
+  // Ninguna canción dura más de 2 h: por encima de eso son milisegundos.
+  return raw > 7200 ? raw / 1000 : raw;
+}
+
+function getTrackVideoId(track) {
+  const candidates = [
+    track?.videoId,
+    track?.id?.videoId,
+    typeof track?.id === "string" ? track.id : ""
+  ];
+
+  return candidates.find(value =>
+    typeof value === "string" &&
+    /^[A-Za-z0-9_-]{11}$/.test(value)
+  ) || "";
 }
 
 function getCacheKey(track) {
-  const title = normalizeSearchText(getTrackTitle(track));
-  const artist = normalizeSearchText(getTrackArtist(track));
+  const { title, artist } = getTrackIdentity(track);
+  const duration = getTrackDuration(track);
 
-  // No depender del videoId: dos videos pueden ser la misma canción.
-  return `${artist}|${title}`;
+  // La duración separa versiones (estudio / en vivo / cover).
+  const bucket = duration ? Math.round(duration / 5) * 5 : 0;
+
+  return [
+    normalizeSearchText(artist),
+    normalizeSearchText(title),
+    bucket
+  ].join("|");
 }
 
 function getLyricsContainer() {
@@ -184,6 +303,8 @@ function setLyricsStatus(message, className = "muted") {
 
   container.innerHTML =
     `<p class="${escapeHTML(className)}">${escapeHTML(message)}</p>`;
+
+  container.scrollTop = 0;
 }
 
 function isReducedMotion() {
@@ -198,6 +319,47 @@ function isReducedMotion() {
    CACHÉ EN MEMORIA Y LOCALSTORAGE
 ========================================================= */
 
+function ttlFor(data) {
+  return data?.syncedLyrics
+    ? CONFIG.CACHE_TTL
+    : CONFIG.CACHE_TTL_PLAIN;
+}
+
+/* Solo se guarda lo imprescindible: sin diagnostics ni wordTimings
+   (las palabras ya van incrustadas en el LRC mejorado). */
+function toCacheable(data) {
+  return {
+    syncedLyrics: data.syncedLyrics || "",
+    plainLyrics: data.plainLyrics || "",
+    source: data.source || "Desconocida",
+    language: data.language || null,
+    syncLevel: data.syncLevel || null
+  };
+}
+
+function purgeLegacyCache() {
+  try {
+    const stale = [];
+
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+
+      if (
+        key &&
+        CONFIG.LEGACY_CACHE_PREFIXES.some(prefix =>
+          key.startsWith(prefix)
+        )
+      ) {
+        stale.push(key);
+      }
+    }
+
+    stale.forEach(key => localStorage.removeItem(key));
+  } catch {
+    // Almacenamiento no disponible.
+  }
+}
+
 function readPersistentCache(key) {
   try {
     const raw = localStorage.getItem(
@@ -210,8 +372,8 @@ function readPersistentCache(key) {
 
     if (
       !entry ||
-      !entry.timestamp ||
-      Date.now() - entry.timestamp > CONFIG.CACHE_TTL ||
+      !entry.expires ||
+      Date.now() > entry.expires ||
       !entry.data
     ) {
       localStorage.removeItem(
@@ -229,10 +391,13 @@ function readPersistentCache(key) {
 
 function writePersistentCache(key, data) {
   try {
+    const now = Date.now();
+
     localStorage.setItem(
       CONFIG.CACHE_PREFIX + key,
       JSON.stringify({
-        timestamp: Date.now(),
+        timestamp: now,
+        expires: now + ttlFor(data),
         data
       })
     );
@@ -293,10 +458,7 @@ function getCachedLyrics(key) {
   if (lyricsCache.has(key)) {
     const entry = lyricsCache.get(key);
 
-    if (
-      Date.now() - entry.timestamp <=
-      CONFIG.CACHE_TTL
-    ) {
+    if (Date.now() <= entry.expires) {
       // Actualizar posición para comportamiento LRU.
       lyricsCache.delete(key);
       lyricsCache.set(key, entry);
@@ -320,11 +482,13 @@ function getCachedLyrics(key) {
 function setCachedLyrics(key, data, persist = true) {
   if (!key || !data) return;
 
+  const compact = toCacheable(data);
+
   lyricsCache.delete(key);
 
   lyricsCache.set(key, {
-    timestamp: Date.now(),
-    data
+    expires: Date.now() + ttlFor(compact),
+    data: compact
   });
 
   while (lyricsCache.size > CONFIG.CACHE_MAX_ITEMS) {
@@ -333,7 +497,7 @@ function setCachedLyrics(key, data, persist = true) {
   }
 
   if (persist) {
-    writePersistentCache(key, data);
+    writePersistentCache(key, compact);
   }
 }
 
@@ -366,18 +530,17 @@ function parseTimestamp(minutes, seconds, fraction = "0") {
   );
 }
 
-function parseTimeTag(tag) {
-  const match = String(tag).match(
-    /[<[](\d{1,3}):(\d{2})(?:[.:](\d{1,3}))?[>\]]/
-  );
+function pad2(value) {
+  return String(value).padStart(2, "0");
+}
 
-  if (!match) return null;
+function formatStamp(seconds) {
+  const total = Math.round(Math.max(0, seconds) * 100);
+  const minutes = Math.floor(total / 6000);
+  const wholeSeconds = Math.floor((total % 6000) / 100);
+  const centiseconds = total % 100;
 
-  return parseTimestamp(
-    match[1],
-    match[2],
-    match[3] || "0"
-  );
+  return `${pad2(minutes)}:${pad2(wholeSeconds)}.${pad2(centiseconds)}`;
 }
 
 /* =========================================================
@@ -420,10 +583,11 @@ function parseLRCMetadata(text) {
     }
 
     const offsetMatch = line.match(
-      /^\[offset:([+-]?\d+)\]$/i
+      /^\[offset:\s*([+-]?\d+)\s*\]$/i
     );
 
     if (offsetMatch) {
+      // Según la especificación LRC, un offset positivo ADELANTA la letra.
       metadata.offset = Number(offsetMatch[1]) / 1000;
     }
   }
@@ -433,7 +597,7 @@ function parseLRCMetadata(text) {
 
 /* =========================================================
    ENHANCED LRC
-   Soporta timestamps por línea y por palabra.
+   Soporta timestamps por línea y por palabra/sílaba.
 ========================================================= */
 
 function parseEnhancedLine(rawText, lineStart, offset = 0) {
@@ -451,7 +615,20 @@ function parseEnhancedLine(rawText, lineStart, offset = 0) {
   }
 
   const words = [];
-  let cursor = 0;
+
+  // Texto que aparece antes de la primera etiqueta de palabra.
+  const leading = rawText
+    .slice(0, matches[0].index)
+    .replace(/<[^>]*>/g, "");
+
+  if (leading.trim()) {
+    words.push({
+      text: leading.trim(),
+      start: Math.max(0, lineStart),
+      end: null,
+      space: true
+    });
+  }
 
   for (let i = 0; i < matches.length; i++) {
     const match = matches[i];
@@ -470,25 +647,28 @@ function parseEnhancedLine(rawText, lineStart, offset = 0) {
       ? nextMatch.index
       : rawText.length;
 
-    const wordText = rawText
+    // Sin trim: el espacio final indica si la palabra termina ahí
+    // (en sílabas no hay espacio entre una y otra).
+    const segment = rawText
       .slice(match.index + match[0].length, end)
-      .replace(/<[^>]*>/g, "")
-      .trim();
+      .replace(/<[^>]*>/g, "");
 
-    if (!wordText) continue;
+    const wordText = segment.trim();
 
-    const startTime = Math.max(
-      0,
-      timestamp + offset
-    );
+    if (!wordText) {
+      if (/\s/.test(segment) && words.length) {
+        words[words.length - 1].space = true;
+      }
+
+      continue;
+    }
 
     words.push({
       text: wordText,
-      start: startTime,
-      end: null
+      start: Math.max(0, timestamp - offset),
+      end: null,
+      space: /\s$/.test(segment)
     });
-
-    cursor = end;
   }
 
   for (let i = 0; i < words.length; i++) {
@@ -497,8 +677,11 @@ function parseEnhancedLine(rawText, lineStart, offset = 0) {
   }
 
   const text = words
-    .map(word => word.text)
-    .join(" ")
+    .map((word, index) =>
+      word.text +
+      (word.space && index < words.length - 1 ? " " : "")
+    )
+    .join("")
     .trim();
 
   return {
@@ -522,43 +705,59 @@ export function parseLRC(text) {
   const lines = text.split(/\r?\n/);
 
   for (const rawLine of lines) {
-    const matches = [
-      ...rawLine.matchAll(LINE_TIME_TAG)
+    const lineMatch = rawLine.match(LEADING_LINE_TAGS);
+
+    if (!lineMatch) continue;
+
+    const stamps = [
+      ...lineMatch[1].matchAll(LINE_TIME_TAG)
     ];
 
-    if (!matches.length) continue;
+    if (!stamps.length) continue;
 
-    const lyricText = rawLine
-      .replace(LINE_TIME_TAG, "")
-      .trim();
+    const lyricText = lineMatch[2].trim();
 
-    if (!lyricText) continue;
-
-    const wordData = parseEnhancedLine(
-      lyricText,
-      0,
-      metadata.offset
+    const baseTimestamp = parseTimestamp(
+      stamps[0][1],
+      stamps[0][2],
+      stamps[0][3] || "0"
     );
 
-    for (const match of matches) {
+    if (baseTimestamp === null) continue;
+
+    const wordData = lyricText
+      ? parseEnhancedLine(
+          lyricText,
+          Math.max(0, baseTimestamp - metadata.offset),
+          metadata.offset
+        )
+      : { text: "", words: [] };
+
+    for (const stamp of stamps) {
       const timestamp = parseTimestamp(
-        match[1],
-        match[2],
-        match[3] || "0"
+        stamp[1],
+        stamp[2],
+        stamp[3] || "0"
       );
 
       if (timestamp === null) continue;
 
       const time = Math.max(
         0,
-        timestamp + metadata.offset
+        timestamp - metadata.offset
       );
+
+      // Estribillos repetidos: [00:10][01:30]texto → las palabras se desplazan.
+      const delta = timestamp - baseTimestamp;
 
       result.push({
         time,
         text: wordData.text || lyricText,
+        gap: !lyricText,
         words: wordData.words.map(word => ({
-          ...word
+          ...word,
+          start: word.start + delta,
+          end: word.end === null ? null : word.end + delta
         }))
       });
     }
@@ -566,7 +765,7 @@ export function parseLRC(text) {
 
   result.sort((a, b) => a.time - b.time);
 
-  // Quitar duplicados exactos.
+  // Quitar duplicados exactos, líneas vacías iniciales y vacías consecutivas.
   const unique = [];
 
   for (const line of result) {
@@ -577,6 +776,10 @@ export function parseLRC(text) {
       previous.time === line.time &&
       previous.text === line.text
     ) {
+      continue;
+    }
+
+    if (line.gap && (!previous || previous.gap)) {
       continue;
     }
 
@@ -615,9 +818,150 @@ export function parseLRC(text) {
 }
 
 /* =========================================================
+   LRC MEJORADO (construcción) Y WORD TIMINGS DEL BACKEND
+========================================================= */
+
+function buildEnhancedLRC(lines) {
+  return lines
+    .map(line => {
+      const head = `[${formatStamp(line.time)}]`;
+
+      if (line.words?.length) {
+        return head + line.words
+          .map(word =>
+            `<${formatStamp(word.start)}>${word.text}` +
+            (word.space !== false ? " " : "")
+          )
+          .join("")
+          .trimEnd();
+      }
+
+      return head + (line.text || "");
+    })
+    .join("\n");
+}
+
+/* Coloca cada palabra dentro de su línea comprobando que el texto coincida. */
+function alignWords(lineText, words) {
+  if (!words.length) return null;
+
+  const text = normalizeText(lineText);
+  let cursor = 0;
+  const output = [];
+
+  for (const word of words) {
+    const wordText = normalizeText(word.text);
+
+    if (!wordText) continue;
+
+    const index = text.indexOf(wordText, cursor);
+
+    if (index < 0 || index - cursor > 3) return null;
+
+    const after = index + wordText.length;
+
+    output.push({
+      text: wordText,
+      start: word.start,
+      end: Number.isFinite(word.end) ? word.end : null,
+      space: /\s/.test(text[after] ?? "")
+    });
+
+    cursor = after;
+  }
+
+  const rest = text
+    .slice(cursor)
+    .replace(/[\s\p{P}]/gu, "");
+
+  if (rest.length > 2) return null;
+
+  return output.length ? output : null;
+}
+
+function enrichWithWordTimings(lrcText, wordTimings) {
+  if (parseLRCMetadata(lrcText).offset !== 0) return null;
+
+  const lines = parseLRC(lrcText);
+
+  if (!lines.length) return null;
+
+  const words = wordTimings
+    .filter(word =>
+      word &&
+      typeof word.text === "string" &&
+      Number.isFinite(Number(word.start))
+    )
+    .map(word => ({
+      text: word.text,
+      start: Number(word.start),
+      end: word.end === null || word.end === undefined
+        ? null
+        : Number(word.end)
+    }))
+    .sort((a, b) => a.start - b.start);
+
+  if (!words.length) return null;
+
+  let cursor = 0;
+  let matched = 0;
+  let textLines = 0;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const nextTime = lines[i + 1]?.time ?? Infinity;
+    const group = [];
+
+    while (
+      cursor < words.length &&
+      words[cursor].start < nextTime - 0.05
+    ) {
+      if (words[cursor].start >= line.time - 0.3) {
+        group.push(words[cursor]);
+      }
+
+      cursor++;
+    }
+
+    if (line.gap) continue;
+
+    textLines++;
+
+    const aligned = alignWords(line.text, group);
+
+    if (aligned) {
+      line.words = aligned;
+      matched++;
+    }
+  }
+
+  // Si casi nada coincide, es mejor dejar la letra por línea.
+  if (!textLines || matched < textLines * 0.6) return null;
+
+  return buildEnhancedLRC(lines);
+}
+
+/* =========================================================
    NORMALIZACIÓN DE RESPUESTAS JSON
    Permite integrar proveedores con estructuras diferentes.
 ========================================================= */
+
+function detectTimeScale(values) {
+  let max = -Infinity;
+
+  for (const value of values) {
+    const number = Number(value);
+
+    if (Number.isFinite(number) && number >= 0 && number > max) {
+      max = number;
+    }
+  }
+
+  if (max === -Infinity) return 1;
+
+  // Ninguna canción dura más de 2 h: un máximo mayor implica milisegundos.
+  return max > 7200 ? 0.001 : 1;
+}
 
 function normalizeTimedJSON(data) {
   if (!data || typeof data !== "object") {
@@ -626,69 +970,73 @@ function normalizeTimedJSON(data) {
 
   const sourceLines =
     data.lines ||
-    data.lyrics ||
+    (Array.isArray(data.lyrics) ? data.lyrics : null) ||
     data.syncedLines ||
-    data.words ||
     [];
 
   if (!Array.isArray(sourceLines)) return [];
 
+  const items = sourceLines
+    .slice(0, CONFIG.MAX_LINES)
+    .filter(item => item && typeof item === "object");
+
+  const startOf = item =>
+    item.start ??
+    item.time ??
+    item.timestamp ??
+    item.startTime ??
+    item.start_time;
+
+  const scale = detectTimeScale(items.map(startOf));
   const lines = [];
 
-  for (const item of sourceLines) {
-    if (!item || typeof item !== "object") continue;
-
-    const rawTime =
-      item.start ??
-      item.time ??
-      item.timestamp ??
-      item.startTime ??
-      item.start_time;
+  for (const item of items) {
+    const rawTime = startOf(item);
 
     if (!isFiniteNumber(rawTime)) continue;
 
-    let time = Number(rawTime);
+    const time = Number(rawTime) * scale;
+    const nested = Array.isArray(item.words) ? item.words : null;
 
-    // Convención: valores muy grandes suelen venir en ms.
-    if (time > 100000) {
-      time /= 1000;
+    let rawText = item.text ?? item.lyric ?? item.content;
+
+    if (rawText === null || rawText === undefined) {
+      rawText = typeof item.words === "string"
+        ? item.words
+        : nested
+          ? nested
+              .map(word => word?.text ?? word?.word ?? "")
+              .join(" ")
+          : "";
     }
 
-    const text = normalizeText(
-      item.text ??
-      item.words ??
-      item.lyric ??
-      item.content ??
-      ""
-    );
+    const text = normalizeText(rawText);
 
     if (!text) continue;
 
-    const words = Array.isArray(item.words)
-      ? item.words
+    const words = nested
+      ? nested
           .filter(word => word && typeof word === "object")
           .map(word => {
-            let start = Number(
+            const start = Number(
               word.start ??
               word.time ??
               word.timestamp ??
-              time
-            );
+              rawTime
+            ) * scale;
 
-            let end = Number(
+            const end = Number(
               word.end ??
               word.endTime ??
               word.end_time ??
-              start
-            );
-
-            if (start > 100000) start /= 1000;
-            if (end > 100000) end /= 1000;
+              start / scale
+            ) * scale;
 
             return {
               text: normalizeText(word.text || word.word || ""),
               start,
-              end
+              end,
+              space: true
             };
           })
           .filter(word =>
@@ -707,21 +1055,6 @@ function normalizeTimedJSON(data) {
   lines.sort((a, b) => a.time - b.time);
 
   return lines;
-}
-
-function linesToLRC(lines) {
-  return lines
-    .map(line => {
-      const minutes = Math.floor(line.time / 60);
-      const seconds = line.time % 60;
-
-      const stamp =
-        `[${String(minutes).padStart(2, "0")}:` +
-        `${seconds.toFixed(3).padStart(6, "0")}]`;
-
-      return stamp + line.text;
-    })
-    .join("\n");
 }
 
 function extractSyncedLyrics(data) {
@@ -750,7 +1083,7 @@ function extractSyncedLyrics(data) {
   const timedLines = normalizeTimedJSON(data);
 
   if (timedLines.length) {
-    return linesToLRC(timedLines);
+    return buildEnhancedLRC(timedLines);
   }
 
   return "";
@@ -760,12 +1093,24 @@ function extractSyncedLyrics(data) {
    PREPARAR RESULTADO
 ========================================================= */
 
-function prepareLyricsData(data) {
+export function prepareLyricsData(data) {
   if (!data || typeof data !== "object") {
     return null;
   }
 
-  const syncedLyrics = extractSyncedLyrics(data);
+  let syncedLyrics = extractSyncedLyrics(data);
+
+  // El backend envía las palabras aparte: se incrustan en el LRC.
+  if (
+    syncedLyrics &&
+    !INLINE_WORD_TAG_TEST.test(syncedLyrics) &&
+    Array.isArray(data.wordTimings) &&
+    data.wordTimings.length
+  ) {
+    syncedLyrics =
+      enrichWithWordTimings(syncedLyrics, data.wordTimings) ||
+      syncedLyrics;
+  }
 
   const plainLyrics =
     data.plainLyrics ||
@@ -778,9 +1123,9 @@ function prepareLyricsData(data) {
     );
 
   const text =
-    data.text ||
     syncedLyrics ||
-    plainLyrics;
+    plainLyrics ||
+    data.text;
 
   if (
     typeof text !== "string" ||
@@ -789,8 +1134,11 @@ function prepareLyricsData(data) {
     return null;
   }
 
+  // diagnostics y wordTimings no se conservan.
+  const { diagnostics, wordTimings, ...rest } = data;
+
   return {
-    ...data,
+    ...rest,
     text,
     syncedLyrics,
     plainLyrics:
@@ -807,6 +1155,7 @@ function prepareLyricsData(data) {
 
 function resetLyrics() {
   parsedLines = [];
+  lineElements = [];
   activeLineIndex = -1;
   activeWordIndex = -1;
 
@@ -830,46 +1179,56 @@ function cancelCurrentRequest() {
 }
 
 /* =========================================================
-   RENDERIZADO SEGURO
+   RENDERIZADO SEGURO (DOM, sin espacios sobrantes)
 ========================================================= */
 
-function renderWordMarkup(words) {
-  if (!Array.isArray(words) || !words.length) {
-    return "";
-  }
+function appendWordSpans(element, words) {
+  words.forEach((word, index) => {
+    const span = document.createElement("span");
 
-  return words
-    .map((word, index) => `
-      <span
-        class="lyric-word"
-        data-word-index="${index}"
-        data-start="${Number(word.start) || 0}"
-        data-end="${Number(word.end) || 0}"
-      >${escapeHTML(word.text)}</span>
-    `)
-    .join(" ");
+    span.className = "lyric-word";
+    span.dataset.wordIndex = String(index);
+    span.dataset.start = String(Number(word.start) || 0);
+    span.dataset.end = String(Number(word.end) || 0);
+    span.textContent = word.text;
+
+    element.appendChild(span);
+
+    if (word.space !== false && index < words.length - 1) {
+      element.appendChild(document.createTextNode(" "));
+    }
+  });
 }
 
 function renderSyncedLines(container) {
   const fragment = document.createDocumentFragment();
+  const elements = [];
 
   parsedLines.forEach((line, index) => {
     const element = document.createElement("div");
 
-    element.className = "lyric-line";
+    element.className = line.gap
+      ? "lyric-line lyric-gap"
+      : "lyric-line";
+
     element.dataset.index = String(index);
     element.dataset.time = String(line.time);
 
-    if (line.words?.length) {
-      element.innerHTML = renderWordMarkup(line.words);
+    if (line.gap) {
+      element.setAttribute("aria-hidden", "true");
+      element.textContent = " ";
+    } else if (line.words?.length) {
+      appendWordSpans(element, line.words);
     } else {
       element.textContent = line.text;
     }
 
+    elements.push(element);
     fragment.appendChild(element);
   });
 
   container.replaceChildren(fragment);
+  lineElements = elements;
 
   container.dataset.lyricsType =
     parsedLines.some(line => line.words?.length)
@@ -878,31 +1237,63 @@ function renderSyncedLines(container) {
 }
 
 function renderPlainText(container, text) {
-  const lines = String(text || "")
+  const rawLines = String(text || "")
     .replace(/\r/g, "")
     .split("\n")
-    .map(line => line.trim())
-    .filter(Boolean)
-    .slice(0, CONFIG.MAX_LINES);
+    .map(line => line.trim());
 
   const fragment = document.createDocumentFragment();
+  let previousBlank = true;
+  let count = 0;
 
-  lines.forEach(line => {
+  for (const line of rawLines) {
+    if (count >= CONFIG.MAX_LINES) break;
+
+    if (!line) {
+      // Un solo espacio entre estrofas.
+      if (!previousBlank) {
+        const gap = document.createElement("div");
+
+        gap.className = "lyric-gap";
+        gap.setAttribute("aria-hidden", "true");
+        gap.textContent = " ";
+
+        fragment.appendChild(gap);
+        previousBlank = true;
+      }
+
+      continue;
+    }
+
     const element = document.createElement("div");
 
     element.className = "lyric-line";
     element.textContent = line;
 
     fragment.appendChild(element);
-  });
+    previousBlank = false;
+    count++;
+  }
 
   container.replaceChildren(fragment);
   container.dataset.lyricsType = "plain";
+  lineElements = [];
 }
 
 /* =========================================================
    AUTO-SCROLL INTELIGENTE
 ========================================================= */
+
+function recenterActiveLine() {
+  if (activeLineIndex < 0) return;
+
+  lastScrollIndex = -1;
+
+  scrollActiveLine(
+    lineElements[activeLineIndex],
+    activeLineIndex
+  );
+}
 
 function bindManualScrollDetection(container) {
   if (
@@ -923,6 +1314,7 @@ function bindManualScrollDetection(container) {
 
     scrollResumeTimer = setTimeout(() => {
       manualScrollUntil = 0;
+      recenterActiveLine();
     }, CONFIG.SCROLL_RESUME_DELAY);
   };
 
@@ -966,6 +1358,14 @@ function shouldAutoScroll() {
   );
 }
 
+function scrollContainerTo(container, top, behavior) {
+  try {
+    container.scrollTo({ top, behavior });
+  } catch {
+    container.scrollTop = top;
+  }
+}
+
 function scrollActiveLine(element, index) {
   if (!element || index === lastScrollIndex) return;
 
@@ -978,21 +1378,17 @@ function scrollActiveLine(element, index) {
   const containerRect = container.getBoundingClientRect();
   const elementRect = element.getBoundingClientRect();
 
-  const center = containerRect.top +
-    containerRect.height / 2;
-
-  const distance = Math.abs(
-    elementRect.top +
-    elementRect.height / 2 -
-    center
-  );
+  // Distancia de la línea al centro visible; no depende de offsetParent.
+  const offsetFromCenter =
+    (elementRect.top + elementRect.height / 2) -
+    (containerRect.top + containerRect.height / 2);
 
   const tolerance =
     containerRect.height *
     CONFIG.SCROLL_CENTER_TOLERANCE;
 
-  // Evitar mover la vista si la línea ya está cerca del centro.
-  if (distance < tolerance) return;
+  // Evitar mover la vista si la línea ya está casi centrada.
+  if (Math.abs(offsetFromCenter) < tolerance) return;
 
   lastScrollIndex = index;
 
@@ -1000,15 +1396,18 @@ function scrollActiveLine(element, index) {
     ? "auto"
     : "smooth";
 
-  const targetTop =
-    element.offsetTop -
-    container.clientHeight / 2 +
-    element.offsetHeight / 2;
+  const maxTop = Math.max(
+    0,
+    container.scrollHeight - container.clientHeight
+  );
 
-  container.scrollTo({
-    top: Math.max(0, targetTop),
-    behavior
-  });
+  const targetTop = clamp(
+    container.scrollTop + offsetFromCenter,
+    0,
+    maxTop
+  );
+
+  scrollContainerTo(container, targetTop, behavior);
 }
 
 /* =========================================================
@@ -1031,6 +1430,11 @@ function displayLyrics(data, container, titleEl) {
   parsedLines = syncedText
     ? parseLRC(syncedText)
     : [];
+
+  // Solo huecos, sin texto: no es una letra sincronizada.
+  if (!parsedLines.some(line => line.text)) {
+    parsedLines = [];
+  }
 
   currentMetadata = syncedText
     ? parseLRCMetadata(syncedText)
@@ -1061,6 +1465,11 @@ function displayLyrics(data, container, titleEl) {
 
     container.dataset.lyricsSynced = "false";
   }
+
+  bindLineSeeking(container);
+
+  // La letra nueva siempre empieza arriba.
+  container.scrollTop = 0;
 
   container.dataset.lyricsSource =
     prepared.source || "Desconocida";
@@ -1114,16 +1523,17 @@ function delay(ms, signal) {
       return;
     }
 
-    const timer = setTimeout(resolve, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(new DOMException("Aborted", "AbortError"));
+    };
 
-    signal?.addEventListener(
-      "abort",
-      () => {
-        clearTimeout(timer);
-        reject(new DOMException("Aborted", "AbortError"));
-      },
-      { once: true }
-    );
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+
+    signal?.addEventListener("abort", onAbort, { once: true });
   });
 }
 
@@ -1139,15 +1549,16 @@ async function fetchLyricsWithRetry(url, signal) {
       throw new DOMException("Aborted", "AbortError");
     }
 
-    const timeoutController = new AbortController();
+    const requestController = new AbortController();
+    let timedOut = false;
 
-    const timeoutId = setTimeout(
-      () => timeoutController.abort(),
-      CONFIG.REQUEST_TIMEOUT
-    );
+    const timeoutId = setTimeout(() => {
+      timedOut = true;
+      requestController.abort();
+    }, CONFIG.REQUEST_TIMEOUT);
 
     const abortHandler = () => {
-      timeoutController.abort();
+      requestController.abort();
     };
 
     signal.addEventListener(
@@ -1159,44 +1570,55 @@ async function fetchLyricsWithRetry(url, signal) {
     try {
       const response = await fetch(url, {
         method: "GET",
-        signal: timeoutController.signal,
+        signal: requestController.signal,
         headers: {
           Accept: "application/json"
         },
         cache: "no-store"
       });
 
-      if (
+      // El 504 del backend ya agotó todo su tiempo: reintentar no ayuda.
+      const retryable =
         response.status === 429 ||
-        response.status >= 500
-      ) {
-        if (attempt < CONFIG.MAX_RETRIES) {
-          const wait = response.status === 429
-            ? parseRetryAfter(response)
-            : 500 * (attempt + 1);
+        (response.status >= 500 && response.status !== 504);
 
-          await delay(wait, signal);
-          continue;
+      if (retryable && attempt < CONFIG.MAX_RETRIES) {
+        clearTimeout(timeoutId);
+
+        try {
+          await response.body?.cancel();
+        } catch {
+          // Nada que cancelar.
         }
+
+        const wait = response.status === 429
+          ? parseRetryAfter(response)
+          : 500 * (attempt + 1);
+
+        await delay(wait, signal);
+        continue;
       }
 
       return response;
 
     } catch (error) {
-      lastError = error;
-
       if (signal.aborted) {
         throw new DOMException("Aborted", "AbortError");
       }
 
-      if (attempt < CONFIG.MAX_RETRIES) {
-        await delay(
-          400 * (attempt + 1),
-          signal
-        );
-
-        continue;
+      // Un timeout NO es una cancelación: se informa al usuario.
+      if (timedOut) {
+        throw new LyricsTimeoutError();
       }
+
+      lastError = error;
+
+      if (attempt >= CONFIG.MAX_RETRIES) break;
+
+      await delay(
+        400 * (attempt + 1),
+        signal
+      );
 
     } finally {
       clearTimeout(timeoutId);
@@ -1219,14 +1641,8 @@ async function fetchLyricsWithRetry(url, signal) {
 function buildLyricsURL(track) {
   const params = new URLSearchParams();
 
-  const title = getTrackTitle(track);
-  const artist = getTrackArtist(track);
-
-  const videoId =
-    track.videoId ||
-    track.id ||
-    "";
-
+  const { title, artist } = getTrackIdentity(track);
+  const videoId = getTrackVideoId(track);
   const duration = getTrackDuration(track);
 
   params.set("title", title);
@@ -1240,7 +1656,7 @@ function buildLyricsURL(track) {
   }
 
   if (duration > 0) {
-    params.set("duration", String(duration));
+    params.set("duration", String(Math.round(duration)));
   }
 
   return `${CONFIG.API_URL}?${params.toString()}`;
@@ -1267,8 +1683,7 @@ export async function loadLyricsForTrack(track) {
 
   resetLyrics();
 
-  const title = getTrackTitle(track);
-  const artist = getTrackArtist(track);
+  const { title, artist } = getTrackIdentity(track);
 
   const cacheKey = getCacheKey(track);
 
@@ -1340,6 +1755,10 @@ export async function loadLyricsForTrack(track) {
       return;
     }
 
+    if (response.status === 504) {
+      throw new LyricsTimeoutError();
+    }
+
     if (!response.ok) {
       throw new Error(
         `Lyrics API: ${response.status}`
@@ -1372,8 +1791,8 @@ export async function loadLyricsForTrack(track) {
     );
 
   } catch (error) {
+    // Solo se ignora una cancelación real (otra canción o clearLyrics).
     if (
-      error?.name === "AbortError" ||
       signal.aborted ||
       requestId !== currentRequestId
     ) {
@@ -1385,12 +1804,18 @@ export async function loadLyricsForTrack(track) {
       error
     );
 
+    const timedOut = error?.name === "TimeoutError";
+
     if (titleEl) {
-      titleEl.textContent = "Error al cargar";
+      titleEl.textContent = timedOut
+        ? "Tardó demasiado"
+        : "Error al cargar";
     }
 
     setLyricsStatus(
-      "No se pudo cargar la letra. Intentá nuevamente."
+      timedOut
+        ? "La búsqueda de letras tardó demasiado. Intentá nuevamente."
+        : "No se pudo cargar la letra. Intentá nuevamente."
     );
   }
 }
@@ -1434,9 +1859,8 @@ function findActiveWordIndex(words, time) {
 
   while (low <= high) {
     const middle = (low + high) >> 1;
-    const word = words[middle];
 
-    if (word.start <= time) {
+    if (words[middle].start <= time) {
       result = middle;
       low = middle + 1;
     } else {
@@ -1444,18 +1868,17 @@ function findActiveWordIndex(words, time) {
     }
   }
 
-  if (result < 0) return -1;
-
-  const activeWord = words[result];
-
-  if (
-    Number.isFinite(activeWord.end) &&
-    time > activeWord.end
-  ) {
-    return result;
-  }
-
   return result;
+}
+
+function clearWordClasses(lineElement) {
+  if (!lineElement) return;
+
+  lineElement
+    .querySelectorAll(".lyric-word.active, .lyric-word.played")
+    .forEach(element => {
+      element.classList.remove("active", "played");
+    });
 }
 
 function updateWordHighlight(lineElement, line, time) {
@@ -1503,34 +1926,49 @@ export function syncLyricsProgress(currentTime) {
     return;
   }
 
-  const container = getLyricsContainer();
+  // Los elementos se guardan al renderizar; solo se vuelven a buscar
+  // si el DOM cambió por fuera.
+  if (lineElements.length !== parsedLines.length) {
+    const container = getLyricsContainer();
 
-  if (!container) return;
+    if (!container) return;
+
+    lineElements = [
+      ...container.querySelectorAll(".lyric-line")
+    ];
+
+    if (lineElements.length !== parsedLines.length) return;
+  }
 
   // Evitar trabajo repetido si el tiempo no cambió.
   if (time === lastSyncTime) return;
 
-  // Detectar retroceso o seek.
+  // Retroceso real (seek), ignorando el ruido del reproductor.
   const movedBackwards =
     lastSyncTime >= 0 &&
-    time < lastSyncTime;
+    time < lastSyncTime - CONFIG.BACKWARD_JITTER;
 
   lastSyncTime = time;
 
   const newIndex = findActiveLineIndex(time);
 
-  const lines = container.querySelectorAll(".lyric-line");
-
   if (newIndex !== activeLineIndex || movedBackwards) {
     const previousElement =
-      lines[activeLineIndex];
+      lineElements[activeLineIndex];
 
-    previousElement?.classList.remove("active");
+    if (previousElement) {
+      previousElement.classList.remove("active");
+      clearWordClasses(previousElement);
+    }
 
     activeLineIndex = newIndex;
     activeWordIndex = -1;
 
-    const activeElement = lines[activeLineIndex];
+    if (movedBackwards) {
+      lastScrollIndex = -1;
+    }
+
+    const activeElement = lineElements[activeLineIndex];
 
     if (activeElement) {
       activeElement.classList.add("active");
@@ -1559,12 +1997,9 @@ export function syncLyricsProgress(currentTime) {
 
   // La línea no cambió, pero puede haber cambiado la palabra.
   if (activeLineIndex >= 0) {
-    const activeElement = lines[activeLineIndex];
-    const activeLine = parsedLines[activeLineIndex];
-
     updateWordHighlight(
-      activeElement,
-      activeLine,
+      lineElements[activeLineIndex],
+      parsedLines[activeLineIndex],
       time
     );
   }
@@ -1595,6 +2030,12 @@ function bindLineSeeking(container) {
     const time = Number(lineElement.dataset.time);
 
     if (!Number.isFinite(time)) return;
+
+    // Tocar una línea para saltar no debe bloquear el auto-scroll.
+    manualScrollUntil = 0;
+    clearTimeout(scrollResumeTimer);
+    scrollResumeTimer = null;
+    lastScrollIndex = -1;
 
     // El player expone seekTo globalmente desde app.js.
     window.ShunelLyricsSeek?.(time);
@@ -1647,7 +2088,7 @@ export function clearLyrics() {
 
 export function getLyricsDiagnostics() {
   return {
-    version: "3.0",
+    version: "3.1",
     lineCount: parsedLines.length,
     activeLineIndex,
     activeWordIndex,
@@ -1667,6 +2108,9 @@ export function getLyricsDiagnostics() {
 ========================================================= */
 
 function initializeLyricsEngine() {
+  // Limpia las letras guardadas por versiones anteriores (rotas).
+  purgeLegacyCache();
+
   const container = getLyricsContainer();
 
   if (!container) return;
