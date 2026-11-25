@@ -1,1793 +1,895 @@
 /* =========================================================
-   SHUNEL 3.0 — PLAYER SYSTEM (REFACTOR)
-   Liquid Glass / Editorial Dark · iOS · Mobile First
+   SHUNEL 3.1 — PLAYER SYSTEM ENHANCEMENTS
+   Compatible con SHUNEL 3.0 — PLAYER SYSTEM (REFACTOR)
 
-   Mismos selectores que la versión 2.0: no hay que tocar
-   app.js, ui.js ni player.js.
+   Este archivo es una capa de mejoras para colocar DESPUÉS
+   del CSS 3.0 original. Conserva sus clases, IDs y estructura.
+   No requiere cambios en app.js, ui.js ni player.js.
 
-   Novedades:
-   - Material Liquid Glass (tinte + blur + borde especular
-     + brillo interior) en dock, botones, cola, menús y video.
-   - Fondo del reproductor teñido con el color de la portada
-     (--song-color, que app.js ya calculaba pero nadie usaba).
-   - Portada que "respira": se encoge en pausa y crece al
-     reproducir, como Apple Music.
-   - Barras de progreso rellenas con tu color de acento
-     (--progress lo pone index.html).
-   - Spinner en el botón de play mientras carga (.is-loading).
-   - Áreas táctiles de 44 px y safe areas en todo.
+   Incluye mejoras CSS-only: accesibilidad, controles táctiles,
+   contraste, rendimiento, transiciones, cola, letras, progreso,
+   adaptación a iOS y fallbacks.
 ========================================================= */
 
-
-/* =========================================================
-   01. TOKENS
-========================================================= */
-
-@property --song-color {
-  syntax: "<color>";
-  inherits: true;
-  initial-value: #242424;
-}
-
+/* 01. Tokens adicionales: se apoyan en los tokens originales. */
 :root {
-  /* Superficies */
-  --player-bg: #080808;
-  --player-bg-soft: #101010;
-
-  --player-surface: rgba(25, 25, 25, .82);
-  --player-surface-strong: rgba(19, 19, 19, .96);
-  --player-surface-light: rgba(255, 255, 255, .055);
-
-  --player-border: rgba(255, 255, 255, .09);
-  --player-border-light: rgba(255, 255, 255, .16);
-
-  /* Texto */
-  --player-text: #f7f7f7;
-  --player-muted: #a3a3a3;
-  --player-subtle: #6e6e6e;
-
-  /* Acento: sigue al selector de color de la app */
-  --player-accent: var(--shunel-accent, #ffffff);
-  --player-on-accent: var(--shunel-on-accent, #080808);
-  --player-accent-soft: rgba(255, 255, 255, .12);
-
-  /* Liquid Glass */
-  --pg-tint: rgba(28, 28, 30, .58);
-  --pg-tint-strong: rgba(20, 20, 22, .76);
-  --pg-blur: 24px;
-  --pg-saturate: 180%;
-  --pg-rim: rgba(255, 255, 255, .26);
-  --pg-rim-soft: rgba(255, 255, 255, .07);
-  --pg-inner:
-    inset 0 1px 0 rgba(255, 255, 255, .14),
-    inset 0 -1px 0 rgba(255, 255, 255, .03);
-  --pg-button-glass:
-    linear-gradient(180deg, rgba(255, 255, 255, .12), rgba(255, 255, 255, .04));
-  --pg-button-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, .18),
-    inset 0 0 0 1px rgba(255, 255, 255, .08),
-    0 6px 18px rgba(0, 0, 0, .28);
-
-  /* Formas */
-  --player-radius: 16px;
-  --player-radius-small: 11px;
-  --player-radius-large: 24px;
-  --player-radius-art: 22px;
-
-  /* Sombras */
-  --player-shadow: 0 12px 35px rgba(0, 0, 0, .38);
-  --player-shadow-deep: 0 24px 70px rgba(0, 0, 0, .58);
-
-  /* Movimiento */
-  --player-transition: .24s cubic-bezier(.2, .8, .2, 1);
-  --player-spring: .5s cubic-bezier(.34, 1.36, .44, 1);
-  --player-ease-out: cubic-bezier(.22, 1, .36, 1);
-
-  /* Safe areas y medidas */
-  --player-safe-bottom: env(safe-area-inset-bottom, 0px);
-  --player-safe-top: env(safe-area-inset-top, 0px);
-  --player-safe-left: env(safe-area-inset-left, 0px);
-  --player-safe-right: env(safe-area-inset-right, 0px);
-  --player-nav-height: var(--nav-height, 65px);
+  --pg-blur: 22px;
+  --pg-saturate: 165%;
   --player-tap: 44px;
-
-  /* Tipografía */
-  --player-font: var(--font-body, "DM Sans", -apple-system, sans-serif);
-  --player-display: var(--font-display, "Manrope", -apple-system, sans-serif);
+  --player-text-strong: #f5f5f5;
+  --player-text-secondary: #c2c2c2;
+  --player-track: rgba(255, 255, 255, .22);
+  --player-glass-fallback: #191919;
+  --player-motion-fast: .16s;
+  --player-motion-normal: .28s;
+  --player-motion-slow: .48s;
 }
 
-
-/* =========================================================
-   02. BOX MODEL Y RESET
-========================================================= */
-
+/* 02. Base segura y contención del reproductor. */
 .player-dock,
 .full-player,
 .queue-panel,
 .youtube-stage,
+.player-menu {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.player-dock,
+.queue-panel,
 .player-menu,
-.player-dock *,
-.full-player *,
-.queue-panel *,
-.youtube-stage *,
-.player-menu * {
-  box-sizing: border-box;
+.full-player,
+.youtube-stage {
+  contain: layout style;
 }
 
-.player-dock button,
-.full-player button,
-.queue-panel button,
-.player-menu button {
-  font-family: inherit;
-  -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
-  user-select: none;
-  -webkit-user-select: none;
+.full-player {
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
 }
 
-.player-dock button:disabled,
-.full-player button:disabled,
-.queue-panel button:disabled {
-  opacity: .38;
-  cursor: not-allowed;
+.full-player-content,
+.full-player-info,
+.now-playing,
+.queue-item {
+  min-width: 0;
 }
 
-
-/* =========================================================
-   03. ICONOS SVG
-========================================================= */
-
-.player-dock svg,
-.full-player svg,
-.queue-panel svg,
-.youtube-stage svg,
-.player-menu svg {
-  display: block;
-  flex-shrink: 0;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  pointer-events: none;
-}
-
-.player-controls svg { width: 20px; height: 20px; }
-.player-controls .play-button svg { width: 20px; height: 20px; }
-
-.full-player-header svg,
-.full-player-info svg,
-.queue-header svg { width: 20px; height: 20px; }
-
-.full-player-controls svg { width: 28px; height: 28px; }
-.full-player-controls .play-button svg { width: 30px; height: 30px; }
-
-.full-player-options svg { width: 18px; height: 18px; }
-.queue-header svg { width: 19px; height: 19px; }
-
-
-/* =========================================================
-   04. MATERIAL LIQUID GLASS
-========================================================= */
-
-/* 4.1 Cuerpo de vidrio: superficies grandes */
+/* 03. Vidrio con fallback de color y menos capas costosas. */
 .player-dock,
 .queue-panel,
 .player-menu {
-  isolation: isolate;
+  background-color: var(--player-glass-fallback);
   -webkit-backdrop-filter: blur(var(--pg-blur)) saturate(var(--pg-saturate));
   backdrop-filter: blur(var(--pg-blur)) saturate(var(--pg-saturate));
 }
 
-/* 4.2 Botones de vidrio con bisel especular más nítido */
+.player-dock {
+  border: 1px solid rgba(255, 255, 255, .10);
+  box-shadow:
+    0 14px 34px rgba(0, 0, 0, .42),
+    inset 0 1px 0 rgba(255, 255, 255, .16);
+}
+
+.queue-panel {
+  border: 1px solid rgba(255, 255, 255, .10);
+  box-shadow:
+    0 -16px 48px rgba(0, 0, 0, .48),
+    inset 0 1px 0 rgba(255, 255, 255, .13);
+}
+
+.player-menu {
+  border: 1px solid rgba(255, 255, 255, .12);
+  box-shadow:
+    0 24px 70px rgba(0, 0, 0, .62),
+    inset 0 1px 0 rgba(255, 255, 255, .14);
+}
+
+.player-dock::before,
+.queue-panel::before,
+.player-menu::before {
+  pointer-events: none;
+}
+
+/* 04. Refracción: mejora progresiva. Si el navegador no admite
+   filtros SVG de backdrop, conserva el blur normal. */
+@supports (backdrop-filter: url("#player-glass-filter")) {
+  .player-dock,
+  .queue-panel,
+  .player-menu {
+    -webkit-backdrop-filter: url("#player-glass-filter") blur(18px) saturate(165%);
+    backdrop-filter: url("#player-glass-filter") blur(18px) saturate(165%);
+  }
+}
+
+/* 05. Botones: objetivos táctiles y respuesta consistente. */
+.player-controls button,
+.player-extra button,
+.expand-player,
+.full-player-header .icon-button,
+.full-player-info .icon-button,
+.full-player-options button,
+.full-player-controls button,
+.queue-header .icon-button,
+.player-menu button,
+.queue-panel > .text-button {
+  min-width: var(--player-tap);
+  min-height: var(--player-tap);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.player-controls button,
+.full-player-controls button,
 .full-player-header .icon-button,
 .full-player-info .icon-button,
 .full-player-options button,
 .queue-header .icon-button {
-  background: var(--pg-button-glass), rgba(255, 255, 255, .04);
-  border: 0;
-  box-shadow:
-    inset 0 1.5px 1px rgba(255, 255, 255, .28),
-    inset 0 -1px 1px rgba(255, 255, 255, .06),
-    inset 0 0 0 1px rgba(255, 255, 255, .08),
-    0 8px 20px rgba(0, 0, 0, .32);
-  -webkit-backdrop-filter: blur(18px) saturate(185%);
-  backdrop-filter: blur(18px) saturate(185%);
+  -webkit-user-select: none;
+  user-select: none;
 }
 
-/* 4.3 Borde especular con máscara (solo superficies grandes) */
-.player-dock::before,
-.queue-panel::before,
-.player-menu::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  padding: 1px;
-  border-radius: inherit;
-  background: linear-gradient(
-    155deg,
-    var(--pg-rim) 0%,
-    var(--pg-rim-soft) 34%,
-    rgba(255, 255, 255, .02) 62%,
-    rgba(255, 255, 255, .12) 100%
-  );
-  -webkit-mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask:
-    linear-gradient(#000 0 0) content-box exclude,
-    linear-gradient(#000 0 0);
-  pointer-events: none;
+.player-controls button:focus-visible,
+.full-player-controls button:focus-visible,
+.full-player-header .icon-button:focus-visible,
+.full-player-info .icon-button:focus-visible,
+.full-player-options button:focus-visible,
+.queue-header .icon-button:focus-visible,
+.player-menu button:focus-visible,
+.queue-panel button:focus-visible {
+  outline: 2px solid var(--player-accent);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 5px rgba(255, 255, 255, .10);
 }
 
-/* 4.4 Brillo superior del dock (reflejo de luz) */
-.player-dock::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 12%;
-  width: 76%;
-  height: 1px;
-  pointer-events: none;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .34), transparent);
-}
-
-
-/* =========================================================
-   05. MINI PLAYER (DOCK)
-========================================================= */
-
-.player-dock {
-  position: fixed;
-  z-index: 50;
-  left: calc(10px + var(--player-safe-left));
-  right: calc(10px + var(--player-safe-right));
-  bottom: calc(var(--player-nav-height) + var(--player-safe-bottom) + 10px);
-
-  min-height: 64px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 8px 10px 8px 8px;
-  overflow: hidden;
-
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, .08), rgba(255, 255, 255, .015) 46%, rgba(255, 255, 255, 0)),
-    radial-gradient(120% 140% at 0% 50%, color-mix(in srgb, var(--song-color) 26%, transparent), transparent 62%),
-    var(--pg-tint);
-  border: 0;
-  border-radius: 20px;
-  box-shadow:
-    0 12px 32px rgba(0, 0, 0, .42),
-    var(--pg-inner);
-
-  cursor: pointer;
+/* 06. Estados de interacción. */
+.player-controls button,
+.full-player-controls button,
+.full-player-header .icon-button,
+.full-player-info .icon-button,
+.full-player-options button,
+.queue-header .icon-button,
+.queue-item,
+.player-menu button {
   transition:
-    transform var(--player-transition),
-    opacity var(--player-transition),
-    --song-color .8s ease;
+    transform var(--player-motion-fast) ease,
+    opacity var(--player-motion-fast) ease,
+    color var(--player-motion-fast) ease,
+    background-color var(--player-motion-fast) ease,
+    box-shadow var(--player-motion-fast) ease;
 }
 
-.player-dock:active { opacity: .94; }
-.player-dock[hidden] { display: none; }
+.player-controls button:active,
+.full-player-controls button:active,
+.full-player-header .icon-button:active,
+.full-player-info .icon-button:active,
+.full-player-options button:active,
+.queue-header .icon-button:active {
+  transform: scale(.94);
+}
 
+.player-controls .play-button,
+.full-player-controls .play-button {
+  box-shadow:
+    0 10px 26px rgba(0, 0, 0, .34),
+    inset 0 1px 0 rgba(255, 255, 255, .48),
+    inset 0 -2px 4px rgba(0, 0, 0, .12);
+}
 
-/* =========================================================
-   06. CANCIÓN ACTUAL
-========================================================= */
+.player-controls .play-button:focus-visible,
+.full-player-controls .play-button:focus-visible {
+  outline-offset: 5px;
+}
+
+/* 07. Dock: jerarquía visual y controles compactos. */
+.player-dock {
+  min-height: 66px;
+  padding-right: 8px;
+  isolation: isolate;
+}
 
 .now-playing {
-  position: relative;
-  z-index: 1;
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  overflow: hidden;
-  cursor: pointer;
+  gap: 10px;
 }
 
 .current-art,
 .now-playing img {
-  width: 46px;
-  height: 46px;
-  flex: 0 0 46px;
-  object-fit: cover;
-  border-radius: 12px;
-  background: #202020;
+  border-radius: 10px;
   box-shadow:
-    0 6px 14px rgba(0, 0, 0, .36),
-    0 0 0 1px rgba(255, 255, 255, .06);
-  transition:
-    transform var(--player-transition),
-    opacity var(--player-transition);
-}
-
-.now-playing:active .current-art {
-  transform: scale(.95);
-  opacity: .85;
-}
-
-.now-playing-text {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 3px;
+    0 5px 14px rgba(0, 0, 0, .34),
+    0 0 0 1px rgba(255, 255, 255, .08);
 }
 
 .current-title {
-  display: block;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  color: var(--player-text);
-  font-family: var(--player-font);
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: -.2px;
-  line-height: 1.25;
+  color: var(--player-text-strong);
+  font-size: clamp(13px, 3.4vw, 14px);
+  letter-spacing: -.25px;
 }
 
 .current-channel {
-  display: block;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  color: var(--player-muted);
-  font-size: 12px;
-  font-weight: 450;
-  line-height: 1.3;
-}
-
-.favorite-current { display: none; }
-
-
-/* =========================================================
-   07. CONTROLES DEL MINI PLAYER
-========================================================= */
-
-.player-center {
-  position: relative;
-  z-index: 2;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  color: var(--player-text-secondary);
+  font-size: 11px;
 }
 
 .player-controls {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-}
-
-.player-controls button,
-.player-extra button,
-.expand-player {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  outline: none;
-  background: transparent;
-  color: var(--player-text);
-  cursor: pointer;
-  transition:
-    transform .16s ease,
-    opacity .16s ease,
-    background-color .16s ease;
-}
-
-.player-controls button:active,
-.player-extra button:active,
-.expand-player:active {
-  transform: scale(.88);
-  opacity: .72;
-}
-
-.control-button {
-  width: var(--player-tap);
-  height: var(--player-tap);
-  border-radius: 50%;
-  font-size: 15px;
-}
-
-.control-button:active { background: rgba(255, 255, 255, .1); }
-
-
-/* =========================================================
-   08. BOTÓN DE PLAY
-========================================================= */
-
-.player-controls .play-button,
-.full-player-controls .play-button {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  border: 0;
-  border-radius: 50%;
-
-  background: var(--player-accent);
-  color: var(--player-on-accent);
-
-  font-weight: 800;
-  cursor: pointer;
-
-  transition:
-    transform var(--player-spring),
-    box-shadow var(--player-transition);
+  gap: 3px;
 }
 
 .player-controls .play-button {
-  width: 42px;
-  height: 42px;
-  font-size: 15px;
-  box-shadow:
-    0 6px 16px rgba(0, 0, 0, .3),
-    inset 0 1px 0 rgba(255, 255, 255, .5),
-    inset 0 -2px 4px rgba(0, 0, 0, .08);
+  width: 44px;
+  height: 44px;
 }
 
-.player-controls .play-button svg,
-.full-player-controls .play-button svg {
-  stroke: currentColor;
-  fill: currentColor;
-}
-
-.player-controls .play-button:active {
-  transform: scale(.9);
-  box-shadow: 0 0 0 6px rgba(255, 255, 255, .08);
-}
-
-.play-button.is-loading::after {
-  content: "";
-  position: absolute;
-  inset: -4px;
-  border-radius: 50%;
-  border: 2px solid transparent;
-  border-top-color: var(--player-accent);
-  border-right-color: color-mix(in srgb, var(--player-accent) 40%, transparent);
-  animation: player-spin .8s linear infinite;
-  pointer-events: none;
-}
-
-.play-button.is-loading svg { opacity: .55; }
-
-@keyframes player-spin {
-  to { transform: rotate(360deg); }
-}
-
-
-/* =========================================================
-   09. PROGRESO DEL MINI PLAYER
-========================================================= */
-
+/* 08. Progreso: pista más legible. Se mantiene --progress de index.html. */
 .player-dock .progress-row {
-  position: absolute;
-  left: 14px;
-  right: 14px;
-  bottom: 0;
-  width: auto;
-  height: 2px;
-  display: block;
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
-  border-radius: 2px;
-  background: rgba(255, 255, 255, .12);
+  height: 3px;
+  background: rgba(255, 255, 255, .16);
 }
-
-.player-dock .progress-row span { display: none; }
 
 .player-dock .progress-row input {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 2px;
-  display: block;
-  margin: 0;
-  padding: 0;
-  appearance: none;
-  -webkit-appearance: none;
-  border: 0;
-  border-radius: 0;
+  height: 3px;
   background:
-    linear-gradient(90deg, var(--player-accent) var(--progress, 0%), transparent var(--progress, 0%));
-  cursor: pointer;
-  pointer-events: none;
+    linear-gradient(
+      90deg,
+      var(--player-accent) 0 var(--progress, 0%),
+      transparent var(--progress, 0%) 100%
+    );
 }
 
-.player-dock .progress-row input::-webkit-slider-runnable-track {
-  height: 2px;
-  background: transparent;
-}
-
-.player-dock .progress-row input::-webkit-slider-thumb {
-  width: 0;
-  height: 2px;
-  appearance: none;
-  -webkit-appearance: none;
-  background: transparent;
-  border: 0;
-}
-
-.player-dock .progress-row input::-moz-range-track { height: 2px; background: transparent; }
-.player-dock .progress-row input::-moz-range-progress { height: 2px; background: var(--player-accent); }
-.player-dock .progress-row input::-moz-range-thumb { width: 0; height: 0; border: 0; background: transparent; }
-
-
-/* =========================================================
-   10. CONTROLES OPCIONALES DEL MINI PLAYER
-========================================================= */
-
-.player-extra { display: none; }
-.expand-player { display: none; }
-
-
-/* =========================================================
-   11. REPRODUCTOR COMPLETO
-========================================================= */
-
+/* 09. Reproductor completo: fondo menos agresivo y mejor lectura. */
 .full-player {
-  position: fixed;
-  z-index: 200;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  height: 100dvh;
-
-  display: flex;
-  flex-direction: column;
-
-  padding:
-    calc(10px + var(--player-safe-top))
-    calc(20px + var(--player-safe-right))
-    calc(18px + var(--player-safe-bottom))
-    calc(20px + var(--player-safe-left));
-
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-
   background:
-    radial-gradient(130% 75% at 50% -5%, color-mix(in srgb, var(--song-color) 78%, transparent), transparent 72%),
-    radial-gradient(90% 55% at 100% 100%, color-mix(in srgb, var(--song-color) 34%, transparent), transparent 70%),
-    radial-gradient(80% 50% at 0% 85%, color-mix(in srgb, var(--song-color) 22%, transparent), transparent 70%),
-    var(--player-bg);
+    radial-gradient(
+      110% 62% at 50% 0%,
+      color-mix(in srgb, var(--song-color) 52%, transparent),
+      transparent 74%
+    ),
+    radial-gradient(
+      90% 50% at 100% 100%,
+      color-mix(in srgb, var(--song-color) 22%, transparent),
+      transparent 72%
+    ),
+    #080808;
+  isolation: isolate;
+}
 
-  opacity: 0;
-  visibility: hidden;
+.full-player::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
   pointer-events: none;
-  transform: translateY(24px);
-
-  transition:
-    opacity .3s ease,
-    visibility .3s ease,
-    transform .42s var(--player-ease-out),
-    --song-color 1s ease;
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, .04),
+    rgba(0, 0, 0, .18) 58%,
+    rgba(0, 0, 0, .34)
+  );
 }
 
-@supports not (color: color-mix(in srgb, red 50%, transparent)) {
-  .full-player {
-    background:
-      radial-gradient(ellipse at 50% 22%, rgba(255, 255, 255, .06), transparent 56%),
-      var(--player-bg);
-  }
-  .player-dock {
-    background: var(--pg-tint);
-  }
-}
-
-.full-player::-webkit-scrollbar { display: none; }
-
-.full-player.active {
-  opacity: 1;
-  visibility: visible;
-  pointer-events: auto;
-  transform: none;
-}
-
-.full-player[hidden] { display: none; }
-
-
-/* =========================================================
-   12. CABECERA DEL REPRODUCTOR COMPLETO
-========================================================= */
-
-.full-player-header {
-  position: relative;
-  z-index: 2;
+.full-player-content {
   width: 100%;
-  max-width: 460px;
-  min-height: var(--player-tap);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin: 0 auto 14px;
+  gap: clamp(15px, 2.8vh, 24px);
+  padding-bottom: max(4px, var(--player-safe-bottom));
 }
 
 .full-player-header > span {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  text-align: center;
-  color: rgba(255, 255, 255, .62);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 1.6px;
-  text-transform: uppercase;
+  color: rgba(255, 255, 255, .78);
+  letter-spacing: 1.35px;
 }
 
-.full-player-header .icon-button {
-  width: var(--player-tap);
-  height: var(--player-tap);
-  display: grid;
-  place-items: center;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  color: #ffffff;
-  cursor: pointer;
-  transition:
-    transform var(--player-transition),
-    background-color var(--player-transition);
-}
-
-.full-player-header .icon-button:active {
-  transform: scale(.9);
-  background-color: rgba(255, 255, 255, .14);
-}
-
-
-/* =========================================================
-   13. CONTENIDO
-========================================================= */
-
-.full-player-content {
-  position: relative;
-  width: 100%;
-  max-width: 430px;
-  display: flex;
-  flex-direction: column;
-  gap: clamp(14px, 2.6vh, 22px);
-  margin: auto;
-}
-
-
-/* =========================================================
-   14. PORTADA
-========================================================= */
-
+/* 10. Portada: movimiento contenido, sin animar continuamente. */
 .full-player-art {
-  position: relative;
-  display: block;
-  width: min(100%, 44vh, 430px);
-  max-width: 100%;
-  height: auto;
-  aspect-ratio: 1 / 1;
-  margin: 0 auto;
-  object-fit: cover;
-
-  border: 0;
-  border-radius: var(--player-radius-art);
-  background: #181818;
-
+  width: min(100%, 43vh, 430px);
+  border-radius: clamp(18px, 4vw, 25px);
   box-shadow:
-    0 22px 50px rgba(0, 0, 0, .5),
-    0 0 0 1px rgba(255, 255, 255, .06);
-
-  scale: .86;
-  transform: translateZ(0);
-
-  transition:
-    scale .6s var(--player-spring),
-    box-shadow .6s var(--player-ease-out),
-    border-radius .3s ease;
+    0 24px 54px rgba(0, 0, 0, .48),
+    0 0 0 1px rgba(255, 255, 255, .08);
+  backface-visibility: hidden;
 }
 
 body.is-playing .full-player-art {
-  scale: 1;
   box-shadow:
-    0 30px 70px rgba(0, 0, 0, .58),
-    0 10px 40px color-mix(in srgb, var(--song-color) 45%, transparent),
-    0 0 0 1px rgba(255, 255, 255, .07);
+    0 28px 64px rgba(0, 0, 0, .52),
+    0 8px 32px color-mix(in srgb, var(--song-color) 34%, transparent),
+    0 0 0 1px rgba(255, 255, 255, .09);
 }
 
-.full-player.active .full-player-art {
-  animation: album-enter .5s var(--player-ease-out) both;
-}
-
-.full-player-art.is-loading {
-  opacity: .6;
-}
-
-@keyframes album-enter {
-  from { opacity: .6; translate: 0 10px; }
-  to   { opacity: 1;  translate: 0 0; }
-}
-
-
-/* =========================================================
-   15. INFORMACIÓN DE LA CANCIÓN
-========================================================= */
-
-.full-player-info {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  min-width: 0;
-}
-
-.full-player-info > div {
-  flex: 1;
-  min-width: 0;
-}
-
+/* 11. Información y tipografía. */
 .full-player-info h2 {
-  display: -webkit-box;
-  margin: 0 0 4px;
-  overflow: hidden;
+  color: #f7f7f7;
+  font-size: clamp(20px, 5.2vw, 26px);
+  line-height: 1.18;
+  letter-spacing: -.65px;
   overflow-wrap: anywhere;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  color: #ffffff;
-  font-family: var(--player-display);
-  font-size: clamp(19px, 5.4vw, 24px);
-  font-weight: 800;
-  line-height: 1.2;
-  letter-spacing: -.5px;
-  text-wrap: balance;
 }
 
 .full-player-info p {
-  margin: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: rgba(255, 255, 255, .66);
+  color: #c8c8c8;
   font-size: 14px;
-  font-weight: 500;
-  line-height: 1.45;
+  line-height: 1.4;
 }
 
-.full-player-info .icon-button {
-  width: var(--player-tap);
-  height: var(--player-tap);
-  display: grid;
-  place-items: center;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  color: #ffffff;
-  cursor: pointer;
-  transition:
-    transform var(--player-spring),
-    background-color var(--player-transition);
+.full-time {
+  color: #c5c5c5;
+  font-variant-numeric: tabular-nums;
 }
 
-.full-player-info .icon-button:active { transform: scale(.86); }
-
-.full-player-info .icon-button.is-favorite svg,
-.full-player-info .icon-button[aria-pressed="true"] svg {
-  fill: var(--player-accent);
-  stroke: var(--player-accent);
-}
-
-.full-player-info .icon-button.is-favorite,
-.full-player-info .icon-button[aria-pressed="true"] {
-  animation: favorite-pop .42s var(--player-spring);
-}
-
-@keyframes favorite-pop {
-  0%   { transform: scale(1); }
-  40%  { transform: scale(1.18); }
-  100% { transform: scale(1); }
-}
-
-
-/* =========================================================
-   16. PROGRESO COMPLETO
-========================================================= */
-
+/* 12. Progreso completo: pista, thumb y área táctil. */
 .full-progress {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 .full-progress input {
-  --track-h: 6px;
-
-  display: block;
-  width: 100%;
-  height: 28px;
-  margin: 0;
-  padding: 0;
-  appearance: none;
-  -webkit-appearance: none;
-  border: 0;
-  background: transparent;
-  cursor: pointer;
-  touch-action: none;
+  height: 32px;
+  --track-h: 5px;
 }
 
-.full-progress input:active { --track-h: 10px; }
-
-.full-progress input::-webkit-slider-runnable-track {
-  height: var(--track-h);
-  border-radius: 999px;
-  background:
-    linear-gradient(90deg,
-      var(--player-accent) 0 var(--progress, 0%),
-      rgba(255, 255, 255, .2) var(--progress, 0%) 100%);
-  box-shadow: inset 0 1px 1px rgba(0, 0, 0, .25);
-  transition: height .2s var(--player-ease-out);
+.full-progress input:active {
+  --track-h: 7px;
 }
 
 .full-progress input::-webkit-slider-thumb {
-  width: 14px;
-  height: 14px;
-  appearance: none;
-  -webkit-appearance: none;
-  margin-top: calc((var(--track-h) - 14px) / 2);
-  border: 0;
-  border-radius: 50%;
-  background: #ffffff;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, .45);
-  transform: scale(.0001);
-  transition: transform .2s var(--player-spring), margin-top .2s var(--player-ease-out);
+  width: 13px;
+  height: 13px;
+  margin-top: calc((var(--track-h) - 13px) / 2);
+  transform: scale(1);
+  opacity: 0;
 }
 
 .full-progress input:active::-webkit-slider-thumb,
 .full-progress input:focus-visible::-webkit-slider-thumb {
-  transform: scale(1);
-}
-
-.full-progress input::-moz-range-track {
-  height: var(--track-h);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, .2);
-}
-
-.full-progress input::-moz-range-progress {
-  height: var(--track-h);
-  border-radius: 999px;
-  background: var(--player-accent);
+  opacity: 1;
 }
 
 .full-progress input::-moz-range-thumb {
-  width: 14px;
-  height: 14px;
-  border: 0;
-  border-radius: 50%;
-  background: #ffffff;
+  width: 13px;
+  height: 13px;
+  opacity: 0;
 }
 
-.full-progress input:disabled { cursor: default; opacity: .6; }
-
-.full-progress input:focus-visible {
-  outline: 2px solid var(--player-accent);
-  outline-offset: 4px;
-  border-radius: 8px;
+.full-progress input:active::-moz-range-thumb,
+.full-progress input:focus-visible::-moz-range-thumb {
+  opacity: 1;
 }
 
-.full-time {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  color: rgba(255, 255, 255, .6);
-  font-size: 11px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: .2px;
-}
-
-
-/* =========================================================
-   17. CONTROLES DEL REPRODUCTOR COMPLETO
-========================================================= */
-
+/* 13. Controles principales: espacio suficiente para el pulgar. */
 .full-player-controls {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: clamp(22px, 9vw, 44px);
-}
-
-.full-player-controls button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  border: 0;
-  background: transparent;
-  color: #ffffff;
-  cursor: pointer;
-  transition:
-    transform .18s var(--player-spring),
-    opacity .16s ease,
-    background-color .16s ease;
-}
-
-.full-player-controls button:active {
-  transform: scale(.86);
-  opacity: .75;
+  gap: clamp(20px, 8vw, 42px);
 }
 
 .full-player-controls .control-button {
   width: 56px;
   height: 56px;
-  border-radius: 50%;
-  font-size: 19px;
-}
-
-.full-player-controls .control-button:active {
-  background: rgba(255, 255, 255, .12);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .16);
 }
 
 .full-player-controls .play-button {
-  width: 74px;
-  height: 74px;
-  box-shadow:
-    0 14px 34px rgba(0, 0, 0, .38),
-    0 0 0 1px rgba(255, 255, 255, .12),
-    inset 0 1px 0 rgba(255, 255, 255, .55),
-    inset 0 -3px 6px rgba(0, 0, 0, .1);
+  width: 76px;
+  height: 76px;
 }
 
-.full-player-controls .play-button:active { transform: scale(.92); }
-
-
-/* =========================================================
-   18. OPCIONES (pastillas de vidrio)
-========================================================= */
-
-.full-player-options {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
+/* 14. Opciones y botones de vidrio. */
+.full-player-header .icon-button,
+.full-player-info .icon-button,
+.full-player-options button,
+.queue-header .icon-button {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .13), rgba(255, 255, 255, .035)),
+    rgba(24, 24, 26, .36);
+  border: 1px solid rgba(255, 255, 255, .12);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .18),
+    0 5px 16px rgba(0, 0, 0, .20);
 }
 
 .full-player-options button {
-  min-height: var(--player-tap);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 10px 16px;
-  border-radius: 999px;
-  color: #e6e6e6;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition:
-    background-color var(--player-transition),
-    transform var(--player-spring),
-    color var(--player-transition);
+  padding-inline: 15px;
+  color: #f0f0f0;
 }
-
-.full-player-options button:active {
-  transform: scale(.95);
-  background-color: rgba(255, 255, 255, .14);
-}
-
-.full-player-options button svg { width: 17px; height: 17px; }
 
 .full-player-options button.active,
 .full-player-options button[aria-pressed="true"],
 .full-player-options button[aria-expanded="true"] {
-  color: var(--player-on-accent);
-  background: var(--player-accent);
-  box-shadow:
-    0 6px 18px rgba(0, 0, 0, .3),
-    inset 0 1px 0 rgba(255, 255, 255, .5);
+  border-color: color-mix(in srgb, var(--player-accent) 55%, white);
 }
 
-
-/* =========================================================
-   19. PANEL DE COLA (hoja de vidrio)
-========================================================= */
-
+/* 15. Cola: cabecera y lista más fáciles de recorrer. */
 .queue-panel {
-  position: fixed;
-  z-index: 300;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  width: 100%;
-  max-height: 82vh;
-  max-height: 82dvh;
-
-  display: flex;
-  flex-direction: column;
-
-  padding:
-    28px
-    calc(18px + var(--player-safe-right))
-    calc(20px + var(--player-safe-bottom))
-    calc(18px + var(--player-safe-left));
-
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, .07), rgba(255, 255, 255, 0) 30%),
-    var(--pg-tint-strong);
-  border: 0;
-  border-radius: 28px 28px 0 0;
-
-  box-shadow:
-    0 -18px 50px rgba(0, 0, 0, .5),
-    var(--pg-inner);
-
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  transform: translateY(32px);
-
-  transition:
-    opacity .26s ease,
-    visibility .26s ease,
-    transform .4s var(--player-ease-out);
+  max-height: min(84dvh, 760px);
+  padding-top: 30px;
+  scroll-padding-top: 18px;
 }
-
-.queue-panel::-webkit-scrollbar { display: none; }
-
-.queue-panel.active {
-  opacity: 1;
-  visibility: visible;
-  pointer-events: auto;
-  transform: translateY(0);
-}
-
-.queue-panel[hidden] { display: none; }
-
-
-/* =========================================================
-   20. ASA DE LA COLA
-========================================================= */
-
-.queue-panel::after {
-  content: "";
-  position: absolute;
-  top: 10px;
-  left: 50%;
-  width: 40px;
-  height: 5px;
-  transform: translateX(-50%);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, .28);
-  pointer-events: none;
-}
-
-
-/* =========================================================
-   21. CABECERA DE LA COLA
-========================================================= */
 
 .queue-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.queue-header .eyebrow {
-  margin-bottom: 4px;
-  color: var(--player-muted);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 1.4px;
-  text-transform: uppercase;
-}
-
-.queue-header h2 {
-  margin: 0;
-  color: #ffffff;
-  font-family: var(--player-display);
-  font-size: 22px;
-  font-weight: 800;
-  letter-spacing: -.5px;
-}
-
-.queue-header .icon-button {
-  width: var(--player-tap);
-  height: var(--player-tap);
-  display: grid;
-  place-items: center;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  color: #ffffff;
-  cursor: pointer;
-  transition: transform var(--player-transition), background-color var(--player-transition);
-}
-
-.queue-header .icon-button:active { transform: scale(.9); }
-
-
-/* =========================================================
-   22. LISTA DE LA COLA
-========================================================= */
-
-.queue-list {
-  display: grid;
-  gap: 4px;
+  position: sticky;
+  top: -28px;
+  z-index: 3;
+  margin: -10px -4px 12px;
+  padding: 10px 4px 12px;
+  background: linear-gradient(
+    180deg,
+    rgba(20, 20, 22, .96),
+    rgba(20, 20, 22, .82)
+  );
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  backdrop-filter: blur(18px) saturate(150%);
 }
 
 .queue-item {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-  min-height: 62px;
-  padding: 8px 10px 8px 8px;
-  border: 0;
-  border-radius: 14px;
-  cursor: pointer;
-  transition:
-    background-color var(--player-transition),
-    transform var(--player-transition);
-}
-
-.queue-item:active {
-  background: rgba(255, 255, 255, .08);
-  transform: scale(.99);
+  min-height: 64px;
+  scroll-margin-block: 12px;
+  border: 1px solid transparent;
 }
 
 .queue-item img {
-  width: 46px;
-  height: 46px;
-  flex: 0 0 46px;
-  object-fit: cover;
-  border-radius: 10px;
-  background: #202020;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, .05);
-}
-
-.queue-item-info {
-  flex: 1;
-  min-width: 0;
+  width: 48px;
+  height: 48px;
+  flex-basis: 48px;
 }
 
 .queue-item-title {
-  display: block;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  color: #eeeeee;
-  font-size: 14px;
+  color: #f2f2f2;
+  font-size: 13px;
   font-weight: 650;
-  line-height: 1.3;
 }
 
 .queue-item-artist {
-  display: block;
-  margin-top: 3px;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  color: #8f8f8f;
-  font-size: 12px;
+  color: #b5b5b5;
+  font-size: 11px;
 }
 
 .queue-item.active {
-  background: rgba(255, 255, 255, .08);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .1), inset 0 0 0 1px rgba(255, 255, 255, .06);
+  background: rgba(255, 255, 255, .085);
+  border-color: rgba(255, 255, 255, .09);
 }
 
-.queue-item.active::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 18px;
-  bottom: 18px;
-  width: 3px;
-  border-radius: 3px;
-  background: var(--player-accent);
-}
-
-.queue-item.active .queue-item-title { color: #ffffff; }
-
-.queue-panel > .text-button {
-  align-self: flex-start;
-  min-height: var(--player-tap);
-  margin-top: 12px;
-  padding: 10px 0;
-  border: 0;
-  background: transparent;
-  color: #cccccc;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-
-/* =========================================================
-   23. VIDEO DE YOUTUBE (marco de vidrio)
-========================================================= */
-
-.youtube-stage {
-  position: relative;
-  width: 100%;
-  max-width: 1050px;
-  margin: 25px auto 110px;
-  padding: 0;
-}
-
-.youtube-frame-wrap {
-  position: relative;
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  overflow: hidden;
-  border: 0;
-  border-radius: 18px;
-  background: #000000;
-  box-shadow:
-    0 16px 40px rgba(0, 0, 0, .45),
-    0 0 0 1px rgba(255, 255, 255, .08),
-    inset 0 1px 0 rgba(255, 255, 255, .12);
-}
-
-#youtubePlayerHost {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  background: #000000;
-}
-
-#youtubePlayerHost iframe {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  border: 0;
-}
-
-
-/* =========================================================
-   24. LETRAS DENTRO DEL REPRODUCTOR (compatibilidad)
-========================================================= */
-
-.player-lyrics {
-  width: 100%;
-  max-height: 60vh;
-  overflow-x: hidden;
-  overflow-y: auto;
-  padding: 20px 0;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-}
-
-.player-lyrics::-webkit-scrollbar { display: none; }
-
-.player-lyrics p {
-  margin: 14px 0;
-  color: rgba(255, 255, 255, .4);
-  font-size: 20px;
-  font-weight: 700;
-  line-height: 1.45;
-  transition: color .3s ease, opacity .3s ease;
-}
-
-.player-lyrics p.active {
-  color: #ffffff;
-  opacity: 1;
-  transform: none;
-}
-
-.full-player #lyricsContainer,
-.full-player .player-lyrics {
-  position: relative;
-  width: 100%;
-  max-width: 100%;
-  background: transparent;
-  color: #f7f7f7;
-}
-
-.full-player #lyricsContainer .lyric-line { font-family: inherit; }
-
-.full-player #lyricsContainer[data-lyrics-type="plain"] .lyric-line {
-  color: #e8e8e8;
-  opacity: 1;
-  filter: none;
-  transform: none;
-}
-
-
-/* =========================================================
-   25. VISUALIZADORES
-========================================================= */
-
-.player-visualizer {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  height: 42px;
-}
-
-.player-visualizer span {
-  width: 3px;
-  height: 8px;
-  border-radius: 5px;
-  background: var(--player-accent);
-  opacity: .85;
-}
-
-.player-visualizer.is-playing span {
-  animation: visualizer-wave .8s ease-in-out infinite alternate;
-}
-
-.player-visualizer span:nth-child(2n) { animation-delay: .15s; }
-.player-visualizer span:nth-child(3n) { animation-delay: .3s; }
-
-@keyframes visualizer-wave {
-  from { height: 6px; opacity: .5; }
-  to   { height: 30px; opacity: 1; }
-}
-
-.full-player #shunelVisualizer {
-  display: block;
-  width: 100%;
-  height: 32px;
-  opacity: .9;
-  transition: opacity .4s ease;
-}
-
-body:not(.is-playing) .full-player #shunelVisualizer { opacity: .45; }
-
-
-/* =========================================================
-   26. TEMPORIZADOR
-========================================================= */
-
-.sleep-timer {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 9px;
-  min-height: var(--player-tap);
-  padding: 10px 16px;
-  border: 0;
-  border-radius: 999px;
-  background: var(--pg-button-glass), rgba(255, 255, 255, .03);
-  box-shadow: var(--pg-button-shadow);
-  color: #eeeeee;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-
-/* =========================================================
-   27. MENÚS (popover de vidrio)
-========================================================= */
-
+/* 16. Menús y temporizador. */
 .player-menu {
-  position: absolute;
-  z-index: 400;
-  min-width: 200px;
-  max-width: min(280px, calc(100vw - 30px));
-  padding: 6px;
-  border: 0;
-  border-radius: 18px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, .07), rgba(255, 255, 255, 0) 40%),
-    var(--pg-tint-strong);
-  box-shadow: var(--player-shadow-deep), var(--pg-inner);
+  padding: 7px;
+  border-radius: 17px;
   transform-origin: top right;
-  animation: menu-in .22s var(--player-ease-out);
-}
-
-@keyframes menu-in {
-  from { opacity: 0; transform: scale(.94) translateY(-4px); }
-  to   { opacity: 1; transform: scale(1) translateY(0); }
 }
 
 .player-menu button {
-  width: 100%;
-  min-height: var(--player-tap);
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
-  border: 0;
-  border-radius: 12px;
-  background: transparent;
-  color: #f0f0f0;
-  text-align: left;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
+  border-radius: 11px;
+  color: #f5f5f5;
 }
 
-.player-menu button:active { background: rgba(255, 255, 255, .1); }
-
-.player-menu button + button { margin-top: 2px; }
-
-
-/* =========================================================
-   28. CARGA Y CAMBIO DE CANCIÓN
-========================================================= */
-
-.player-loading {
-  position: relative;
-  overflow: hidden;
+.sleep-timer {
+  border: 1px solid rgba(255, 255, 255, .12);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .12), rgba(255, 255, 255, .035)),
+    rgba(24, 24, 26, .48);
 }
 
+/* 17. Letras: aprovecha los estados active/pre-active/far si existen.
+   No crea clases ni modifica el comportamiento del JS. */
+.player-lyrics {
+  scroll-behavior: smooth;
+  scroll-padding-block: 42vh;
+  padding-block: clamp(24px, 7vh, 64px);
+}
+
+.player-lyrics p,
+.full-player #lyricsContainer .lyric-line {
+  color: rgba(255, 255, 255, .38);
+  font-size: clamp(19px, 5.4vw, 25px);
+  font-weight: 720;
+  line-height: 1.42;
+  letter-spacing: -.45px;
+  transition:
+    color .24s ease,
+    opacity .24s ease,
+    transform .24s ease,
+    filter .24s ease;
+}
+
+.player-lyrics p.active,
+.full-player #lyricsContainer .lyric-line.active {
+  color: #ffffff;
+  opacity: 1;
+  filter: none;
+  transform: scale(1.015);
+}
+
+.player-lyrics p.pre-active,
+.full-player #lyricsContainer .lyric-line.pre-active {
+  color: rgba(255, 255, 255, .72);
+  opacity: .82;
+}
+
+.player-lyrics p.far,
+.full-player #lyricsContainer .lyric-line.far {
+  opacity: .30;
+  filter: none;
+}
+
+.full-player #lyricsContainer[data-lyrics-type="plain"] .lyric-line {
+  color: #eeeeee;
+}
+
+/* 18. Visualizador: animación limitada a su propia zona. */
+.player-visualizer {
+  contain: layout paint;
+}
+
+.player-visualizer.is-playing span {
+  will-change: height;
+}
+
+body:not(.is-playing) .player-visualizer span {
+  animation: none;
+  height: 6px;
+  opacity: .45;
+}
+
+body:not(.is-playing) .full-player #shunelVisualizer {
+  opacity: .38;
+}
+
+/* 19. YouTube: tamaño estable y pintura contenida. */
+.youtube-stage {
+  contain: layout paint;
+}
+
+.youtube-frame-wrap {
+  isolation: isolate;
+  contain: layout paint;
+  background: #000;
+}
+
+#youtubePlayerHost,
+#youtubePlayerHost iframe {
+  display: block;
+}
+
+/* 20. Estados de carga y cambio. */
 .player-loading::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  transform: translateX(-100%);
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .085), transparent);
-  animation: player-shimmer 1.4s infinite;
+  pointer-events: none;
 }
 
-@keyframes player-shimmer {
-  to { transform: translateX(100%); }
+.play-button.is-loading::after {
+  border-width: 2px;
 }
 
-.song-changing { animation: song-change .32s var(--player-ease-out) both; }
-
-@keyframes song-change {
-  from { opacity: .5; transform: translateY(5px); }
-  to   { opacity: 1;  transform: translateY(0); }
+.full-player-art.is-loading {
+  filter: brightness(.82);
 }
 
-
-/* =========================================================
-   29. ESTADOS ACTIVOS
-========================================================= */
-
-.player-controls button.active,
-.full-player-controls button.active {
-  color: var(--player-accent);
-  background-color: rgba(255, 255, 255, .1);
+.song-changing {
+  animation-duration: .26s;
 }
 
-.queue-item.active .queue-item-title { color: #ffffff; }
-
-
-/* =========================================================
-   30. TÁCTIL Y FOCO
-========================================================= */
-
+/* 21. Rendimiento: contenido fuera de pantalla y medios. */
+.queue-item img,
 .current-art,
-.now-playing-text {
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
+.now-playing img,
+.full-player-art {
+  height: auto;
+  aspect-ratio: 1;
 }
 
-.current-art:active,
-.now-playing-text:active { opacity: .8; }
-
-.player-dock button:focus-visible,
-.full-player button:focus-visible,
-.queue-panel button:focus-visible,
-.player-menu button:focus-visible {
-  outline: 2px solid var(--player-accent);
-  outline-offset: 3px;
+.queue-item img,
+.current-art,
+.now-playing img,
+.full-player-art {
+  object-fit: cover;
 }
 
+.queue-list {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 420px;
+}
 
-/* =========================================================
-   31. TELÉFONOS PEQUEÑOS (iPhone SE, 375 px y menos)
-========================================================= */
-
+/* 22. Pantallas pequeñas. */
 @media (max-width: 380px) {
   .player-dock {
-    left: calc(8px + var(--player-safe-left));
-    right: calc(8px + var(--player-safe-right));
-    min-height: 60px;
-    padding: 7px 8px 7px 7px;
-    border-radius: 18px;
+    gap: 5px;
   }
 
-  .current-art,
-  .now-playing img {
-    width: 42px;
-    height: 42px;
-    flex-basis: 42px;
-    border-radius: 10px;
+  .now-playing {
+    gap: 8px;
   }
 
-  .now-playing { gap: 9px; }
-  .current-title { font-size: 13px; }
-  .current-channel { font-size: 11px; }
+  .current-title {
+    font-size: 12px;
+  }
 
-  .player-controls { gap: 0; }
+  .current-channel {
+    font-size: 10px;
+  }
 
   .player-controls .play-button {
-    width: 40px;
-    height: 40px;
+    width: 42px;
+    height: 42px;
   }
 
-  .full-player {
-    padding-left: calc(16px + var(--player-safe-left));
-    padding-right: calc(16px + var(--player-safe-right));
-  }
-
-  .full-player-content { gap: 14px; }
-  .full-player-art { width: min(100%, 38vh); }
-  .full-player-controls { gap: 22px; }
-  .full-player-controls .control-button { width: 50px; height: 50px; }
-  .full-player-controls .play-button { width: 66px; height: 66px; }
-  .full-player-info h2 { font-size: 19px; }
-
-  .queue-panel {
-    padding-left: calc(14px + var(--player-safe-left));
-    padding-right: calc(14px + var(--player-safe-right));
-  }
-}
-
-@media (max-height: 700px) and (orientation: portrait) {
-  .full-player-header { margin-bottom: 8px; }
-  .full-player-art { width: min(100%, 36vh); }
-  .full-player-content { gap: 12px; }
-  .full-player #shunelVisualizer { height: 24px; }
-}
-
-
-/* =========================================================
-   32. TELÉFONOS GRANDES
-========================================================= */
-
-@media (min-width: 430px) {
-  .player-dock {
-    left: calc(14px + var(--player-safe-left));
-    right: calc(14px + var(--player-safe-right));
-  }
-
-  .full-player-content { max-width: 400px; }
-  .full-player-art { border-radius: 24px; }
-  .full-player-controls { gap: 44px; }
-}
-
-
-/* =========================================================
-   33. TABLETS Y ESCRITORIO
-========================================================= */
-
-@media (min-width: 700px) {
-  .player-dock {
-    left: 50%;
-    right: auto;
-    width: min(620px, calc(100vw - 40px));
-    transform: translateX(-50%);
-  }
-
-  .full-player-content { max-width: 430px; }
-  .full-player-art { width: min(100%, 48vh, 430px); }
-
-  .queue-panel {
-    left: auto;
-    right: 20px;
-    bottom: 20px;
-    width: min(420px, calc(100vw - 40px));
-    max-height: min(75vh, 700px);
-    border-radius: 24px;
-  }
-
-  .queue-panel::after { display: none; }
-}
-
-
-/* =========================================================
-   34. HORIZONTAL
-========================================================= */
-
-@media (orientation: landscape) and (max-height: 500px) {
   .full-player {
     padding-top: calc(8px + var(--player-safe-top));
-    padding-bottom: calc(10px + var(--player-safe-bottom));
-  }
-
-  .full-player-header {
-    max-width: 750px;
-    min-height: 40px;
-    margin-bottom: 6px;
-  }
-
-  .full-player-content {
-    display: grid;
-    grid-template-columns: minmax(130px, .8fr) minmax(220px, 1fr);
-    align-items: center;
-    column-gap: 28px;
-    row-gap: 10px;
-    max-width: 750px;
   }
 
   .full-player-art {
-    grid-column: 1;
-    grid-row: 1 / 7;
-    width: min(100%, 70vh, 300px);
-    justify-self: center;
+    width: min(100%, 37vh);
   }
 
-  .full-player-content > :not(.full-player-art) { grid-column: 2; }
-
-  .full-player-info h2 { font-size: 18px; }
-  .full-player-controls { gap: 24px; }
-  .full-player-controls .play-button { width: 54px; height: 54px; }
-}
-
-
-/* =========================================================
-   35. SAFARI E iOS
-========================================================= */
-
-@supports (-webkit-touch-callout: none) {
-  .full-player,
-  .queue-panel,
-  .player-lyrics {
-    -webkit-overflow-scrolling: touch;
+  .full-player-controls {
+    gap: 18px;
   }
 
-  .player-dock { will-change: transform; }
+  .full-player-controls .control-button {
+    width: 48px;
+    height: 48px;
+  }
 
-  .full-player { min-height: -webkit-fill-available; }
+  .full-player-controls .play-button {
+    width: 64px;
+    height: 64px;
+  }
 }
 
+/* 23. Teléfonos altos: portada y controles con mejor proporción. */
+@media (min-height: 800px) and (orientation: portrait) {
+  .full-player-content {
+    gap: clamp(18px, 3.2vh, 30px);
+  }
 
-/* =========================================================
-   36. MENOS TRANSPARENCIA (ajuste de accesibilidad de iOS)
-========================================================= */
+  .full-player-art {
+    width: min(100%, 46vh, 430px);
+  }
 
-@media (prefers-reduced-transparency: reduce) {
+  .full-player-controls .play-button {
+    width: 80px;
+    height: 80px;
+  }
+}
+
+/* 24. Horizontal: composición en dos columnas conservando el HTML. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .full-player {
+    overflow-y: auto;
+  }
+
+  .full-player-content {
+    grid-template-columns: minmax(120px, .75fr) minmax(220px, 1fr);
+    column-gap: clamp(18px, 4vw, 36px);
+    max-width: 820px;
+  }
+
+  .full-player-art {
+    width: min(100%, 68vh, 280px);
+  }
+
+  .full-player-controls .control-button {
+    width: 48px;
+    height: 48px;
+  }
+
+  .full-player-controls .play-button {
+    width: 58px;
+    height: 58px;
+  }
+
+  .full-player-options {
+    gap: 5px;
+  }
+
+  .full-player-options button {
+    min-height: 38px;
+    padding: 7px 11px;
+  }
+}
+
+/* 25. Tablets y escritorio. */
+@media (min-width: 700px) {
+  .player-dock {
+    width: min(620px, calc(100vw - 48px));
+  }
+
+  .full-player-content {
+    max-width: 450px;
+  }
+
+  .full-player-art {
+    width: min(100%, 48vh, 440px);
+  }
+
+  .queue-panel {
+    right: 24px;
+    bottom: 24px;
+    width: min(430px, calc(100vw - 48px));
+  }
+
+  .queue-item:hover {
+    background: rgba(255, 255, 255, .065);
+  }
+}
+
+/* 26. Hover solo en dispositivos con puntero real. */
+@media (hover: hover) and (pointer: fine) {
+  .player-controls button:hover,
+  .full-player-controls .control-button:hover {
+    background: rgba(255, 255, 255, .09);
+  }
+
+  .full-player-options button:hover,
+  .player-menu button:hover,
+  .queue-item:hover {
+    background-color: rgba(255, 255, 255, .08);
+  }
+
+  .full-player-art:hover {
+    box-shadow:
+      0 30px 66px rgba(0, 0, 0, .56),
+      0 0 0 1px rgba(255, 255, 255, .10);
+  }
+}
+
+/* 27. Contraste reforzado. */
+@media (prefers-contrast: more) {
+  .current-channel,
+  .full-player-info p,
+  .full-time,
+  .queue-item-artist,
+  .full-player-header > span {
+    color: #e2e2e2;
+  }
+
   .player-dock,
   .queue-panel,
   .player-menu,
   .full-player-header .icon-button,
   .full-player-info .icon-button,
-  .full-player-options button,
   .queue-header .icon-button {
+    border: 1px solid rgba(255, 255, 255, .42);
+  }
+
+  .player-lyrics p,
+  .full-player #lyricsContainer .lyric-line {
+    color: #d6d6d6;
+  }
+}
+
+/* 28. Reducir transparencia: superficies opacas y legibles. */
+@media (prefers-reduced-transparency: reduce) {
+  .player-dock,
+  .queue-panel,
+  .player-menu,
+  .queue-header,
+  .full-player-header .icon-button,
+  .full-player-info .icon-button,
+  .full-player-options button,
+  .sleep-timer {
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
   }
 
-  .player-dock { background: #1b1b1b; }
+  .player-dock {
+    background: #191919;
+  }
+
   .queue-panel,
-  .player-menu { background: #171717; }
+  .queue-header {
+    background: #171717;
+  }
+
+  .player-menu {
+    background: #1c1c1c;
+  }
 
   .full-player-header .icon-button,
   .full-player-info .icon-button,
   .full-player-options button,
-  .queue-header .icon-button { background: #262626; }
+  .sleep-timer {
+    background: #242424;
+  }
 }
 
-
-/* =========================================================
-   37. MENOS MOVIMIENTO
-========================================================= */
-
+/* 29. Movimiento reducido: desactiva desplazamientos y loops.
+   El indicador de carga permanece estático para no perder estado. */
 @media (prefers-reduced-motion: reduce) {
   .player-dock *,
   .full-player *,
   .queue-panel *,
   .youtube-stage *,
   .player-menu * {
-    animation: none;
-    transition: none;
-    scroll-behavior: auto;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
   }
 
   .full-player,
-  .queue-panel { transform: none; }
+  .queue-panel {
+    transform: none;
+  }
 
   .full-player-art,
-  body.is-playing .full-player-art { scale: 1; }
+  body.is-playing .full-player-art {
+    scale: 1;
+    translate: none;
+  }
 
-  .play-button.is-loading::after { animation: player-spin 2s linear infinite; }
+  .play-button.is-loading::after {
+    animation: none;
+    border-color: var(--player-accent);
+    opacity: .75;
+  }
+
+  .player-visualizer.is-playing span {
+    animation: none;
+    height: 7px;
+  }
 }
 
-
-/* =========================================================
-   38. SIN BACKDROP-FILTER
-========================================================= */
-
+/* 30. Fallback sin backdrop-filter. */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .player-dock { background: #191919; }
-  .queue-panel { background: #171717; }
-  .player-menu { background: #1c1c1c; }
-
-  .full-player-header .icon-button,
-  .full-player-info .icon-button,
-  .full-player-options button,
-  .queue-header .icon-button { background: #262626; }
-}
-
-
-/* =========================================================
-   39. HOVER (solo con mouse)
-========================================================= */
-
-@media (hover: hover) and (pointer: fine) {
-  .player-controls button:hover,
-  .full-player-controls .control-button:hover {
-    background-color: rgba(255, 255, 255, .08);
-  }
-
-  .full-player-header .icon-button:hover,
-  .full-player-info .icon-button:hover,
-  .full-player-options button:hover,
-  .queue-header .icon-button:hover {
-    background-color: rgba(255, 255, 255, .12);
-  }
-
-  .queue-item:hover { background: rgba(255, 255, 255, .05); }
-  .player-menu button:hover { background: rgba(255, 255, 255, .07); }
-}
-
-
-/* =========================================================
-   40. SEGURIDAD FINAL
-========================================================= */
-
-.player-dock img,
-.queue-panel img { max-width: 100%; }
-
-.now-playing,
-.now-playing-text,
-.queue-item-info,
-.full-player-info > div { min-width: 0; }
-
-.player-dock [hidden],
-.full-player [hidden],
-.queue-panel [hidden] { display: none; }
-
-.full-player.active { z-index: 200; }
-
-
-/* =========================================================
-   41. ALTO CONTRASTE / COLORES FORZADOS
-========================================================= */
-
-@media (prefers-contrast: more) {
-  .current-channel,
-  .full-player-info p,
-  .full-time,
-  .queue-item-artist { color: #d0d0d0; }
-
   .player-dock,
-  .queue-panel { box-shadow: 0 0 0 1px rgba(255, 255, 255, .4); }
+  .queue-panel,
+  .player-menu {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: #191919;
+  }
+
+  .queue-panel {
+    background: #171717;
+  }
+
+  .player-menu {
+    background: #1c1c1c;
+  }
 }
 
+/* 31. Colores forzados y navegación por teclado. */
 @media (forced-colors: active) {
   .player-dock,
   .queue-panel,
   .player-menu,
-  .full-player-options button { border: 1px solid CanvasText; }
+  .queue-item,
+  .full-player-options button {
+    border: 1px solid CanvasText;
+  }
+
+  .player-dock::before,
+  .queue-panel::before,
+  .player-menu::before,
+  .player-dock::after {
+    display: none;
+  }
 
   .player-controls .play-button,
   .full-player-controls .play-button {
+    forced-color-adjust: none;
     background: Highlight;
     color: HighlightText;
-    border: 1px solid CanvasText;
+  }
+
+  .full-progress input:focus-visible,
+  button:focus-visible {
+    outline: 2px solid Highlight;
   }
 }
 
+/* 32. AMOLED y ahorro visual en pantallas OLED. */
+@media (prefers-color-scheme: dark) {
+  .full-player {
+    background-color: #000;
+  }
+}
+
+/* 33. Seguridad de contenido e imágenes. */
+.player-dock img,
+.queue-panel img,
+.full-player img {
+  max-width: 100%;
+}
+
+.player-dock [hidden],
+.full-player [hidden],
+.queue-panel [hidden] {
+  display: none !important;
+}
+
 /* =========================================================
-   END — SHUNEL PLAYER SYSTEM 3.0
+   FIN — SHUNEL 3.1 PLAYER ENHANCEMENTS
 ========================================================= */
