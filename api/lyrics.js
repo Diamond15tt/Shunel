@@ -1,45 +1,37 @@
+/* SHUNEL — Lyrics API
+ * Vercel Node.js Function: /api/lyrics
+ * Multi-provider search with bounded requests, validation and diagnostics.
+ * Runtime: Node.js 20+
+ */
 
-/* =========================================
-   SHUNEL — LYRICS API 3.0
-   Multi-source lyrics engine
+const PROVIDERS = Object.freeze({
+  lrclib: "https://lrclib.net/api",
+  liriqo: "https://api.liriqo-alfarrizi.my.id/v1",
+  lrcmux: "https://api.lrcmux.dev",
+  better: "https://api.betterlyrics.org",
+  lyricsOvh: "https://api.lyrics.ovh/v1",
+  youtube: "https://www.youtube.com"
+});
 
-   Providers:
-   - LRCLIB
-   - LiriQo
-   - LRCMux
-   - Better Lyrics (KuGou / QQ)
-   - Lyrics.ovh
-   - YouTube Captions
-
-   Features:
-   - Smart provider ranking
-   - Synced lyrics priority
-   - Enhanced LRC preservation
-   - Word timing metadata when available
-   - Timestamp normalization
-   - YouTube caption timing extraction
-   - Better title / artist matching
-   - Request timeouts and cancellation
-   - Response validation
-   - Provider diagnostics
-========================================= */
-
-const LIRIQO_URL = "https://api.liriqo-alfarrizi.my.id/v1";
-const BETTER_URL = "https://api.betterlyrics.org";
-const LRCMUX_URL = "https://api.lrcmux.dev";
-const LRCLIB_URL = "https://lrclib.net/api";
-
-const USER_AGENT = "Shunel/3.0 (https://shunel.vercel.app)";
-
-const MAX_TITLE_LENGTH = 250;
-const MAX_ARTIST_LENGTH = 180;
-const MAX_VIDEO_ID_LENGTH = 30;
-const MAX_LYRICS_LENGTH = 250000;
-const MAX_LYRIC_LINES = 12000;
-
-const DEFAULT_TIMEOUT = 8000;
-const LIRIQO_TIMEOUT = 14000;
-const YOUTUBE_TIMEOUT = 9000;
+const CONFIG = Object.freeze({
+  userAgent: "Shunel/4.0 (+https://shunel.vercel.app)",
+  maxTitleLength: 250,
+  maxArtistLength: 180,
+  maxVideoIdLength: 30,
+  maxLyricsLength: 250_000,
+  maxLines: 12_000,
+  maxResponseBytes: 1_500_000,
+  requestTimeoutMs: 8_000,
+  liriqoTimeoutMs: 11_000,
+  youtubeTimeoutMs: 9_000,
+  totalTimeoutMs: 18_000,
+  maxRetries: 1,
+  cacheTtlMs: 60 * 60 * 1000,
+  cacheMaxEntries: 100,
+  minMatchScore: 62,
+  earlySyncedScore: 68,
+  earlySyncedQuality: 58
+});
 
 const PROVIDER_NAMES = [
   "LRCLIB",
@@ -50,12 +42,19 @@ const PROVIDER_NAMES = [
   "YouTube"
 ];
 
-/* =========================================
-   01. GENERAL UTILITIES
-========================================= */
+const memoryCache = new Map();
+
+class LyricsHttpError extends Error {
+  constructor(message, status = 502, retryable = false) {
+    super(message);
+    this.name = "LyricsHttpError";
+    this.status = status;
+    this.retryable = retryable;
+  }
+}
 
 function clean(value, maxLength = 500) {
-  return String(value || "")
+  return String(value ?? "")
     .replace(/[\u0000-\u001F\u007F]/g, " ")
     .replace(/\s+/g, " ")
     .trim()
@@ -63,8 +62,8 @@ function clean(value, maxLength = 500) {
 }
 
 function normalizeText(value) {
-  return clean(value)
-    .normalize("NFD")
+  return clean(value, 500)
+    .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/\b(feat|ft|featuring)\b.*$/i, "")
@@ -75,656 +74,545 @@ function normalizeText(value) {
 }
 
 function decodeEntities(value) {
-  return String(value || "")
+  return String(value ?? "")
     .replace(/&amp;/gi, "&")
     .replace(/&quot;/gi, '"')
     .replace(/&apos;|&#39;/gi, "'")
     .replace(/&lt;/gi, "<")
     .replace(/&gt;/gi, ">")
-    .replace(/&#(\d+);/g, (_, code) => {
-      const number = Number(code);
-
+    .replace(/&#(\d+);/g, (_, raw) => {
+      const code = Number(raw);
       try {
-        return String.fromCodePoint(number);
+        return String.fromCodePoint(code);
       } catch {
         return "";
       }
     })
-    .replace(/&#x([a-f0-9]+);/gi, (_, code) => {
-      const number = parseInt(code, 16);
-
+    .replace(/&#x([a-f\d]+);/gi, (_, raw) => {
+      const code = Number.parseInt(raw, 16);
       try {
-        return String.fromCodePoint(number);
+        return String.fromCodePoint(code);
       } catch {
         return "";
       }
     });
 }
 
-function isValidVideoId(value) {
-  return /^[a-zA-Z0-9_-]{11}$/.test(value || "");
+function validVideoId(value) {
+  return /^[A-Za-z0-9_-]{11}$/.test(value);
 }
 
-function isValidDuration(value) {
-  return Number.isFinite(value) &&
-    value > 0 &&
-    value < 86400;
+function validDuration(value) {
+  return Number.isFinite(value) && value > 0 && value < 86_400;
 }
 
-function validLyrics(text) {
-  if (typeof text !== "string") return false;
+function validLyrics(value) {
+  if (typeof value !== "string") return false;
+  const text = value.trim();
 
-  const value = text.trim();
-
-  if (
-    value.length < 20 ||
-    value.length > MAX_LYRICS_LENGTH
-  ) {
+  if (text.length < 20 || text.length > CONFIG.maxLyricsLength) {
     return false;
   }
 
-  if (
-    /^(lyrics not found|not found|no lyrics|error|undefined|null)$/i.test(value)
-  ) {
+  if (/^(lyrics not found|not found|no lyrics|error|undefined|null)$/i.test(text)) {
     return false;
   }
 
-  const normalized = value
+  const visible = text
     .replace(/\[[^\]]+\]/g, "")
     .replace(/<[^>]+>/g, "")
     .trim();
 
-  return normalized.length >= 15;
+  return visible.length >= 15;
 }
 
-function safeJson(response) {
-  return response.json().catch(() => null);
+function parseRetryAfter(response) {
+  const raw = response.headers.get("retry-after");
+  if (!raw) return 500;
+
+  const seconds = Number(raw);
+  if (Number.isFinite(seconds)) {
+    return Math.min(4_000, Math.max(250, seconds * 1_000));
+  }
+
+  const date = Date.parse(raw);
+  if (Number.isFinite(date)) {
+    return Math.min(4_000, Math.max(250, date - Date.now()));
+  }
+
+  return 500;
 }
 
-/* =========================================
-   02. TIMESTAMP UTILITIES
-========================================= */
+function abortError() {
+  const error = new Error("La solicitud fue cancelada.");
+  error.name = "AbortError";
+  return error;
+}
+
+function throwIfAborted(signal) {
+  if (signal?.aborted) throw abortError();
+}
+
+function sleep(ms, signal) {
+  return new Promise((resolve, reject) => {
+    throwIfAborted(signal);
+    const timer = setTimeout(done, ms);
+
+    function done() {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }
+
+    function onAbort() {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+      reject(abortError());
+    }
+
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+function combineSignals(signals) {
+  const valid = signals.filter(Boolean);
+  const controller = new AbortController();
+  const cleanups = [];
+
+  for (const signal of valid) {
+    if (signal.aborted) {
+      controller.abort(signal.reason);
+      break;
+    }
+
+    const handler = () => controller.abort(signal.reason);
+    signal.addEventListener("abort", handler, { once: true });
+    cleanups.push(() => signal.removeEventListener("abort", handler));
+  }
+
+  return {
+    signal: controller.signal,
+    cleanup() {
+      for (const cleanup of cleanups) cleanup();
+    }
+  };
+}
+
+async function readBodyLimited(response, maxBytes = CONFIG.maxResponseBytes) {
+  const declaredLength = Number(response.headers.get("content-length") || 0);
+
+  if (declaredLength > maxBytes) {
+    await response.body?.cancel().catch(() => {});
+    throw new LyricsHttpError("Respuesta del proveedor demasiado grande.", 502);
+  }
+
+  if (!response.body) return "";
+
+  const reader = response.body.getReader();
+  const chunks = [];
+  let total = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel().catch(() => {});
+        throw new LyricsHttpError("Respuesta del proveedor supera el límite permitido.", 502);
+      }
+
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const merged = new Uint8Array(total);
+  let offset = 0;
+
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  return new TextDecoder("utf-8", { fatal: false }).decode(merged);
+}
+
+async function fetchText(url, options = {}) {
+  const {
+    signal,
+    timeoutMs = CONFIG.requestTimeoutMs,
+    headers = {},
+    retries = CONFIG.maxRetries
+  } = options;
+
+  const parsedUrl = new URL(url);
+  if (parsedUrl.protocol !== "https:") {
+    throw new LyricsHttpError("Solo se permiten conexiones HTTPS.", 400);
+  }
+
+  let lastError;
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    throwIfAborted(signal);
+
+    const timeoutController = new AbortController();
+    const timeout = setTimeout(() => timeoutController.abort(), timeoutMs);
+    const combined = combineSignals([signal, timeoutController.signal]);
+
+    try {
+      const response = await fetch(parsedUrl, {
+        method: "GET",
+        redirect: "error",
+        signal: combined.signal,
+        headers: {
+          "User-Agent": CONFIG.userAgent,
+          Accept: "application/json, text/plain, application/xml, text/xml, */*",
+          ...headers
+        }
+      });
+
+      if (!response.ok) {
+        const retryable = response.status === 429 || response.status >= 500;
+        const retryDelay = response.status === 429
+          ? parseRetryAfter(response)
+          : 350 * (attempt + 1);
+
+        await response.body?.cancel().catch(() => {});
+
+        if (retryable && attempt < retries) {
+          await sleep(retryDelay + Math.floor(Math.random() * 180), signal);
+          continue;
+        }
+
+        throw new LyricsHttpError(
+          `Proveedor respondió HTTP ${response.status}.`,
+          response.status,
+          retryable
+        );
+      }
+
+      return await readBodyLimited(response);
+    } catch (error) {
+      lastError = error;
+
+      if (signal?.aborted) throw abortError();
+      if (timeoutController.signal.aborted) {
+        lastError = new LyricsHttpError("Tiempo de espera agotado.", 504, true);
+      }
+
+      const retryable = error?.retryable || error?.status === 429 ||
+        error?.status >= 500 || error?.name === "TypeError" ||
+        error?.name === "AbortError";
+
+      if (!retryable || attempt >= retries) throw lastError;
+
+      await sleep(350 * (attempt + 1) + Math.floor(Math.random() * 180), signal);
+    } finally {
+      clearTimeout(timeout);
+      combined.cleanup();
+    }
+  }
+
+  throw lastError || new LyricsHttpError("No se pudo contactar al proveedor.", 502);
+}
+
+async function fetchJson(url, options = {}) {
+  const text = await fetchText(url, options);
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new LyricsHttpError("El proveedor devolvió JSON inválido.", 502);
+  }
+}
 
 function normalizeTimestamp(value, duration = 0) {
   const raw = Number(value);
+  if (!Number.isFinite(raw) || raw < 0) return null;
 
-  if (!Number.isFinite(raw) || raw < 0) {
-    return null;
+  if (duration > 0 && raw > duration * 1.5) {
+    return raw / 1_000;
   }
 
-  /*
-    Los servicios pueden devolver segundos o milisegundos.
-
-    Se usa la duración como referencia cuando existe.
-    Esto también corrige el caso exacto de 1000 ms.
-  */
-
-  if (
-    duration > 0 &&
-    raw > duration * 1.5
-  ) {
-    return raw / 1000;
-  }
-
-  if (raw >= 1000) {
-    return raw / 1000;
-  }
-
+  if (raw >= 100_000) return raw / 1_000;
   return raw;
 }
 
 function formatLrcTime(seconds) {
-  const safeSeconds = Math.max(0, Number(seconds) || 0);
+  const centiseconds = Math.round(Math.max(0, seconds) * 100);
+  const minutes = Math.floor(centiseconds / 6_000);
+  const remainder = centiseconds % 6_000;
+  const wholeSeconds = Math.floor(remainder / 100);
+  const fraction = remainder % 100;
 
-  const totalCentiseconds = Math.round(safeSeconds * 100);
-
-  const minutes = Math.floor(totalCentiseconds / 6000);
-  const remaining = totalCentiseconds % 6000;
-
-  const wholeSeconds = Math.floor(remaining / 100);
-  const centiseconds = remaining % 100;
-
-  return (
-    "[" +
-    String(minutes).padStart(2, "0") +
-    ":" +
-    String(wholeSeconds).padStart(2, "0") +
-    "." +
-    String(centiseconds).padStart(2, "0") +
-    "]"
-  );
+  return `[${String(minutes).padStart(2, "0")}:${String(wholeSeconds).padStart(2, "0")}.${String(fraction).padStart(2, "0")}]`;
 }
 
-function parseLrcTimestamp(value) {
-  const match = String(value || "").match(
-    /^(\d{1,3}):(\d{2})(?:[.:](\d{1,3}))?$/
-  );
-
-  if (!match) return null;
-
-  const minutes = Number(match[1]);
-  const seconds = Number(match[2]);
-
-  const fraction = Number(
-    String(match[3] || "0").padEnd(3, "0")
-  );
-
-  if (seconds >= 60) return null;
-
-  return minutes * 60 + seconds + fraction / 1000;
-}
-
-/* =========================================
-   03. LRC VALIDATION
-========================================= */
-
-function inspectLRC(text) {
+function inspectLrc(text) {
   if (!validLyrics(text)) {
-    return {
-      valid: false,
-      lineCount: 0,
-      timedLineCount: 0,
-      ratio: 0
-    };
+    return { valid: false, lineCount: 0, timedLineCount: 0, ratio: 0 };
   }
 
   const lines = text.split(/\r?\n/);
-
+  let lineCount = 0;
   let timedLineCount = 0;
-  let contentLineCount = 0;
-
-  const timestampRegex =
-    /\[(\d{1,3}):(\d{2})(?:[.:](\d{1,3}))?\]/g;
+  const timestamp = /^\s*\[(\d{1,3}):([0-5]\d)(?:[.:](\d{1,3}))?\]/;
 
   for (const line of lines) {
-    const trimmed = line.trim();
-
-    if (!trimmed) continue;
-
-    if (
-      /^\[(ar|ti|al|by|re|ve|offset|length|kana|la|tool):/i.test(trimmed)
-    ) {
+    const value = line.trim();
+    if (!value || /^\[(ar|ti|al|by|re|ve|offset|length|kana|la|tool):/i.test(value)) {
       continue;
     }
 
-    contentLineCount++;
-
-    if (timestampRegex.test(trimmed)) {
-      timedLineCount++;
-    }
-
-    timestampRegex.lastIndex = 0;
+    lineCount++;
+    if (timestamp.test(value)) timedLineCount++;
   }
 
-  const ratio = contentLineCount
-    ? timedLineCount / contentLineCount
-    : 0;
-
   return {
-    valid: contentLineCount > 0,
-    lineCount: contentLineCount,
+    valid: lineCount > 0,
+    lineCount,
     timedLineCount,
-    ratio
+    ratio: lineCount ? timedLineCount / lineCount : 0
   };
 }
 
-/* =========================================
-   04. LYRICS RESULT
-========================================= */
+function normalizeTimedEntries(entries, duration = 0) {
+  if (!Array.isArray(entries)) return [];
 
-function result(
-  lyrics,
-  source,
-  synced = false,
-  metadata = {}
-) {
+  const output = [];
+
+  for (const item of entries.slice(0, CONFIG.maxLines)) {
+    if (!item || typeof item !== "object") continue;
+
+    const rawStart = item.start ?? item.time ?? item.timestamp ??
+      item.offset ?? item.startTime ?? item.start_time;
+
+    const start = normalizeTimestamp(rawStart, duration);
+    const text = decodeEntities(item.text ?? item.word ?? "").trim();
+
+    if (start === null || !text || text.length > 1_000) continue;
+    if (duration > 0 && start > duration + 30) continue;
+
+    output.push({ time: start, text });
+  }
+
+  output.sort((a, b) => a.time - b.time);
+  return output;
+}
+
+function entriesToLrc(entries, duration = 0) {
+  return normalizeTimedEntries(entries, duration)
+    .map(line => `${formatLrcTime(line.time)}${line.text}`)
+    .join("\n");
+}
+
+function normalizeWordTimings(entries, duration = 0) {
+  if (!Array.isArray(entries)) return [];
+
+  return entries.slice(0, CONFIG.maxLines).flatMap(item => {
+    if (!item || typeof item !== "object") return [];
+
+    const start = normalizeTimestamp(
+      item.start ?? item.time ?? item.timestamp,
+      duration
+    );
+    const end = normalizeTimestamp(
+      item.end ?? item.endTime ?? item.end_time,
+      duration
+    );
+    const text = decodeEntities(item.text ?? item.word ?? "").trim();
+
+    if (start === null || !text || text.length > 200) return [];
+
+    return [{
+      text,
+      start,
+      end: end !== null && end >= start ? end : null
+    }];
+  }).sort((a, b) => a.start - b.start);
+}
+
+function createResult(lyrics, source, synced = false, metadata = {}) {
   if (!validLyrics(lyrics)) return null;
 
   const text = lyrics.trim();
-  const lrcInfo = inspectLRC(text);
-
-  const hasTimestamps =
-    synced &&
-    lrcInfo.valid &&
-    lrcInfo.timedLineCount > 0;
+  const info = inspectLrc(text);
+  const hasTimestamps = Boolean(synced && info.valid && info.timedLineCount);
 
   return {
     text,
-
     source,
-
-    synced: Boolean(hasTimestamps),
-
+    synced: hasTimestamps,
     syncedLyrics: hasTimestamps ? text : "",
-
-    plainLyrics: hasTimestamps
-      ? ""
-      : text,
-
-    syncLevel: metadata.syncLevel ||
-      (hasTimestamps ? "line" : "plain"),
-
-    wordTimings: Array.isArray(metadata.wordTimings)
-      ? metadata.wordTimings
-      : [],
-
+    plainLyrics: hasTimestamps ? "" : text,
+    syncLevel: metadata.syncLevel || (hasTimestamps ? "line" : "plain"),
+    wordTimings: Array.isArray(metadata.wordTimings) ? metadata.wordTimings : [],
     language: metadata.language || null,
-
-    duration: Number.isFinite(metadata.duration)
-      ? metadata.duration
-      : null,
-
+    duration: Number.isFinite(metadata.duration) ? metadata.duration : null,
     metadata: {
-      lineCount: lrcInfo.lineCount,
-      timedLineCount: lrcInfo.timedLineCount,
-      timingRatio: lrcInfo.ratio,
-      provider: source
+      lineCount: info.lineCount,
+      timedLineCount: info.timedLineCount,
+      timingRatio: info.ratio,
+      provider: source,
+      matchScore: Number.isFinite(metadata.matchScore) ? metadata.matchScore : null
     }
   };
 }
 
-/* =========================================
-   05. SMART MATCHING
-========================================= */
-
 function similarityScore(target, candidate) {
   if (!target || !candidate) return 0;
-
   if (target === candidate) return 1;
 
-  if (
-    candidate.includes(target) ||
-    target.includes(candidate)
-  ) {
-    return 0.82;
+  const a = new Set(target.split(" "));
+  const b = new Set(candidate.split(" "));
+  const intersection = [...a].filter(word => b.has(word)).length;
+  const union = new Set([...a, ...b]).size;
+  const jaccard = union ? intersection / union : 0;
+
+  if (candidate.includes(target) || target.includes(candidate)) {
+    return Math.max(0.82, jaccard);
   }
 
-  const targetWords = new Set(target.split(" "));
-  const candidateWords = new Set(candidate.split(" "));
-
-  const intersection = [...targetWords].filter(
-    word => candidateWords.has(word)
-  ).length;
-
-  const union = new Set([
-    ...targetWords,
-    ...candidateWords
-  ]).size;
-
-  return union ? intersection / union : 0;
+  return jaccard;
 }
 
-function calculateMatchScore({
-  title,
-  artist,
-  duration,
-  candidateTitle,
-  candidateArtist,
-  candidateDuration
-}) {
-  const targetTitle = normalizeText(title);
-  const targetArtist = normalizeText(artist);
-
-  const foundTitle = normalizeText(candidateTitle);
-  const foundArtist = normalizeText(candidateArtist);
-
+function matchScore(target, candidate) {
   const titleScore = similarityScore(
-    targetTitle,
-    foundTitle
+    normalizeText(target.title),
+    normalizeText(candidate.title)
   );
+  const artistScore = target.artist
+    ? similarityScore(normalizeText(target.artist), normalizeText(candidate.artist))
+    : 0.45;
 
-  const artistScore = targetArtist
-    ? similarityScore(targetArtist, foundArtist)
-    : 0.5;
+  let score = titleScore * 68 + artistScore * 27;
 
-  let score =
-    titleScore * 65 +
-    artistScore * 25;
+  const candidateDuration = Number(candidate.duration);
+  if (target.duration > 0 && validDuration(candidateDuration)) {
+    const difference = Math.abs(target.duration - candidateDuration) / target.duration;
 
-  if (
-    duration > 0 &&
-    Number(candidateDuration) > 0
-  ) {
-    const difference = Math.abs(
-      duration - Number(candidateDuration)
-    );
-
-    const ratio = difference / duration;
-
-    if (ratio <= 0.02) score += 10;
-    else if (ratio <= 0.05) score += 7;
-    else if (ratio <= 0.10) score += 4;
-    else if (ratio > 0.25) score -= 12;
+    if (difference <= 0.02) score += 5;
+    else if (difference <= 0.06) score += 3;
+    else if (difference > 0.2) score -= 14;
   }
 
   return Math.round(score);
 }
 
-/* =========================================
-   06. REQUEST ENGINE
-========================================= */
+function resultQuality(item) {
+  if (!item) return 0;
 
-async function request(
-  url,
-  options = {},
-  timeout = DEFAULT_TIMEOUT
-) {
-  const controller = new AbortController();
+  let score = item.synced ? 48 : 0;
+  const levels = { syllable: 28, word: 24, character: 22, line: 10, plain: 0 };
+  score += levels[String(item.syncLevel || "plain").toLowerCase()] || 0;
 
-  const timer = setTimeout(
-    () => controller.abort(),
-    timeout
-  );
+  if (item.wordTimings?.length) score += 14;
+  if ((item.metadata?.timingRatio || 0) >= 0.8) score += 7;
+  else if ((item.metadata?.timingRatio || 0) >= 0.5) score += 3;
+  if ((item.metadata?.lineCount || 0) >= 5) score += 3;
+  if (item.language === "es") score += 2;
 
-  let externalAbortHandler = null;
-
-  try {
-    if (options.signal) {
-      if (options.signal.aborted) {
-        controller.abort();
-      } else {
-        externalAbortHandler = () => controller.abort();
-
-        options.signal.addEventListener(
-          "abort",
-          externalAbortHandler,
-          { once: true }
-        );
-      }
-    }
-
-    const headers = {
-      "User-Agent": USER_AGENT,
-      Accept: "application/json, text/plain, */*",
-      ...(options.headers || {})
-    };
-
-    const response = await fetch(url, {
-      ...options,
-      headers,
-      signal: controller.signal
-    });
-
-    if (!response.ok) {
-      return {
-        ok: false,
-        status: response.status,
-        response: null
-      };
-    }
-
-    return {
-      ok: true,
-      status: response.status,
-      response
-    };
-
-  } catch (error) {
-    return {
-      ok: false,
-      status: 0,
-      response: null,
-      error
-    };
-
-  } finally {
-    clearTimeout(timer);
-
-    if (options.signal && externalAbortHandler) {
-      options.signal.removeEventListener(
-        "abort",
-        externalAbortHandler
-      );
-    }
-  }
+  return score;
 }
 
-/* =========================================
-   07. TIMED ENTRIES
-========================================= */
-
-function normalizeTimedEntries(entries, duration = 0) {
-  if (!Array.isArray(entries)) return [];
-
-  return entries
-    .slice(0, MAX_LYRIC_LINES)
-    .map(item => {
-      if (!item || typeof item.text !== "string") {
-        return null;
-      }
-
-      const rawStart =
-        item.start ??
-        item.time ??
-        item.timestamp ??
-        item.offset;
-
-      const start = normalizeTimestamp(
-        rawStart,
-        duration
-      );
-
-      const text = decodeEntities(
-        item.text
-      ).trim();
-
-      if (
-        start === null ||
-        !text ||
-        text.length > 1000
-      ) {
-        return null;
-      }
-
-      return {
-        time: start,
-        text
-      };
-    })
+function selectBestResult(results) {
+  return results
     .filter(Boolean)
-    .sort((a, b) => a.time - b.time);
+    .filter(item => validLyrics(item.text))
+    .sort((a, b) => {
+      const qualityDifference = resultQuality(b) - resultQuality(a);
+      if (qualityDifference) return qualityDifference;
+      return (b.metadata?.matchScore || 0) - (a.metadata?.matchScore || 0);
+    })[0] || null;
 }
 
-function makeLrc(entries, duration = 0) {
-  const normalized = normalizeTimedEntries(
-    entries,
-    duration
-  );
-
-  if (!normalized.length) return "";
-
-  return normalized
-    .map(line =>
-      formatLrcTime(line.time) + line.text
-    )
-    .join("\n");
-}
-
-function createWordTimings(entries, duration = 0) {
-  const normalized = normalizeTimedEntries(
-    entries,
-    duration
-  );
-
-  if (!normalized.length) return [];
-
-  return normalized.map(item => ({
-    time: item.time,
-    text: item.text
-  }));
-}
-
-/* =========================================
-   08. 1. LRCLIB
-========================================= */
-
-async function searchLRCLIB(
-  title,
-  artist,
-  duration
-) {
-  const url = new URL(`${LRCLIB_URL}/search`);
-
-  url.searchParams.set("track_name", title);
-
-  if (artist) {
-    url.searchParams.set("artist_name", artist);
+function makeUrl(base, path, params = {}) {
+  const url = new URL(path, base);
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== "") {
+      url.searchParams.set(key, String(value));
+    }
   }
+  return url.toString();
+}
 
-  if (duration > 0) {
-    url.searchParams.set(
-      "duration",
-      String(Math.round(duration))
-    );
-  }
+async function searchLrclib(target, signal) {
+  const url = makeUrl(PROVIDERS.lrclib, "/search", {
+    track_name: target.title,
+    artist_name: target.artist,
+    duration: target.duration ? Math.round(target.duration) : undefined
+  });
 
-  const requestResult = await request(
-    url.toString(),
-    {
-      headers: {
-        "Lrclib-Client": "Shunel/3.0 (https://shunel.vercel.app)"
-      }
-    },
-    DEFAULT_TIMEOUT
-  );
-
-  if (!requestResult.ok) return null;
-
-  const data = await safeJson(
-    requestResult.response
-  );
-
+  const data = await fetchJson(url, { signal, timeoutMs: CONFIG.requestTimeoutMs });
   if (!Array.isArray(data)) return null;
 
-  const candidates = data
-    .filter(item =>
-      validLyrics(item.syncedLyrics) ||
-      validLyrics(item.plainLyrics)
-    )
-    .map(item => {
-      const score = calculateMatchScore({
-        title,
-        artist,
-        duration,
-        candidateTitle: item.trackName,
-        candidateArtist: item.artistName,
-        candidateDuration: item.duration
-      });
-
-      const hasSynced = validLyrics(
-        item.syncedLyrics
-      );
-
-      return {
-        item,
-        score: score + (hasSynced ? 12 : 0),
-        hasSynced
-      };
-    })
-    .sort((a, b) => b.score - a.score);
-
-  if (!candidates.length) return null;
+  const candidates = data.map(item => {
+    const score = matchScore(target, {
+      title: item.trackName,
+      artist: item.artistName,
+      duration: item.duration
+    });
+    return { item, score };
+  }).filter(candidate =>
+    candidate.score >= CONFIG.minMatchScore &&
+    (validLyrics(candidate.item.syncedLyrics) || validLyrics(candidate.item.plainLyrics))
+  ).sort((a, b) => {
+    const syncA = validLyrics(a.item.syncedLyrics) ? 1 : 0;
+    const syncB = validLyrics(b.item.syncedLyrics) ? 1 : 0;
+    return (syncB - syncA) || (b.score - a.score);
+  });
 
   const best = candidates[0];
+  if (!best) return null;
 
-  if (best.score < 45) return null;
-
-  if (best.hasSynced) {
-    return result(
-      best.item.syncedLyrics,
-      "LRCLIB",
-      true,
-      {
-        syncLevel: "line",
-        duration: Number(best.item.duration) || null
-      }
-    );
-  }
-
-  return result(
-    best.item.plainLyrics,
+  const synced = validLyrics(best.item.syncedLyrics);
+  return createResult(
+    synced ? best.item.syncedLyrics : best.item.plainLyrics,
     "LRCLIB",
-    false
+    synced,
+    {
+      syncLevel: synced ? "line" : "plain",
+      duration: Number(best.item.duration) || null,
+      matchScore: best.score
+    }
   );
 }
 
-/* =========================================
-   09. 2. LIRIQO
-========================================= */
+async function searchLiriqo(target, videoId, signal) {
+  const url = makeUrl(PROVIDERS.liriqo, "/lyrics", {
+    v: videoId || undefined,
+    title: videoId ? undefined : target.title,
+    artist: videoId ? undefined : target.artist,
+    duration: target.duration ? Math.round(target.duration) : undefined,
+    full: "1"
+  });
 
-async function searchLiriQo(
-  title,
-  artist,
-  duration,
-  videoId
-) {
-  const url = new URL(`${LIRIQO_URL}/lyrics`);
-
-  if (videoId) {
-    url.searchParams.set("v", videoId);
-  } else {
-    url.searchParams.set("title", title);
-
-    if (artist) {
-      url.searchParams.set("artist", artist);
-    }
-  }
-
-  if (duration > 0) {
-    url.searchParams.set(
-      "duration",
-      String(Math.round(duration))
-    );
-  }
-
-  url.searchParams.set("full", "1");
-
-  const requestResult = await request(
-    url.toString(),
-    {},
-    LIRIQO_TIMEOUT
-  );
-
-  if (!requestResult.ok) return null;
-
-  const data = await safeJson(
-    requestResult.response
-  );
-
-  if (!data || data.error) return null;
+  const data = await fetchJson(url, { signal, timeoutMs: CONFIG.liriqoTimeoutMs });
+  if (!data || typeof data !== "object" || data.error) return null;
 
   const candidates = [
     ...(data.primary ? [data.primary] : []),
     ...(Array.isArray(data.tracks) ? data.tracks : [])
-  ];
+  ].filter(item => item && typeof item === "object");
 
   const unique = [];
   const seen = new Set();
 
   for (const item of candidates) {
-    if (!item || typeof item !== "object") continue;
-
     const key = [
-      item.provider,
-      item.upstreamProvider,
-      item.syncLevel,
-      item.lrc,
-      item.plain
+      item.provider, item.upstreamProvider, item.syncLevel,
+      item.lrc, item.plain, JSON.stringify(item.timed || [])
     ].join("|");
 
-    if (seen.has(key)) continue;
-
-    seen.add(key);
-    unique.push(item);
+    if (!seen.has(key)) {
+      seen.add(key);
+      unique.push(item);
+    }
   }
 
-  const rank = {
-    syllable: 6,
-    word: 5,
-    character: 5,
-    line: 4,
-    plain: 1
-  };
+  const rank = { syllable: 6, word: 5, character: 5, line: 4, plain: 1 };
 
   unique.sort((a, b) =>
     (rank[String(b.syncLevel).toLowerCase()] || 0) -
@@ -732,54 +620,44 @@ async function searchLiriQo(
   );
 
   for (const item of unique) {
-    const timed = Array.isArray(item.timed)
-      ? item.timed
-      : [];
-
-    const lrc = makeLrc(timed, duration);
+    const timed = normalizeTimedEntries(item.timed, target.duration);
+    const lrc = entriesToLrc(timed, target.duration);
 
     if (validLyrics(lrc)) {
-      const wordTimings = createWordTimings(
-        timed,
-        duration
-      );
-
-      return result(
+      const words = normalizeWordTimings(item.timed, target.duration);
+      return createResult(
         lrc,
-        `LiriQo · ${item.upstreamProvider || item.provider || "Proveedor"}`,
+        `LiriQo · ${clean(item.upstreamProvider || item.provider || "Proveedor", 60)}`,
         true,
         {
           syncLevel: rank[String(item.syncLevel).toLowerCase()]
             ? String(item.syncLevel).toLowerCase()
             : "line",
-          wordTimings,
-          duration
+          wordTimings: words,
+          duration: target.duration || null
         }
       );
     }
 
-    if (validLyrics(item.lrc)) {
-      const lrcInfo = inspectLRC(item.lrc);
-
-      if (lrcInfo.timedLineCount > 0) {
-        return result(
-          item.lrc,
-          `LiriQo · ${item.upstreamProvider || item.provider || "Proveedor"}`,
-          true,
-          {
-            syncLevel: String(item.syncLevel || "line").toLowerCase(),
-            duration
-          }
-        );
-      }
+    if (validLyrics(item.lrc) && inspectLrc(item.lrc).timedLineCount > 0) {
+      return createResult(
+        item.lrc,
+        `LiriQo · ${clean(item.upstreamProvider || item.provider || "Proveedor", 60)}`,
+        true,
+        {
+          syncLevel: String(item.syncLevel || "line").toLowerCase(),
+          wordTimings: normalizeWordTimings(item.timed, target.duration),
+          duration: target.duration || null
+        }
+      );
     }
   }
 
   for (const item of unique) {
     if (validLyrics(item.plain)) {
-      return result(
+      return createResult(
         item.plain,
-        `LiriQo · ${item.upstreamProvider || item.provider || "Proveedor"}`,
+        `LiriQo · ${clean(item.upstreamProvider || item.provider || "Proveedor", 60)}`,
         false
       );
     }
@@ -788,719 +666,416 @@ async function searchLiriQo(
   return null;
 }
 
-/* =========================================
-   10. 3. LRCMUX
-========================================= */
+async function searchLrcmux(target, signal) {
+  const url = makeUrl(PROVIDERS.lrcmux, "/get", {
+    title: target.title,
+    artist: target.artist,
+    level: "word",
+    format: "json",
+    duration: target.duration ? Math.round(target.duration) : undefined
+  });
 
-async function searchLRCMux(
-  title,
-  artist,
-  duration
-) {
-  const url = new URL(`${LRCMUX_URL}/get`);
+  const data = await fetchJson(url, { signal, timeoutMs: 9_000 });
+  if (!data || typeof data !== "object" || !Array.isArray(data.lines)) return null;
 
-  url.searchParams.set("title", title);
-  url.searchParams.set("artist", artist);
-  url.searchParams.set("level", "word");
-  url.searchParams.set("format", "json");
+  const lrc = entriesToLrc(data.lines, target.duration);
+  const source = `LRCMux · ${clean(data.meta?.source?.name || "Proveedor", 60)}`;
 
-  if (duration > 0) {
-    url.searchParams.set(
-      "duration",
-      String(Math.round(duration))
-    );
+  if (validLyrics(lrc)) {
+    return createResult(lrc, source, true, {
+      syncLevel: "word",
+      wordTimings: normalizeWordTimings(data.lines, target.duration),
+      duration: target.duration || null
+    });
   }
 
-  const requestResult = await request(
-    url.toString(),
-    {},
-    9000
-  );
+  const plain = data.lines
+    .map(line => decodeEntities(line?.text || "").trim())
+    .filter(Boolean)
+    .join("\n");
 
-  if (!requestResult.ok) return null;
-
-  const data = await safeJson(
-    requestResult.response
-  );
-
-  if (!data) return null;
-
-  if (Array.isArray(data.lines)) {
-    const lrc = makeLrc(
-      data.lines,
-      duration
-    );
-
-    if (validLyrics(lrc)) {
-      const wordTimings = createWordTimings(
-        data.lines,
-        duration
-      );
-
-      return result(
-        lrc,
-        `LRCMux · ${data.meta?.source?.name || "Proveedor"}`,
-        true,
-        {
-          syncLevel: "word",
-          wordTimings,
-          duration
-        }
-      );
-    }
-
-    const plain = data.lines
-      .map(line => decodeEntities(line?.text || ""))
-      .filter(Boolean)
-      .join("\n");
-
-    if (validLyrics(plain)) {
-      return result(
-        plain,
-        `LRCMux · ${data.meta?.source?.name || "Proveedor"}`,
-        false
-      );
-    }
-  }
-
-  return null;
+  return createResult(plain, source, false);
 }
 
-/* =========================================
-   11. 4. BETTER LYRICS
-========================================= */
+async function searchBetterLyrics(target, signal) {
+  for (const provider of ["kugou", "qq"]) {
+    throwIfAborted(signal);
 
-async function searchBetterLyrics(
-  title,
-  artist,
-  duration
-) {
-  const providers = ["kugou", "qq"];
+    const url = makeUrl(PROVIDERS.better, `/${provider}/getLyrics`, {
+      s: target.title,
+      a: target.artist,
+      al: "",
+      d: Math.round(target.duration || 0)
+    });
 
-  for (const provider of providers) {
-    const url = new URL(
-      `${BETTER_URL}/${provider}/getLyrics`
-    );
-
-    url.searchParams.set("s", title);
-    url.searchParams.set("a", artist);
-    url.searchParams.set("al", "");
-    url.searchParams.set(
-      "d",
-      String(Math.round(duration || 0))
-    );
-
-    const requestResult = await request(
-      url.toString(),
-      {},
-      7000
-    );
-
-    if (!requestResult.ok) continue;
-
-    const data = await safeJson(
-      requestResult.response
-    );
-
-    if (!data || !validLyrics(data.lyrics)) {
+    let data;
+    try {
+      data = await fetchJson(url, { signal, timeoutMs: 7_000, retries: 0 });
+    } catch (error) {
+      if (signal?.aborted) throw error;
       continue;
     }
 
+    if (!validLyrics(data?.lyrics)) continue;
+
     const lyrics = decodeEntities(data.lyrics);
-
-    if (
-      provider === "kugou" &&
-      inspectLRC(lyrics).timedLineCount > 0
-    ) {
-      return result(
-        lyrics,
-        "Better Lyrics · KuGou",
-        true,
-        {
-          syncLevel: "line",
-          duration
-        }
-      );
+    if (provider === "kugou" && inspectLrc(lyrics).timedLineCount > 0) {
+      return createResult(lyrics, "Better Lyrics · KuGou", true, {
+        syncLevel: "line",
+        duration: target.duration || null
+      });
     }
 
-    /*
-      QQ puede devolver QRC u otros formatos.
-      Se conserva como texto normal cuando no se
-      puede verificar una conversión segura.
-    */
+    const plain = lyrics
+      .replace(/<[^>]*>/g, "\n")
+      .replace(/\(\d+,\d+\)|\[\d+,\d+\]/g, "")
+      .trim();
 
-    const plain = decodeEntities(
-      lyrics
-        .replace(/<[^>]*>/g, "\n")
-        .replace(/\(\d+,\d+\)/g, "")
-        .replace(/\[\d+,\d+\]/g, "")
+    const resultValue = createResult(
+      plain,
+      `Better Lyrics · ${provider === "qq" ? "QQ Music" : "KuGou"}`,
+      false
     );
-
-    if (validLyrics(plain)) {
-      return result(
-        plain,
-        `Better Lyrics · ${provider === "qq" ? "QQ Music" : "KuGou"}`,
-        false
-      );
-    }
+    if (resultValue) return resultValue;
   }
 
   return null;
 }
 
-/* =========================================
-   12. 5. LYRICS.OVH
-========================================= */
+async function searchLyricsOvh(target, signal) {
+  if (!target.title || !target.artist) return null;
 
-async function searchLyricsOVH(
-  title,
-  artist
-) {
-  if (!artist || !title) return null;
+  const url = `${PROVIDERS.lyricsOvh}/${encodeURIComponent(target.artist)}/${encodeURIComponent(target.title)}`;
+  const data = await fetchJson(url, { signal, timeoutMs: CONFIG.requestTimeoutMs });
 
-  const url =
-    "https://api.lyrics.ovh/v1/" +
-    encodeURIComponent(artist) +
-    "/" +
-    encodeURIComponent(title);
-
-  const requestResult = await request(
-    url,
-    {},
-    DEFAULT_TIMEOUT
-  );
-
-  if (!requestResult.ok) return null;
-
-  const data = await safeJson(
-    requestResult.response
-  );
-
-  if (!data || !validLyrics(data.lyrics)) {
-    return null;
-  }
-
-  return result(
-    data.lyrics,
-    "Lyrics.ovh",
-    false
-  );
+  return createResult(data?.lyrics, "Lyrics.ovh", false);
 }
-
-/* =========================================
-   13. YOUTUBE CAPTIONS
-========================================= */
 
 function extractArrayAfter(html, marker) {
   const markerIndex = html.indexOf(marker);
-
-  if (markerIndex === -1) return null;
+  if (markerIndex < 0) return null;
 
   const start = html.indexOf("[", markerIndex);
-
-  if (start === -1) return null;
+  if (start < 0) return null;
 
   let depth = 0;
   let inString = false;
   let escaped = false;
 
-  for (let i = start; i < html.length; i++) {
-    const char = html[i];
+  for (let index = start; index < html.length; index++) {
+    const char = html[index];
 
     if (inString) {
-      if (escaped) {
-        escaped = false;
-      } else if (char === "\\") {
-        escaped = true;
-      } else if (char === '"') {
-        inString = false;
-      }
-
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === '"') inString = false;
       continue;
     }
 
-    if (char === '"') {
-      inString = true;
-    } else if (char === "[") {
-      depth++;
-    } else if (char === "]") {
+    if (char === '"') inString = true;
+    else if (char === "[") depth++;
+    else if (char === "]") {
       depth--;
-
-      if (depth === 0) {
-        return html.slice(start, i + 1);
-      }
+      if (depth === 0) return html.slice(start, index + 1);
     }
   }
 
   return null;
 }
 
-function extractYouTubeCaptionLines(xml, duration = 0) {
-  if (typeof xml !== "string") return [];
+function extractYoutubeCaptionLines(xml, duration = 0) {
+  if (typeof xml !== "string" || xml.length > CONFIG.maxLyricsLength) return [];
 
   const entries = [];
-
-  /*
-    YouTube suele entregar subtítulos XML con:
-    start="12.34"
-    dur="2.10"
-
-    Se conservan los tiempos originales.
-  */
-
   const regex = /<text\b([^>]*)>([\s\S]*?)<\/text>/gi;
-
   let match;
 
-  while (
-    (match = regex.exec(xml)) &&
-    entries.length < MAX_LYRIC_LINES
-  ) {
+  while ((match = regex.exec(xml)) && entries.length < CONFIG.maxLines) {
     const attributes = match[1] || "";
-    const content = match[2] || "";
+    const startRaw = attributes.match(/\bstart=["']([\d.]+)["']/i)?.[1];
+    const durRaw = attributes.match(/\bdur=["']([\d.]+)["']/i)?.[1];
+    if (!startRaw) continue;
 
-    const startMatch = attributes.match(
-      /\bstart=["']([\d.]+)["']/i
-    );
-
-    const durationMatch = attributes.match(
-      /\bdur=["']([\d.]+)["']/i
-    );
-
-    if (!startMatch) continue;
-
-    const start = Number(startMatch[1]);
-    const segmentDuration = Number(
-      durationMatch?.[1] || 0
-    );
-
+    const start = Number(startRaw);
+    const segmentDuration = Number(durRaw || 0);
     const text = decodeEntities(
-      content
-        .replace(/<[^>]+>/g, "")
-        .replace(/\s+/g, " ")
+      match[2].replace(/<[^>]+>/g, "").replace(/\s+/g, " ")
     ).trim();
 
-    if (
-      !Number.isFinite(start) ||
-      start < 0 ||
-      !text
-    ) {
-      continue;
-    }
+    if (!Number.isFinite(start) || start < 0 || !text || text.length > 1_000) continue;
+    if (duration > 0 && start > duration + 30) continue;
 
-    if (
-      duration > 0 &&
-      start > duration + 30
-    ) {
-      continue;
-    }
-
-    entries.push({
-      time: start,
-      duration: segmentDuration,
-      text
-    });
+    entries.push({ time: start, duration: segmentDuration, text });
   }
 
-  return entries.sort(
-    (a, b) => a.time - b.time
-  );
+  return entries.sort((a, b) => a.time - b.time);
 }
 
-async function searchYouTube(videoId) {
-  if (!isValidVideoId(videoId)) return null;
+async function searchYoutube(videoId, target, signal) {
+  if (!validVideoId(videoId)) return null;
 
-  const watchResult = await request(
-    `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`,
-    {
-      headers: {
-        "Accept-Language": "es,en;q=0.9"
-      }
-    },
-    YOUTUBE_TIMEOUT
-  );
+  const watchUrl = `${PROVIDERS.youtube}/watch?v=${encodeURIComponent(videoId)}`;
+  const html = await fetchText(watchUrl, {
+    signal,
+    timeoutMs: CONFIG.youtubeTimeoutMs,
+    retries: 0,
+    headers: { "Accept-Language": "es,en;q=0.8" }
+  });
 
-  if (!watchResult.ok) return null;
-
-  const html = await watchResult.response.text();
-
-  const rawTracks = extractArrayAfter(
-    html,
-    '"captionTracks":'
-  );
-
+  const rawTracks = extractArrayAfter(html, '"captionTracks":');
   if (!rawTracks) return null;
 
   let tracks;
-
   try {
     tracks = JSON.parse(rawTracks);
   } catch {
     return null;
   }
 
-  if (!Array.isArray(tracks) || !tracks.length) {
-    return null;
-  }
+  if (!Array.isArray(tracks) || !tracks.length) return null;
 
-  const preferred =
-    tracks.find(track =>
-      /^es(-|$)/i.test(track.languageCode || "")
-    ) ||
-    tracks.find(track =>
-      /^en(-|$)/i.test(track.languageCode || "")
-    ) ||
+  const preferred = tracks.find(track => /^es(-|$)/i.test(track.languageCode || "")) ||
+    tracks.find(track => /^en(-|$)/i.test(track.languageCode || "")) ||
     tracks[0];
 
   if (!preferred?.baseUrl) return null;
 
-  const subtitleResult = await request(
-    preferred.baseUrl,
-    {},
-    YOUTUBE_TIMEOUT
-  );
+  const captionUrl = new URL(preferred.baseUrl);
+  if (captionUrl.protocol !== "https:" ||
+      !/(^|\.)youtube\.com$/i.test(captionUrl.hostname)) {
+    return null;
+  }
 
-  if (!subtitleResult.ok) return null;
+  const xml = await fetchText(captionUrl.toString(), {
+    signal,
+    timeoutMs: CONFIG.youtubeTimeoutMs,
+    retries: 0
+  });
 
-  const xml = await subtitleResult.response.text();
+  const entries = extractYoutubeCaptionLines(xml, target.duration);
+  const lrc = entriesToLrc(entries, target.duration);
 
-  const entries = extractYouTubeCaptionLines(xml);
-
-  if (!entries.length) return null;
-
-  const lrc = entries
-    .map(line =>
-      formatLrcTime(line.time) + line.text
-    )
-    .join("\n");
-
-  if (!validLyrics(lrc)) return null;
-
-  return result(
-    lrc,
-    "YouTube Subtitles",
-    true,
-    {
-      syncLevel: "line",
-      language: preferred.languageCode || null,
-      wordTimings: [],
-      duration: null
-    }
-  );
+  return createResult(lrc, "YouTube Subtitles", true, {
+    syncLevel: "line",
+    language: clean(preferred.languageCode || "", 12) || null,
+    duration: target.duration || null
+  });
 }
 
-/* =========================================
-   14. PROVIDER QUALITY
-========================================= */
-
-function getResultQuality(item) {
-  if (!item) return 0;
-
-  let score = 0;
-
-  if (item.synced) score += 50;
-
-  const syncLevel = String(
-    item.syncLevel || "plain"
-  ).toLowerCase();
-
-  const syncScores = {
-    syllable: 30,
-    word: 25,
-    character: 25,
-    line: 10,
-    plain: 0
-  };
-
-  score += syncScores[syncLevel] || 0;
-
-  if (item.wordTimings?.length) {
-    score += 15;
-  }
-
-  const metadata = item.metadata || {};
-
-  if (metadata.timingRatio >= 0.8) {
-    score += 8;
-  } else if (metadata.timingRatio >= 0.5) {
-    score += 4;
-  }
-
-  if (metadata.lineCount >= 5) {
-    score += 3;
-  }
-
-  if (item.language === "es") {
-    score += 2;
-  }
-
-  return score;
+function makeCacheKey(target, videoId) {
+  return [
+    normalizeText(target.artist),
+    normalizeText(target.title),
+    videoId || "",
+    target.duration ? Math.round(target.duration / 5) * 5 : 0
+  ].join("|");
 }
 
-function selectBestResult(results) {
-  const valid = results
-    .filter(Boolean)
-    .filter(item => validLyrics(item.text));
+function getCache(key) {
+  const entry = memoryCache.get(key);
+  if (!entry) return null;
 
-  if (!valid.length) return null;
+  if (Date.now() - entry.timestamp > CONFIG.cacheTtlMs) {
+    memoryCache.delete(key);
+    return null;
+  }
 
-  return valid
-    .map(item => ({
-      item,
-      score: getResultQuality(item)
-    }))
-    .sort((a, b) => b.score - a.score)[0]
-    .item;
+  memoryCache.delete(key);
+  memoryCache.set(key, entry);
+  return entry.value;
 }
 
-/* =========================================
-   15. PROVIDER EXECUTION
-========================================= */
+function setCache(key, value) {
+  memoryCache.delete(key);
+  memoryCache.set(key, { timestamp: Date.now(), value });
 
-async function runProvider(
-  name,
-  callback,
-  diagnostics
-) {
+  while (memoryCache.size > CONFIG.cacheMaxEntries) {
+    memoryCache.delete(memoryCache.keys().next().value);
+  }
+}
+
+async function runProvider(name, callback, diagnostics, signal) {
   const startedAt = Date.now();
 
   try {
+    throwIfAborted(signal);
     const value = await callback();
 
     diagnostics[name] = {
       success: Boolean(value),
-      duration: Date.now() - startedAt,
+      durationMs: Date.now() - startedAt,
       status: value ? "found" : "not_found"
     };
 
     return value;
-
   } catch (error) {
+    if (signal?.aborted || error?.name === "AbortError") {
+      diagnostics[name] = {
+        success: false,
+        durationMs: Date.now() - startedAt,
+        status: "cancelled"
+      };
+      return null;
+    }
+
     diagnostics[name] = {
       success: false,
-      duration: Date.now() - startedAt,
-      status: "error",
-      message: clean(error?.message || "Unknown error", 180)
+      durationMs: Date.now() - startedAt,
+      status: error?.status === 504 ? "timeout" : "error",
+      message: clean(error?.message || "Error desconocido", 140)
     };
-
-    console.warn(
-      `[Shunel Lyrics] ${name}:`,
-      error?.message || error
-    );
 
     return null;
   }
 }
 
-/* =========================================
-   16. API HANDLER
-========================================= */
+function getQueryValue(query, key) {
+  const value = query?.[key];
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function sendJson(res, status, payload) {
+  res.status(status).json(payload);
+}
 
 export default async function handler(req, res) {
-  res.setHeader(
-    "Access-Control-Allow-Origin",
-    "*"
-  );
-
-  res.setHeader(
-    "Access-Control-Allow-Methods",
-    "GET, OPTIONS"
-  );
-
-  res.setHeader(
-    "Access-Control-Allow-Headers",
-    "Content-Type"
-  );
-
   if (req.method === "OPTIONS") {
+    res.setHeader("Allow", "GET, OPTIONS");
     return res.status(204).end();
   }
 
   if (req.method !== "GET") {
-    return res.status(405).json({
-      error: "Método no permitido"
-    });
+    res.setHeader("Allow", "GET, OPTIONS");
+    return sendJson(res, 405, { error: "Método no permitido." });
   }
 
-  const title = clean(
-    req.query.title,
-    MAX_TITLE_LENGTH
-  );
-
-  const artist = clean(
-    req.query.artist,
-    MAX_ARTIST_LENGTH
-  );
-
-  const requestedVideoId = clean(
-    req.query.videoId,
-    MAX_VIDEO_ID_LENGTH
-  );
-
-  const videoId = isValidVideoId(requestedVideoId)
-    ? requestedVideoId
-    : "";
-
-  const requestedDuration = Number(
-    req.query.duration
-  );
-
-  const duration = isValidDuration(requestedDuration)
-    ? requestedDuration
-    : 0;
+  const title = clean(getQueryValue(req.query, "title"), CONFIG.maxTitleLength);
+  const artist = clean(getQueryValue(req.query, "artist"), CONFIG.maxArtistLength);
+  const requestedVideoId = clean(getQueryValue(req.query, "videoId"), CONFIG.maxVideoIdLength);
+  const videoId = validVideoId(requestedVideoId) ? requestedVideoId : "";
+  const requestedDuration = Number(getQueryValue(req.query, "duration"));
+  const duration = validDuration(requestedDuration) ? requestedDuration : 0;
 
   if (!title && !videoId) {
-    return res.status(400).json({
-      error: "Se necesita el título o el videoId"
+    return sendJson(res, 400, {
+      error: "Se necesita el título o un videoId válido."
     });
   }
 
-  /*
-    Cache CDN:
-    - 1 hora de caché normal.
-    - 24 horas de stale-while-revalidate.
-  */
+  const target = { title, artist, duration };
+  const cacheKey = makeCacheKey(target, videoId);
+  const cached = getCache(cacheKey);
 
-  res.setHeader(
-    "Cache-Control",
-    "public, s-maxage=3600, stale-while-revalidate=86400"
-  );
-
-  res.setHeader(
-    "Content-Type",
-    "application/json; charset=utf-8"
-  );
+  if (cached) {
+    res.setHeader("Cache-Control", "public, s-maxage=3600, stale-while-revalidate=86400");
+    res.setHeader("X-Shunel-Lyrics-Cache", "HIT");
+    return sendJson(res, 200, { ...cached, cache: "hit" });
+  }
 
   const startedAt = Date.now();
-
   const diagnostics = {};
+  const clientController = new AbortController();
+  const totalController = new AbortController();
+  const totalTimer = setTimeout(
+    () => totalController.abort(),
+    CONFIG.totalTimeoutMs
+  );
+
+  const onRequestAborted = () => clientController.abort();
+  const onResponseClose = () => {
+    if (!res.writableEnded) clientController.abort();
+  };
+
+  req.on?.("aborted", onRequestAborted);
+  res.on?.("close", onResponseClose);
+
+  const combined = combineSignals([clientController.signal, totalController.signal]);
+  const signal = combined.signal;
+
+  res.setHeader("Cache-Control", "public, s-maxage=3600, stale-while-revalidate=86400");
+  res.setHeader("X-Shunel-Lyrics-Cache", "MISS");
 
   try {
-    /*
-      Primera ronda:
-      consultar en paralelo las fuentes que
-      pueden entregar sincronización.
-    */
-
     const firstRound = await Promise.all([
-      runProvider(
-        "LRCLIB",
-        () => title
-          ? searchLRCLIB(title, artist, duration)
-          : null,
-        diagnostics
-      ),
-
-      runProvider(
-        "LiriQo",
-        () => searchLiriQo(
-          title,
-          artist,
-          duration,
-          videoId
-        ),
-        diagnostics
-      ),
-
-      runProvider(
-        "LRCMux",
-        () => title && artist
-          ? searchLRCMux(title, artist, duration)
-          : null,
-        diagnostics
-      ),
-
-      runProvider(
-        "Better Lyrics",
-        () => title && artist
-          ? searchBetterLyrics(title, artist, duration)
-          : null,
-        diagnostics
-      )
+      runProvider("LRCLIB", () => title ? searchLrclib(target, signal) : null, diagnostics, signal),
+      runProvider("LiriQo", () => searchLiriqo(target, videoId, signal), diagnostics, signal),
+      runProvider("LRCMux", () => title && artist ? searchLrcmux(target, signal) : null, diagnostics, signal),
+      runProvider("Better Lyrics", () => title && artist ? searchBetterLyrics(target, signal) : null, diagnostics, signal)
     ]);
 
-    /*
-      No se entrega inmediatamente una letra plain.
-      Primero se comparan los resultados sincronizados.
-    */
+    if (signal.aborted) {
+      if (totalController.signal.aborted && !clientController.signal.aborted) {
+        return sendJson(res, 504, { error: "La búsqueda de letras superó el tiempo máximo." });
+      }
+      return;
+    }
 
-    const bestFirstRound = selectBestResult(
-      firstRound
-    );
+    const bestFirstRound = selectBestResult(firstRound);
 
     if (
       bestFirstRound?.synced &&
-      getResultQuality(bestFirstRound) >= 50
+      resultQuality(bestFirstRound) >= CONFIG.earlySyncedQuality &&
+      (bestFirstRound.metadata?.matchScore ?? 100) >= CONFIG.earlySyncedScore
     ) {
-      return res.status(200).json({
+      const payload = {
         ...bestFirstRound,
         diagnostics: {
           providers: diagnostics,
-          totalDuration: Date.now() - startedAt
+          totalDurationMs: Date.now() - startedAt
         }
-      });
+      };
+      setCache(cacheKey, payload);
+      return sendJson(res, 200, payload);
     }
 
-    /*
-      Segunda ronda:
-      Lyrics.ovh y subtítulos de YouTube.
-    */
-
     const secondRound = await Promise.all([
-      runProvider(
-        "Lyrics.ovh",
-        () => title && artist
-          ? searchLyricsOVH(title, artist)
-          : null,
-        diagnostics
-      ),
-
-      runProvider(
-        "YouTube",
-        () => videoId
-          ? searchYouTube(videoId)
-          : null,
-        diagnostics
-      )
+      runProvider("Lyrics.ovh", () => title && artist ? searchLyricsOvh(target, signal) : null, diagnostics, signal),
+      runProvider("YouTube", () => videoId ? searchYoutube(videoId, target, signal) : null, diagnostics, signal)
     ]);
 
-    const best = selectBestResult([
-      ...firstRound,
-      ...secondRound
-    ]);
+    if (signal.aborted) {
+      if (totalController.signal.aborted && !clientController.signal.aborted) {
+        return sendJson(res, 504, { error: "La búsqueda de letras superó el tiempo máximo." });
+      }
+      return;
+    }
+
+    const best = selectBestResult([...firstRound, ...secondRound]);
 
     if (best) {
-      return res.status(200).json({
+      const payload = {
         ...best,
         diagnostics: {
           providers: diagnostics,
-          totalDuration: Date.now() - startedAt
+          totalDurationMs: Date.now() - startedAt
         }
-      });
+      };
+      setCache(cacheKey, payload);
+      return sendJson(res, 200, payload);
     }
 
-    const failedProviders = PROVIDER_NAMES.filter(
-      name => diagnostics[name]?.status === "error"
+    const failedProviders = PROVIDER_NAMES.filter(name =>
+      ["error", "timeout"].includes(diagnostics[name]?.status)
     );
 
-    return res.status(404).json({
-      error: "No encontramos una letra disponible",
+    return sendJson(res, 404, {
+      error: "No encontramos una letra disponible.",
       providersChecked: PROVIDER_NAMES,
       failedProviders,
       diagnostics: {
         providers: diagnostics,
-        totalDuration: Date.now() - startedAt
+        totalDurationMs: Date.now() - startedAt
       }
     });
-
   } catch (error) {
-    console.error(
-      "[Shunel Lyrics API]",
-      error
-    );
+    if (signal.aborted && clientController.signal.aborted) return;
 
-    return res.status(500).json({
-      error: "Error interno buscando letras"
-    });
+    console.error("[Shunel Lyrics API]", clean(error?.message || error, 240));
+    return sendJson(res, 500, { error: "Error interno buscando letras." });
+  } finally {
+    clearTimeout(totalTimer);
+    combined.cleanup();
+    req.off?.("aborted", onRequestAborted);
+    res.off?.("close", onResponseClose);
   }
 }

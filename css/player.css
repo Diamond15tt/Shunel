@@ -1,5 +1,5 @@
 /* =========================================================
-   SHUNEL 3.0 — PLAYER SYSTEM
+   SHUNEL 3.0 — PLAYER SYSTEM (REFACTOR)
    Liquid Glass / Editorial Dark · iOS · Mobile First
 
    Mismos selectores que la versión 2.0: no hay que tocar
@@ -16,11 +16,6 @@
      (--progress lo pone index.html).
    - Spinner en el botón de play mientras carga (.is-loading).
    - Áreas táctiles de 44 px y safe areas en todo.
-
-   Referencias:
-   - Apple HIG Materials: developer.apple.com/design/human-interface-guidelines/materials
-   - Apple HIG Accessibility (44 pt): developer.apple.com/design/human-interface-guidelines/accessibility
-   - CSS Liquid Glass: github.com/nordify/css-liquid-glass
 ========================================================= */
 
 
@@ -28,8 +23,6 @@
    01. TOKENS
 ========================================================= */
 
-/* Permite animar el cambio de color entre canciones
-   (Safari 16.4+, Chrome 85+; donde no exista, cambia sin animar). */
 @property --song-color {
   syntax: "<color>";
   inherits: true;
@@ -175,10 +168,6 @@
 
 /* =========================================================
    04. MATERIAL LIQUID GLASS
-   Tres capas, como el material de Apple:
-   1) cuerpo: tinte translúcido + blur + saturación
-   2) borde especular (más brillante arriba-izquierda)
-   3) brillo interior superior (inset shadow)
 ========================================================= */
 
 /* 4.1 Cuerpo de vidrio: superficies grandes */
@@ -204,20 +193,6 @@
     0 8px 20px rgba(0, 0, 0, .32);
   -webkit-backdrop-filter: blur(18px) saturate(185%);
   backdrop-filter: blur(18px) saturate(185%);
-}
-
-/* 33. Escritorio: mantener centrado limpio al presionar */
-@media (min-width: 700px) {
-  .player-dock {
-    left: 50%;
-    right: auto;
-    width: min(620px, calc(100vw - 40px));
-    transform: translateX(-50%);
-  }
-
-  .player-dock:active {
-    transform: translateX(-50%) scale(.985);
-  }
 }
 
 /* 4.3 Borde especular con máscara (solo superficies grandes) */
@@ -279,7 +254,6 @@
   padding: 8px 10px 8px 8px;
   overflow: hidden;
 
-  /* tinte + un toque del color de la canción */
   background:
     linear-gradient(180deg, rgba(255, 255, 255, .08), rgba(255, 255, 255, .015) 46%, rgba(255, 255, 255, 0)),
     radial-gradient(120% 140% at 0% 50%, color-mix(in srgb, var(--song-color) 26%, transparent), transparent 62%),
@@ -297,8 +271,8 @@
     --song-color .8s ease;
 }
 
-.player-dock:active { transform: scale(.985); }
-.player-dock[hidden] { display: none !important; }
+.player-dock:active { opacity: .94; }
+.player-dock[hidden] { display: none; }
 
 
 /* =========================================================
@@ -417,7 +391,6 @@
   opacity: .72;
 }
 
-/* 44 px de área táctil aunque el icono se vea pequeño */
 .control-button {
   width: var(--player-tap);
   height: var(--player-tap);
@@ -430,13 +403,11 @@
 
 /* =========================================================
    08. BOTÓN DE PLAY
-   Usa el color de acento elegido por el usuario.
 ========================================================= */
 
-.play-button {
+.player-controls .play-button,
+.full-player-controls .play-button {
   position: relative;
-  width: 42px !important;
-  height: 42px !important;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -444,34 +415,38 @@
   border: 0;
   border-radius: 50%;
 
-  background: var(--player-accent) !important;
-  color: var(--player-on-accent) !important;
+  background: var(--player-accent);
+  color: var(--player-on-accent);
 
-  font-size: 15px !important;
   font-weight: 800;
   cursor: pointer;
-
-  box-shadow:
-    0 6px 16px rgba(0, 0, 0, .3),
-    inset 0 1px 0 rgba(255, 255, 255, .5),
-    inset 0 -2px 4px rgba(0, 0, 0, .08);
 
   transition:
     transform var(--player-spring),
     box-shadow var(--player-transition);
 }
 
-.play-button svg {
+.player-controls .play-button {
+  width: 42px;
+  height: 42px;
+  font-size: 15px;
+  box-shadow:
+    0 6px 16px rgba(0, 0, 0, .3),
+    inset 0 1px 0 rgba(255, 255, 255, .5),
+    inset 0 -2px 4px rgba(0, 0, 0, .08);
+}
+
+.player-controls .play-button svg,
+.full-player-controls .play-button svg {
   stroke: currentColor;
   fill: currentColor;
 }
 
-.play-button:active {
+.player-controls .play-button:active {
   transform: scale(.9);
   box-shadow: 0 0 0 6px rgba(255, 255, 255, .08);
 }
 
-/* 8.1 Cargando: anillo giratorio (ui.js pone .is-loading y aria-busy) */
 .play-button.is-loading::after {
   content: "";
   position: absolute;
@@ -493,7 +468,6 @@
 
 /* =========================================================
    09. PROGRESO DEL MINI PLAYER
-   Línea fina en el borde inferior, con el acento.
 ========================================================= */
 
 .player-dock .progress-row {
@@ -528,7 +502,7 @@
   background:
     linear-gradient(90deg, var(--player-accent) var(--progress, 0%), transparent var(--progress, 0%));
   cursor: pointer;
-  pointer-events: none; /* el dock entero abre el reproductor */
+  pointer-events: none;
 }
 
 .player-dock .progress-row input::-webkit-slider-runnable-track {
@@ -549,24 +523,17 @@
 .player-dock .progress-row input::-moz-range-progress { height: 2px; background: var(--player-accent); }
 .player-dock .progress-row input::-moz-range-thumb { width: 0; height: 0; border: 0; background: transparent; }
 
-.player-dock .progress-row input:focus-visible {
-  outline: 2px solid var(--player-accent);
-  outline-offset: 3px;
-}
-
 
 /* =========================================================
    10. CONTROLES OPCIONALES DEL MINI PLAYER
 ========================================================= */
 
 .player-extra { display: none; }
-.expand-player { display: none !important; }
+.expand-player { display: none; }
 
 
 /* =========================================================
    11. REPRODUCTOR COMPLETO
-   Fondo teñido con el color de la portada: el vidrio de los
-   botones tiene algo que "refractar".
 ========================================================= */
 
 .full-player {
@@ -610,7 +577,6 @@
     --song-color 1s ease;
 }
 
-/* Navegadores sin color-mix(): degradado neutro */
 @supports not (color: color-mix(in srgb, red 50%, transparent)) {
   .full-player {
     background:
@@ -628,12 +594,10 @@
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
-  /* none (no translateY(0)): así el fondo fixed de artwork.css
-     se ancla a la pantalla y no se mueve con el scroll */
   transform: none;
 }
 
-.full-player[hidden] { display: none !important; }
+.full-player[hidden] { display: none; }
 
 
 /* =========================================================
@@ -704,15 +668,11 @@
 
 /* =========================================================
    14. PORTADA
-   Se encoge en pausa y crece al reproducir (body.is-playing
-   lo pone ui.js). Usa la propiedad "scale" para no chocar con
-   la animación de entrada, que usa "translate".
 ========================================================= */
 
 .full-player-art {
   position: relative;
   display: block;
-  /* el ancho manda y el alto lo sigue: siempre cuadrada */
   width: min(100%, 44vh, 430px);
   max-width: 100%;
   height: auto;
@@ -749,7 +709,6 @@ body.is-playing .full-player-art {
   animation: album-enter .5s var(--player-ease-out) both;
 }
 
-/* ui.js pone .is-loading mientras baja la portada */
 .full-player-art.is-loading {
   opacity: .6;
 }
@@ -840,8 +799,6 @@ body.is-playing .full-player-art {
 
 /* =========================================================
    16. PROGRESO COMPLETO
-   Área táctil de 28 px, barra visual de 6 px que engorda
-   al tocarla (como iOS). El relleno usa --progress.
 ========================================================= */
 
 .full-progress {
@@ -863,7 +820,7 @@ body.is-playing .full-player-art {
   border: 0;
   background: transparent;
   cursor: pointer;
-  touch-action: none; /* arrastrar no hace scroll */
+  touch-action: none;
 }
 
 .full-progress input:active { --track-h: 10px; }
@@ -969,7 +926,6 @@ body.is-playing .full-player-art {
   opacity: .75;
 }
 
-/* Al tocar aparece una "burbuja" de vidrio detrás del icono */
 .full-player-controls .control-button {
   width: 56px;
   height: 56px;
@@ -983,8 +939,8 @@ body.is-playing .full-player-art {
 }
 
 .full-player-controls .play-button {
-  width: 74px !important;
-  height: 74px !important;
+  width: 74px;
+  height: 74px;
   box-shadow:
     0 14px 34px rgba(0, 0, 0, .38),
     0 0 0 1px rgba(255, 255, 255, .12),
@@ -1102,7 +1058,7 @@ body.is-playing .full-player-art {
   transform: translateY(0);
 }
 
-.queue-panel[hidden] { display: none !important; }
+.queue-panel[hidden] { display: none; }
 
 
 /* =========================================================
@@ -1234,7 +1190,6 @@ body.is-playing .full-player-art {
   font-size: 12px;
 }
 
-/* Canción actual: tarjeta de vidrio + barrita de acento */
 .queue-item.active {
   background: rgba(255, 255, 255, .08);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .1), inset 0 0 0 1px rgba(255, 255, 255, .06);
@@ -1304,8 +1259,8 @@ body.is-playing .full-player-art {
 #youtubePlayerHost iframe {
   position: absolute;
   inset: 0;
-  width: 100% !important;
-  height: 100% !important;
+  width: 100%;
+  height: 100%;
   border: 0;
 }
 
@@ -1339,7 +1294,7 @@ body.is-playing .full-player-art {
 .player-lyrics p.active {
   color: #ffffff;
   opacity: 1;
-  transform: none; /* sin escala: evita saltos al sincronizar */
+  transform: none;
 }
 
 .full-player #lyricsContainer,
@@ -1365,7 +1320,6 @@ body.is-playing .full-player-art {
    25. VISUALIZADORES
 ========================================================= */
 
-/* 25.1 Barras CSS (legado) */
 .player-visualizer {
   display: flex;
   align-items: center;
@@ -1394,7 +1348,6 @@ body.is-playing .full-player-art {
   to   { height: 30px; opacity: 1; }
 }
 
-/* 25.2 Canvas nuevo de index.html */
 .full-player #shunelVisualizer {
   display: block;
   width: 100%;
@@ -1566,10 +1519,9 @@ body:not(.is-playing) .full-player #shunelVisualizer { opacity: .45; }
 
   .player-controls { gap: 0; }
 
-  /* se mantienen los 44 px táctiles: solo baja el play */
   .player-controls .play-button {
-    width: 40px !important;
-    height: 40px !important;
+    width: 40px;
+    height: 40px;
   }
 
   .full-player {
@@ -1581,7 +1533,7 @@ body:not(.is-playing) .full-player #shunelVisualizer { opacity: .45; }
   .full-player-art { width: min(100%, 38vh); }
   .full-player-controls { gap: 22px; }
   .full-player-controls .control-button { width: 50px; height: 50px; }
-  .full-player-controls .play-button { width: 66px !important; height: 66px !important; }
+  .full-player-controls .play-button { width: 66px; height: 66px; }
   .full-player-info h2 { font-size: 19px; }
 
   .queue-panel {
@@ -1590,7 +1542,6 @@ body:not(.is-playing) .full-player #shunelVisualizer { opacity: .45; }
   }
 }
 
-/* Pantallas bajitas (iPhone SE = 667 px de alto) */
 @media (max-height: 700px) and (orientation: portrait) {
   .full-player-header { margin-bottom: 8px; }
   .full-player-art { width: min(100%, 36vh); }
@@ -1626,8 +1577,6 @@ body:not(.is-playing) .full-player #shunelVisualizer { opacity: .45; }
     width: min(620px, calc(100vw - 40px));
     transform: translateX(-50%);
   }
-
-  .player-dock:active { transform: translateX(-50%) scale(.99); }
 
   .full-player-content { max-width: 430px; }
   .full-player-art { width: min(100%, 48vh, 430px); }
@@ -1681,7 +1630,7 @@ body:not(.is-playing) .full-player #shunelVisualizer { opacity: .45; }
 
   .full-player-info h2 { font-size: 18px; }
   .full-player-controls { gap: 24px; }
-  .full-player-controls .play-button { width: 54px !important; height: 54px !important; }
+  .full-player-controls .play-button { width: 54px; height: 54px; }
 }
 
 
@@ -1696,7 +1645,6 @@ body:not(.is-playing) .full-player #shunelVisualizer { opacity: .45; }
     -webkit-overflow-scrolling: touch;
   }
 
-  /* capa propia: el dock no se repinta con cada scroll */
   .player-dock { will-change: transform; }
 
   .full-player { min-height: -webkit-fill-available; }
@@ -1740,9 +1688,9 @@ body:not(.is-playing) .full-player #shunelVisualizer { opacity: .45; }
   .queue-panel *,
   .youtube-stage *,
   .player-menu * {
-    animation: none !important;
-    transition: none !important;
-    scroll-behavior: auto !important;
+    animation: none;
+    transition: none;
+    scroll-behavior: auto;
   }
 
   .full-player,
@@ -1751,8 +1699,7 @@ body:not(.is-playing) .full-player #shunelVisualizer { opacity: .45; }
   .full-player-art,
   body.is-playing .full-player-art { scale: 1; }
 
-  /* el spinner sí se queda (es información), pero lento */
-  .play-button.is-loading::after { animation: player-spin 2s linear infinite !important; }
+  .play-button.is-loading::after { animation: player-spin 2s linear infinite; }
 }
 
 
@@ -1808,7 +1755,7 @@ body:not(.is-playing) .full-player #shunelVisualizer { opacity: .45; }
 
 .player-dock [hidden],
 .full-player [hidden],
-.queue-panel [hidden] { display: none !important; }
+.queue-panel [hidden] { display: none; }
 
 .full-player.active { z-index: 200; }
 
@@ -1833,7 +1780,12 @@ body:not(.is-playing) .full-player #shunelVisualizer { opacity: .45; }
   .player-menu,
   .full-player-options button { border: 1px solid CanvasText; }
 
-  .play-button { forced-color-adjust: none; }
+  .player-controls .play-button,
+  .full-player-controls .play-button {
+    background: Highlight;
+    color: HighlightText;
+    border: 1px solid CanvasText;
+  }
 }
 
 /* =========================================================

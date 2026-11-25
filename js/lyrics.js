@@ -12,7 +12,7 @@
 const CONFIG = Object.freeze({
   API_URL: "/api/lyrics",
 
-  CACHE_PREFIX: "shunel_lyrics_v3_",
+  CACHE_PREFIX: "shun&& el_lyrics_v3_",
   CACHE_TTL: 7 * 24 * 60 * 60 * 1000,
   CACHE_MAX_ITEMS: 60,
 

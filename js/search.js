@@ -1,26 +1,33 @@
 
 /* =========================================================
-   SHUNEL — SEARCH ENGINE 4.1
-   Búsqueda, validación, caché y gestión de peticiones
+   SHUNEL — SEARCH ENGINE 5.0
+
+   Búsqueda, validación, caché LRU, historial,
+   peticiones compartidas, cancelación y paginación.
 
    COMPATIBILIDAD:
-   - Mantiene searchTracks(query, signal).
-   - Añade searchTracks(query, signal, options).
-   - Mantiene el endpoint /api/search.
+   - searchTracks(query, signal)
+   - searchTracks(query, signal, options)
+   - searchTracks(query, options)
+   - searchTracksAdvanced(query, options, signal)
+   - searchPopularTracks()
+   - searchNewTracks()
+   - searchRelevantTracks()
+   - searchTracksPage()
+   - Mantiene /api/search.
    - Mantiene el formato de canciones del servidor.
-   - Mantiene las funciones públicas originales.
+   - Conserva las funciones públicas de 4.1.
 
-   NUEVO:
-   - Orden por relevancia.
-   - Orden por popularidad (viewCount).
-   - Orden por fecha (date).
-   - Caché independiente por orden y cantidad.
-   - Peticiones compartidas según sus opciones.
-   - Paginación con orden configurable.
+   REQUISITO DEL SERVIDOR:
+   /api/search debe aceptar:
+   - q
+   - order
+   - maxResults
+   - pageToken
 
    IMPORTANTE:
-   El endpoint /api/search también debe aceptar
-   el parámetro "order" y enviarlo a YouTube.
+   La cancelación de un consumidor no cancela las
+   peticiones de otros consumidores.
 ========================================================= */
 
 const SEARCH_ENDPOINT = "/api/search";
@@ -30,6 +37,8 @@ const SEARCH_ENDPOINT = "/api/search";
 ========================================================= */
 
 const CONFIG = Object.freeze({
+  version: "5.0",
+
   maxQueryLength: 150,
   minQueryLength: 1,
 
@@ -37,8 +46,10 @@ const CONFIG = Object.freeze({
 
   cacheTTL: 3 * 60 * 1000,
   maxCacheEntries: 40,
+  maxCacheBytes: 5 * 1024 * 1024,
 
   maxResponseBytes: 2 * 1024 * 1024,
+  maxErrorMessageLength: 250,
 
   maxRecentSearches: 20,
   recentStorageKey: "shunel_recent_searches",
@@ -48,7 +59,13 @@ const CONFIG = Object.freeze({
 
   defaultOrder: "relevance",
   defaultRequestResults: 15,
-  maxRequestResults: 25
+  maxRequestResults: 25,
+
+  maxPageTokenLength: 4096,
+  maxTrackTextLength: 1000,
+  maxCloneDepth: 12,
+
+  maxConcurrentRequests: 8
 });
 
 const VIDEO_ID_REGEX = /^[a-zA-Z0-9_-]{11}$/;
@@ -66,6 +83,15 @@ const ALLOWED_ORDERS = Object.freeze([
   "date"
 ]);
 
+const collator = typeof Intl !== "undefined" &&
+  typeof Intl.Collator === "function"
+    ? new Intl.Collator(undefined, {
+        sensitivity: "base",
+        numeric: true,
+        usage: "sort"
+      })
+    : null;
+
 /* =========================================================
    02. ESTADO INTERNO
 ========================================================= */
@@ -74,19 +100,27 @@ const searchCache = new Map();
 const inFlightRequests = new Map();
 const recentSearches = [];
 
+let cacheBytes = 0;
+let requestGeneration = 0;
+
 const statistics = {
   totalSearches: 0,
   successfulSearches: 0,
   failedSearches: 0,
   cancelledSearches: 0,
+
   cacheHits: 0,
   sharedRequests: 0,
+
   totalDuration: 0,
-  lastSearchDuration: 0
+  lastSearchDuration: 0,
+
+  totalHttpRequests: 0,
+  totalPages: 0
 };
 
 /* =========================================================
-   03. ERRORES PERSONALIZADOS
+   03. ERRORES
 ========================================================= */
 
 export class SearchError extends Error {
@@ -96,6 +130,10 @@ export class SearchError extends Error {
     this.name = "SearchError";
     this.code = code;
     this.details = details;
+
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, SearchError);
+    }
   }
 }
 
@@ -115,6 +153,13 @@ function createTimeoutError() {
   );
 }
 
+function isAbortError(error) {
+  return (
+    error?.name === "AbortError" ||
+    error?.code === "SEARCH_ABORTED"
+  );
+}
+
 /* =========================================================
    04. UTILIDADES GENERALES
 ========================================================= */
@@ -124,6 +169,17 @@ function isObject(value) {
     value !== null &&
     typeof value === "object" &&
     !Array.isArray(value)
+  );
+}
+
+function isPlainObject(value) {
+  if (!isObject(value)) return false;
+
+  const prototype = Object.getPrototypeOf(value);
+
+  return (
+    prototype === Object.prototype ||
+    prototype === null
   );
 }
 
@@ -163,22 +219,141 @@ function isAbortSignal(value) {
 }
 
 function getCurrentTime() {
-  return typeof performance !== "undefined" &&
+  return (
+    typeof performance !== "undefined" &&
     typeof performance.now === "function"
-      ? performance.now()
-      : Date.now();
+  )
+    ? performance.now()
+    : Date.now();
+}
+
+function getOrigin() {
+  if (
+    typeof globalThis !== "undefined" &&
+    globalThis.location?.origin
+  ) {
+    return globalThis.location.origin;
+  }
+
+  return "http://localhost";
+}
+
+function compareStrings(first, second) {
+  if (collator) {
+    return collator.compare(first, second);
+  }
+
+  return first.localeCompare(second);
+}
+
+function normalizeForComparison(value) {
+  return safeString(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase();
 }
 
 /* =========================================================
-   05. NORMALIZACIÓN DE CONSULTAS
+   05. COPIAS SEGURAS
+========================================================= */
+
+function cloneData(value, depth = 0, seen = new WeakMap()) {
+  if (
+    value === null ||
+    typeof value !== "object"
+  ) {
+    return value;
+  }
+
+  if (depth >= CONFIG.maxCloneDepth) {
+    return undefined;
+  }
+
+  if (seen.has(value)) {
+    return seen.get(value);
+  }
+
+  if (Array.isArray(value)) {
+    const result = [];
+
+    seen.set(value, result);
+
+    for (const item of value) {
+      result.push(
+        cloneData(item, depth + 1, seen)
+      );
+    }
+
+    return result;
+  }
+
+  if (!isPlainObject(value)) {
+    return undefined;
+  }
+
+  const result = {};
+
+  seen.set(value, result);
+
+  for (const key of Object.keys(value)) {
+    if (
+      key === "__proto__" ||
+      key === "constructor" ||
+      key === "prototype"
+    ) {
+      continue;
+    }
+
+    const cloned = cloneData(
+      value[key],
+      depth + 1,
+      seen
+    );
+
+    if (cloned !== undefined) {
+      result[key] = cloned;
+    }
+  }
+
+  return result;
+}
+
+function cloneTracks(items) {
+  return items.map(track => cloneData(track));
+}
+
+function estimateSize(value) {
+  try {
+    const serialized = JSON.stringify(value);
+
+    if (!serialized) return 0;
+
+    return serialized.length * 2;
+  } catch {
+    return 0;
+  }
+}
+
+/* =========================================================
+   06. NORMALIZACIÓN DE CONSULTAS
 ========================================================= */
 
 export function normalizeSearchQuery(query) {
-  if (query === null || query === undefined) {
+  if (
+    typeof query !== "string" &&
+    typeof query !== "number"
+  ) {
     return "";
   }
 
-  let value = safeString(query);
+  if (
+    typeof query === "number" &&
+    !Number.isFinite(query)
+  ) {
+    return "";
+  }
+
+  let value = String(query);
 
   value = value.normalize("NFC");
 
@@ -204,7 +379,7 @@ function getNormalizedKey(query) {
 }
 
 /* =========================================================
-   06. VALIDACIÓN DE CONSULTAS
+   07. VALIDACIÓN DE CONSULTAS
 ========================================================= */
 
 function validateQuery(query) {
@@ -224,7 +399,10 @@ function validateQuery(query) {
     );
   }
 
-  if (cleanQuery.length > CONFIG.maxQueryLength) {
+  if (
+    Array.from(cleanQuery).length >
+    CONFIG.maxQueryLength
+  ) {
     throw new SearchError(
       "La búsqueda es demasiado larga.",
       "QUERY_TOO_LONG"
@@ -235,23 +413,13 @@ function validateQuery(query) {
 }
 
 /* =========================================================
-   07. OPCIONES DE BÚSQUEDA
+   08. OPCIONES DE BÚSQUEDA
 ========================================================= */
 
-/**
- * Normaliza las opciones enviadas al servidor.
- *
- * order:
- * - relevance
- * - viewCount
- * - date
- *
- * maxResults:
- * - Entre 1 y 25.
- */
-
 function normalizeSearchOptions(options = {}) {
-  const source = isObject(options) ? options : {};
+  const source = isPlainObject(options)
+    ? options
+    : {};
 
   const requestedOrder = source.order;
 
@@ -259,15 +427,25 @@ function normalizeSearchOptions(options = {}) {
     ? requestedOrder
     : CONFIG.defaultOrder;
 
-  const requestedResults = Number(source.maxResults);
+  const requestedResults = source.maxResults;
 
-  const maxResults = Number.isFinite(requestedResults)
-    ? clamp(
-        Math.floor(requestedResults),
+  let maxResults = CONFIG.defaultRequestResults;
+
+  if (
+    requestedResults !== undefined &&
+    requestedResults !== null &&
+    requestedResults !== ""
+  ) {
+    const number = Number(requestedResults);
+
+    if (Number.isFinite(number)) {
+      maxResults = clamp(
+        Math.floor(number),
         1,
         CONFIG.maxRequestResults
-      )
-    : CONFIG.defaultRequestResults;
+      );
+    }
+  }
 
   return {
     order,
@@ -275,16 +453,12 @@ function normalizeSearchOptions(options = {}) {
   };
 }
 
-/**
- * Crea una clave única para cada combinación.
- *
- * Evita que una búsqueda popular se confunda
- * con una búsqueda reciente o normal.
- */
-
 function createRequestKey(query, options = {}) {
   const normalizedQuery = getNormalizedKey(query);
-  const normalizedOptions = normalizeSearchOptions(options);
+
+  const normalizedOptions = normalizeSearchOptions(
+    options
+  );
 
   return [
     normalizedQuery,
@@ -294,7 +468,7 @@ function createRequestKey(query, options = {}) {
 }
 
 /* =========================================================
-   08. VALIDACIÓN DE VIDEO ID
+   09. VALIDACIÓN DE VIDEO ID
 ========================================================= */
 
 export function isValidVideoId(videoId) {
@@ -305,7 +479,7 @@ export function isValidVideoId(videoId) {
 }
 
 /* =========================================================
-   09. VALIDACIÓN DE URL
+   10. VALIDACIÓN DE URL
 ========================================================= */
 
 export function isSafeHttpUrl(value) {
@@ -333,11 +507,25 @@ function normalizeThumbnail(value) {
     return undefined;
   }
 
-  return value;
+  try {
+    const url = new URL(value);
+
+    if (
+      typeof globalThis !== "undefined" &&
+      globalThis.location?.protocol === "https:" &&
+      url.protocol !== "https:"
+    ) {
+      return undefined;
+    }
+
+    return url.href;
+  } catch {
+    return undefined;
+  }
 }
 
 /* =========================================================
-   10. VALIDACIÓN DE DURACIÓN
+   11. VALIDACIÓN DE DURACIÓN
 ========================================================= */
 
 export function normalizeDuration(value) {
@@ -401,11 +589,11 @@ export function normalizeDuration(value) {
 }
 
 /* =========================================================
-   11. VALIDACIÓN DE CANCIONES
+   12. VALIDACIÓN DE CANCIONES
 ========================================================= */
 
 export function isValidTrack(track) {
-  if (!isObject(track)) {
+  if (!isPlainObject(track)) {
     return false;
   }
 
@@ -420,6 +608,13 @@ export function isValidTrack(track) {
     return false;
   }
 
+  if (
+    track.title.length >
+    CONFIG.maxTrackTextLength
+  ) {
+    return false;
+  }
+
   return true;
 }
 
@@ -428,26 +623,30 @@ function normalizeTrack(track) {
     return null;
   }
 
-  const normalized = {
-    ...track,
+  const normalized = cloneData(track);
 
-    videoId: track.videoId,
+  if (!normalized) return null;
 
-    title: normalizeWhitespace(
-      track.title.normalize("NFC")
-    )
-  };
+  normalized.videoId = track.videoId;
+
+  normalized.title = normalizeWhitespace(
+    track.title.normalize("NFC")
+  );
 
   if (typeof track.artist === "string") {
     normalized.artist = normalizeWhitespace(
       track.artist.normalize("NFC")
-    );
+    ).slice(0, CONFIG.maxTrackTextLength);
+  } else {
+    delete normalized.artist;
   }
 
   if (typeof track.channelTitle === "string") {
     normalized.channelTitle = normalizeWhitespace(
       track.channelTitle.normalize("NFC")
-    );
+    ).slice(0, CONFIG.maxTrackTextLength);
+  } else {
+    delete normalized.channelTitle;
   }
 
   if (track.duration !== undefined) {
@@ -472,31 +671,31 @@ function normalizeTrack(track) {
     }
   }
 
-  if (typeof track.thumbnail === "string") {
-    const thumbnail = normalizeThumbnail(track.thumbnail);
+  const thumbnail = normalizeThumbnail(
+    track.thumbnail
+  );
 
-    if (thumbnail) {
-      normalized.thumbnail = thumbnail;
-    } else {
-      delete normalized.thumbnail;
-    }
+  if (thumbnail) {
+    normalized.thumbnail = thumbnail;
+  } else {
+    delete normalized.thumbnail;
   }
 
-  if (typeof track.thumbnailUrl === "string") {
-    const thumbnail = normalizeThumbnail(track.thumbnailUrl);
+  const thumbnailUrl = normalizeThumbnail(
+    track.thumbnailUrl
+  );
 
-    if (thumbnail) {
-      normalized.thumbnailUrl = thumbnail;
-    } else {
-      delete normalized.thumbnailUrl;
-    }
+  if (thumbnailUrl) {
+    normalized.thumbnailUrl = thumbnailUrl;
+  } else {
+    delete normalized.thumbnailUrl;
   }
 
   return normalized;
 }
 
 /* =========================================================
-   12. ELIMINACIÓN DE DUPLICADOS
+   13. ELIMINACIÓN DE DUPLICADOS
 ========================================================= */
 
 export function deduplicateTracks(items) {
@@ -512,13 +711,13 @@ export function deduplicateTracks(items) {
 
     if (seen.has(track.videoId)) continue;
 
-    seen.add(track.videoId);
-
     const normalized = normalizeTrack(track);
 
-    if (normalized) {
-      results.push(normalized);
-    }
+    if (!normalized) continue;
+
+    seen.add(normalized.videoId);
+
+    results.push(normalized);
 
     if (results.length >= CONFIG.maxResults) {
       break;
@@ -529,7 +728,7 @@ export function deduplicateTracks(items) {
 }
 
 /* =========================================================
-   13. ORDENAMIENTO LOCAL
+   14. ORDENAMIENTO LOCAL
 ========================================================= */
 
 export function sortTracks(
@@ -546,48 +745,61 @@ export function sortTracks(
     return results;
   }
 
-  if (mode === "title") {
-    results.sort((a, b) =>
-      safeString(a.title).localeCompare(
-        safeString(b.title),
-        undefined,
-        { sensitivity: "base" }
-      )
-    );
+  if (mode === "relevance") {
+    return results;
   }
 
-  if (mode === "artist") {
-    results.sort((a, b) =>
-      safeString(a.artist || a.channelTitle).localeCompare(
-        safeString(b.artist || b.channelTitle),
-        undefined,
-        { sensitivity: "base" }
-      )
-    );
-  }
+  const decorated = results.map((track, index) => ({
+    track,
+    index
+  }));
 
-  if (mode === "duration") {
-    results.sort((a, b) => {
-      const first = normalizeDuration(
-        a.duration ?? a.durationSeconds
+  decorated.sort((first, second) => {
+    const a = first.track;
+    const b = second.track;
+
+    let result = 0;
+
+    if (mode === "title") {
+      result = compareStrings(
+        safeString(a?.title),
+        safeString(b?.title)
+      );
+    }
+
+    if (mode === "artist") {
+      result = compareStrings(
+        safeString(a?.artist || a?.channelTitle),
+        safeString(b?.artist || b?.channelTitle)
+      );
+    }
+
+    if (mode === "duration") {
+      const firstDuration = normalizeDuration(
+        a?.duration ?? a?.durationSeconds
       );
 
-      const second = normalizeDuration(
-        b.duration ?? b.durationSeconds
+      const secondDuration = normalizeDuration(
+        b?.duration ?? b?.durationSeconds
       );
 
-      if (first === undefined) return 1;
-      if (second === undefined) return -1;
+      if (firstDuration === undefined) {
+        result = secondDuration === undefined ? 0 : 1;
+      } else if (secondDuration === undefined) {
+        result = -1;
+      } else {
+        result = firstDuration - secondDuration;
+      }
+    }
 
-      return first - second;
-    });
-  }
+    return result || first.index - second.index;
+  });
 
-  return results;
+  return decorated.map(item => item.track);
 }
 
 /* =========================================================
-   14. FILTROS LOCALES
+   15. FILTROS LOCALES
 ========================================================= */
 
 export function filterTracks(items, filters = {}) {
@@ -595,63 +807,80 @@ export function filterTracks(items, filters = {}) {
     return [];
   }
 
+  if (!isPlainObject(filters)) {
+    filters = {};
+  }
+
   let results = [...items];
 
   if (filters.artist) {
-    const artist = normalizeSearchQuery(
-      filters.artist
-    ).toLocaleLowerCase();
+    const artist = normalizeForComparison(
+      normalizeSearchQuery(filters.artist)
+    );
 
     results = results.filter(track => {
-      const name = safeString(
-        track.artist || track.channelTitle
-      ).toLocaleLowerCase();
+      const name = normalizeForComparison(
+        track?.artist || track?.channelTitle
+      );
 
       return name.includes(artist);
     });
   }
 
-  if (filters.minDuration !== undefined) {
-    const min = Number(filters.minDuration);
+  const min = filters.minDuration === undefined
+    ? undefined
+    : Number(filters.minDuration);
 
-    if (Number.isFinite(min) && min >= 0) {
-      results = results.filter(track => {
-        const duration = normalizeDuration(
-          track.duration ?? track.durationSeconds
-        );
+  const max = filters.maxDuration === undefined
+    ? undefined
+    : Number(filters.maxDuration);
 
-        return duration !== undefined && duration >= min;
-      });
-    }
+  const validMin = Number.isFinite(min) && min >= 0;
+  const validMax = Number.isFinite(max) && max >= 0;
+
+  if (
+    validMin &&
+    validMax &&
+    min > max
+  ) {
+    return [];
   }
 
-  if (filters.maxDuration !== undefined) {
-    const max = Number(filters.maxDuration);
+  if (validMin || validMax) {
+    results = results.filter(track => {
+      const duration = normalizeDuration(
+        track?.duration ?? track?.durationSeconds
+      );
 
-    if (Number.isFinite(max) && max >= 0) {
-      results = results.filter(track => {
-        const duration = normalizeDuration(
-          track.duration ?? track.durationSeconds
-        );
+      if (duration === undefined) {
+        return false;
+      }
 
-        return duration !== undefined && duration <= max;
-      });
-    }
+      if (validMin && duration < min) {
+        return false;
+      }
+
+      if (validMax && duration > max) {
+        return false;
+      }
+
+      return true;
+    });
   }
 
   if (filters.query) {
-    const query = normalizeSearchQuery(
-      filters.query
-    ).toLocaleLowerCase();
+    const query = normalizeForComparison(
+      normalizeSearchQuery(filters.query)
+    );
 
     results = results.filter(track => {
-      const title = safeString(
-        track.title
-      ).toLocaleLowerCase();
+      const title = normalizeForComparison(
+        track?.title
+      );
 
-      const artist = safeString(
-        track.artist || track.channelTitle
-      ).toLocaleLowerCase();
+      const artist = normalizeForComparison(
+        track?.artist || track?.channelTitle
+      );
 
       return (
         title.includes(query) ||
@@ -664,8 +893,21 @@ export function filterTracks(items, filters = {}) {
 }
 
 /* =========================================================
-   15. CACHÉ
+   16. CACHÉ LRU
 ========================================================= */
+
+function removeCacheEntry(key) {
+  const entry = searchCache.get(key);
+
+  if (!entry) return;
+
+  cacheBytes = Math.max(
+    0,
+    cacheBytes - entry.size
+  );
+
+  searchCache.delete(key);
+}
 
 function getCachedResults(key) {
   const entry = searchCache.get(key);
@@ -673,7 +915,7 @@ function getCachedResults(key) {
   if (!entry) return null;
 
   if (Date.now() >= entry.expiresAt) {
-    searchCache.delete(key);
+    removeCacheEntry(key);
     return null;
   }
 
@@ -682,30 +924,47 @@ function getCachedResults(key) {
 
   statistics.cacheHits++;
 
-  return entry.items.map(track => ({ ...track }));
+  return cloneTracks(entry.items);
 }
 
 function setCachedResults(key, items) {
   if (!Array.isArray(items)) return;
 
   if (searchCache.has(key)) {
-    searchCache.delete(key);
+    removeCacheEntry(key);
   }
 
-  while (searchCache.size >= CONFIG.maxCacheEntries) {
+  const cloned = cloneTracks(items);
+  const size = estimateSize(cloned);
+
+  if (size > CONFIG.maxCacheBytes) {
+    return;
+  }
+
+  while (
+    searchCache.size >= CONFIG.maxCacheEntries ||
+    cacheBytes + size > CONFIG.maxCacheBytes
+  ) {
     const oldestKey = searchCache.keys().next().value;
 
-    searchCache.delete(oldestKey);
+    if (oldestKey === undefined) break;
+
+    removeCacheEntry(oldestKey);
   }
 
-  searchCache.set(key, {
-    items: items.map(track => ({ ...track })),
+  const entry = {
+    items: cloned,
+    size,
     expiresAt: Date.now() + CONFIG.cacheTTL
-  });
+  };
+
+  searchCache.set(key, entry);
+  cacheBytes += size;
 }
 
 export function clearSearchCache() {
   searchCache.clear();
+  cacheBytes = 0;
 }
 
 export function cleanSearchCache() {
@@ -713,17 +972,21 @@ export function cleanSearchCache() {
 
   for (const [key, entry] of searchCache) {
     if (now >= entry.expiresAt) {
-      searchCache.delete(key);
+      removeCacheEntry(key);
     }
   }
 }
 
 /* =========================================================
-   16. HISTORIAL DE BÚSQUEDAS
+   17. HISTORIAL DE BÚSQUEDAS
 ========================================================= */
 
 function loadRecentSearches() {
   try {
+    if (typeof localStorage === "undefined") {
+      return;
+    }
+
     const saved = localStorage.getItem(
       CONFIG.recentStorageKey
     );
@@ -734,15 +997,36 @@ function loadRecentSearches() {
 
     if (!Array.isArray(parsed)) return;
 
-    recentSearches.length = 0;
+    const seen = new Set();
+    const valid = [];
 
-    parsed
-      .filter(item =>
-        typeof item === "string" &&
-        item.trim()
-      )
-      .slice(0, CONFIG.maxRecentSearches)
-      .forEach(item => recentSearches.push(item));
+    for (const item of parsed) {
+      if (typeof item !== "string") continue;
+
+      const normalized = normalizeSearchQuery(item);
+
+      if (
+        !normalized ||
+        Array.from(normalized).length >
+          CONFIG.maxQueryLength
+      ) {
+        continue;
+      }
+
+      const key = getNormalizedKey(normalized);
+
+      if (seen.has(key)) continue;
+
+      seen.add(key);
+      valid.push(normalized);
+
+      if (valid.length >= CONFIG.maxRecentSearches) {
+        break;
+      }
+    }
+
+    recentSearches.length = 0;
+    recentSearches.push(...valid);
 
   } catch {
     recentSearches.length = 0;
@@ -751,6 +1035,10 @@ function loadRecentSearches() {
 
 function saveRecentSearches() {
   try {
+    if (typeof localStorage === "undefined") {
+      return;
+    }
+
     localStorage.setItem(
       CONFIG.recentStorageKey,
       JSON.stringify(recentSearches)
@@ -761,7 +1049,8 @@ function saveRecentSearches() {
 }
 
 function rememberSearch(query) {
-  const key = getNormalizedKey(query);
+  const cleanQuery = validateQuery(query);
+  const key = getNormalizedKey(cleanQuery);
 
   const index = recentSearches.findIndex(
     item => getNormalizedKey(item) === key
@@ -771,7 +1060,7 @@ function rememberSearch(query) {
     recentSearches.splice(index, 1);
   }
 
-  recentSearches.unshift(query);
+  recentSearches.unshift(cleanQuery);
 
   if (recentSearches.length > CONFIG.maxRecentSearches) {
     recentSearches.length = CONFIG.maxRecentSearches;
@@ -788,23 +1077,33 @@ export function clearRecentSearches() {
   recentSearches.length = 0;
 
   try {
-    localStorage.removeItem(CONFIG.recentStorageKey);
+    if (typeof localStorage !== "undefined") {
+      localStorage.removeItem(CONFIG.recentStorageKey);
+    }
   } catch {
     // El almacenamiento puede estar deshabilitado.
   }
 }
 
 /* =========================================================
-   17. ESTADÍSTICAS
+   18. ESTADÍSTICAS
 ========================================================= */
 
 export function getSearchStats() {
+  let activeConsumers = 0;
+
+  for (const entry of inFlightRequests.values()) {
+    activeConsumers += entry.consumers;
+  }
+
   return {
     ...statistics,
 
     cacheEntries: searchCache.size,
+    cacheBytes,
 
     activeRequests: inFlightRequests.size,
+    activeConsumers,
 
     averageDuration:
       statistics.successfulSearches > 0
@@ -823,37 +1122,104 @@ export function resetSearchStats() {
 }
 
 /* =========================================================
-   18. LECTURA SEGURA DE RESPUESTAS
+   19. LECTURA LIMITADA DE RESPUESTAS
 ========================================================= */
 
-async function readResponseJSON(response, signal) {
+function getContentLength(response) {
+  const value = response.headers.get("content-length");
+
+  if (!value) return null;
+
+  const number = Number(value);
+
+  return Number.isFinite(number) && number >= 0
+    ? number
+    : null;
+}
+
+async function readResponseText(response, signal) {
   if (signal?.aborted) {
     throw createAbortError();
   }
 
-  const contentType = response.headers.get(
-    "content-type"
-  ) || "";
-
-  if (!contentType.toLowerCase().includes("json")) {
-    throw new SearchError(
-      "El servidor devolvió un formato inesperado.",
-      "INVALID_CONTENT_TYPE"
-    );
-  }
-
-  const contentLength = Number(
-    response.headers.get("content-length")
-  );
+  const contentLength = getContentLength(response);
 
   if (
-    Number.isFinite(contentLength) &&
+    contentLength !== null &&
     contentLength > CONFIG.maxResponseBytes
   ) {
+    try {
+      await response.body?.cancel();
+    } catch {
+      // La cancelación del cuerpo es best effort.
+    }
+
     throw new SearchError(
       "La respuesta del servidor es demasiado grande.",
       "RESPONSE_TOO_LARGE"
     );
+  }
+
+  const body = response.body;
+
+  if (
+    body &&
+    typeof body.getReader === "function" &&
+    typeof TextDecoder !== "undefined"
+  ) {
+    const reader = body.getReader();
+    const decoder = new TextDecoder("utf-8");
+
+    let receivedBytes = 0;
+    let text = "";
+
+    try {
+      while (true) {
+        if (signal?.aborted) {
+          throw createAbortError();
+        }
+
+        const result = await reader.read();
+
+        if (result.done) break;
+
+        const chunk = result.value;
+
+        receivedBytes += chunk.byteLength;
+
+        if (receivedBytes > CONFIG.maxResponseBytes) {
+          try {
+            await reader.cancel();
+          } catch {
+            // El cuerpo puede estar cerrado.
+          }
+
+          throw new SearchError(
+            "La respuesta del servidor es demasiado grande.",
+            "RESPONSE_TOO_LARGE"
+          );
+        }
+
+        text += decoder.decode(chunk, {
+          stream: true
+        });
+      }
+
+      text += decoder.decode();
+
+      if (signal?.aborted) {
+        throw createAbortError();
+      }
+
+      return text;
+
+    } finally {
+      try {
+        reader.releaseLock();
+      } catch {
+        // Puede haberse liberado anteriormente.
+      }
+    }
   }
 
   let text;
@@ -863,7 +1229,7 @@ async function readResponseJSON(response, signal) {
   } catch (error) {
     if (
       signal?.aborted ||
-      error.name === "AbortError"
+      error?.name === "AbortError"
     ) {
       throw createAbortError();
     }
@@ -878,12 +1244,39 @@ async function readResponseJSON(response, signal) {
     throw createAbortError();
   }
 
-  if (text.length > CONFIG.maxResponseBytes) {
+  const size = typeof TextEncoder !== "undefined"
+    ? new TextEncoder().encode(text).byteLength
+    : text.length * 3;
+
+  if (size > CONFIG.maxResponseBytes) {
     throw new SearchError(
       "La respuesta del servidor es demasiado grande.",
       "RESPONSE_TOO_LARGE"
     );
   }
+
+  return text;
+}
+
+async function readResponseJSON(response, signal) {
+  const contentType = (
+    response.headers.get("content-type") || ""
+  ).toLowerCase();
+
+  if (
+    !contentType.includes("json") &&
+    !contentType.includes("+json")
+  ) {
+    throw new SearchError(
+      "El servidor devolvió un formato inesperado.",
+      "INVALID_CONTENT_TYPE"
+    );
+  }
+
+  const text = await readResponseText(
+    response,
+    signal
+  );
 
   try {
     return JSON.parse(text);
@@ -896,34 +1289,105 @@ async function readResponseJSON(response, signal) {
 }
 
 /* =========================================================
-   19. PETICIÓN HTTP
+   20. MENSAJES HTTP
 ========================================================= */
 
-/**
- * Envía la consulta y sus opciones al endpoint.
- *
- * La señal de cada consumidor no controla la petición
- * compartida. Cada consumidor cancela solamente su espera.
- */
+function getSafeServerMessage(data) {
+  if (
+    typeof data?.error === "string" &&
+    data.error.trim()
+  ) {
+    return normalizeWhitespace(data.error)
+      .slice(0, CONFIG.maxErrorMessageLength);
+  }
 
-async function performRequest(query, options = {}) {
-  const normalizedOptions = normalizeSearchOptions(options);
+  if (
+    typeof data?.message === "string" &&
+    data.message.trim()
+  ) {
+    return normalizeWhitespace(data.message)
+      .slice(0, CONFIG.maxErrorMessageLength);
+  }
 
-  const url = new URL(
-    SEARCH_ENDPOINT,
-    window.location.origin
+  return "No se pudo completar la búsqueda.";
+}
+
+async function createHttpError(response, signal) {
+  let message = "No se pudo buscar en YouTube.";
+
+  try {
+    const contentType = (
+      response.headers.get("content-type") || ""
+    ).toLowerCase();
+
+    if (
+      contentType.includes("json") ||
+      contentType.includes("+json")
+    ) {
+      const data = await readResponseJSON(
+        response,
+        signal
+      );
+
+      message = getSafeServerMessage(data);
+    }
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw error;
+    }
+
+    if (error?.code === "RESPONSE_TOO_LARGE") {
+      message = "El servidor devolvió un error demasiado grande.";
+    }
+  }
+
+  const status = response.status;
+
+  let code = "HTTP_ERROR";
+
+  if (status === 429) {
+    code = "RATE_LIMIT";
+  } else if (status >= 500) {
+    code = "SERVER_ERROR";
+  } else if (status >= 400) {
+    code = "CLIENT_ERROR";
+  }
+
+  return new SearchError(
+    message,
+    code,
+    {
+      status,
+      retryAfter: response.headers.get("retry-after")
+    }
   );
+}
 
-  url.searchParams.set("q", query);
-  url.searchParams.set("order", normalizedOptions.order);
-  url.searchParams.set(
-    "maxResults",
-    String(normalizedOptions.maxResults)
-  );
+/* =========================================================
+   21. PETICIONES HTTP CON TIMEOUT
+========================================================= */
+
+async function fetchJSONWithTimeout(
+  url,
+  externalSignal
+) {
+  if (externalSignal?.aborted) {
+    throw createAbortError();
+  }
 
   const controller = new AbortController();
 
   let timedOut = false;
+
+  const abortFromExternal = () => {
+    controller.abort();
+  };
+
+  externalSignal?.addEventListener(
+    "abort",
+    abortFromExternal,
+    { once: true }
+  );
 
   const timeoutId = setTimeout(() => {
     timedOut = true;
@@ -931,6 +1395,8 @@ async function performRequest(query, options = {}) {
   }, CONFIG.timeout);
 
   try {
+    statistics.totalHttpRequests++;
+
     const response = await fetch(url, {
       method: "GET",
 
@@ -941,76 +1407,31 @@ async function performRequest(query, options = {}) {
       signal: controller.signal
     });
 
+    if (externalSignal?.aborted) {
+      throw createAbortError();
+    }
+
     if (!response.ok) {
-      let message = "No se pudo buscar en YouTube.";
-
-      try {
-        const data = await response.json();
-
-        if (
-          typeof data?.error === "string" &&
-          data.error.length <= 250
-        ) {
-          message = data.error;
-        }
-      } catch {
-        // Se conserva el mensaje general.
-      }
-
-      throw new SearchError(
-        message,
-        "HTTP_ERROR",
-        { status: response.status }
+      throw await createHttpError(
+        response,
+        controller.signal
       );
     }
 
-    const data = await readResponseJSON(
+    return await readResponseJSON(
       response,
       controller.signal
     );
 
-    if (!isObject(data)) {
-      throw new SearchError(
-        "YouTube devolvió una respuesta inesperada.",
-        "INVALID_RESPONSE"
-      );
-    }
-
-    if (!Array.isArray(data.items)) {
-      throw new SearchError(
-        "YouTube devolvió una respuesta inesperada.",
-        "INVALID_ITEMS"
-      );
-    }
-
-    return {
-      items: deduplicateTracks(data.items),
-
-      nextPageToken:
-        typeof data.nextPageToken === "string"
-          ? data.nextPageToken
-          : null,
-
-      hasMore:
-        typeof data.hasMore === "boolean"
-          ? data.hasMore
-          : null,
-
-      totalResults:
-        Number.isFinite(data.totalResults)
-          ? data.totalResults
-          : null
-    };
-
   } catch (error) {
-    if (
-      timedOut ||
-      error.name === "AbortError"
-    ) {
-      if (timedOut) {
-        throw createTimeoutError();
-      }
+    if (timedOut) {
+      throw createTimeoutError();
+    }
 
+    if (
+      externalSignal?.aborted ||
+      error?.name === "AbortError"
+    ) {
       throw createAbortError();
     }
 
@@ -1018,114 +1439,252 @@ async function performRequest(query, options = {}) {
       throw error;
     }
 
+    if (error instanceof TypeError) {
+      throw new SearchError(
+        "No se pudo conectar con el servidor de búsqueda.",
+        "NETWORK_ERROR",
+        { cause: error.message }
+      );
+    }
+
     throw new SearchError(
-      "No se pudo conectar con el servidor de búsqueda.",
-      "NETWORK_ERROR"
+      "Ocurrió un problema al comunicarse con el servidor.",
+      "REQUEST_ERROR"
     );
 
   } finally {
     clearTimeout(timeoutId);
+
+    externalSignal?.removeEventListener(
+      "abort",
+      abortFromExternal
+    );
   }
 }
 
 /* =========================================================
-   20. PETICIONES COMPARTIDAS
+   22. VALIDACIÓN DE RESPUESTAS
 ========================================================= */
 
-function waitForSharedRequest(promise, signal) {
-  if (!signal) return promise;
-
-  if (signal.aborted) {
-    return Promise.reject(createAbortError());
+function normalizeServerResponse(data) {
+  if (!isPlainObject(data)) {
+    throw new SearchError(
+      "YouTube devolvió una respuesta inesperada.",
+      "INVALID_RESPONSE"
+    );
   }
 
-  return new Promise((resolve, reject) => {
-    let settled = false;
-
-    const cleanup = () => {
-      signal.removeEventListener(
-        "abort",
-        onAbort
-      );
-    };
-
-    const finish = callback => value => {
-      if (settled) return;
-
-      settled = true;
-
-      cleanup();
-
-      callback(value);
-    };
-
-    const onResolve = finish(resolve);
-    const onReject = finish(reject);
-
-    const onAbort = () => {
-      onReject(createAbortError());
-    };
-
-    signal.addEventListener(
-      "abort",
-      onAbort,
-      { once: true }
+  if (!Array.isArray(data.items)) {
+    throw new SearchError(
+      "YouTube devolvió una lista de canciones inválida.",
+      "INVALID_ITEMS"
     );
+  }
 
-    promise.then(onResolve, onReject);
+  const nextPageToken =
+    typeof data.nextPageToken === "string" &&
+    data.nextPageToken.length <= CONFIG.maxPageTokenLength
+      ? data.nextPageToken
+      : null;
+
+  return {
+    items: deduplicateTracks(data.items),
+
+    nextPageToken,
+
+    hasMore:
+      typeof data.hasMore === "boolean"
+        ? data.hasMore
+        : null,
+
+    totalResults:
+      Number.isSafeInteger(data.totalResults) &&
+      data.totalResults >= 0
+        ? data.totalResults
+        : null
+  };
+}
+
+/* =========================================================
+   23. CONSTRUCCIÓN DE URL
+========================================================= */
+
+function createSearchURL(query, options = {}, pageToken) {
+  const normalizedOptions = normalizeSearchOptions(
+    options
+  );
+
+  const url = new URL(
+    SEARCH_ENDPOINT,
+    getOrigin()
+  );
+
+  url.searchParams.set("q", query);
+
+  url.searchParams.set(
+    "order",
+    normalizedOptions.order
+  );
+
+  url.searchParams.set(
+    "maxResults",
+    String(normalizedOptions.maxResults)
+  );
+
+  if (pageToken !== undefined) {
+    url.searchParams.set("pageToken", pageToken);
+  }
+
+  return url;
+}
+
+/* =========================================================
+   24. PETICIÓN DE BÚSQUEDA
+========================================================= */
+
+async function performRequest(
+  query,
+  options = {},
+  signal
+) {
+  const url = createSearchURL(query, options);
+
+  const data = await fetchJSONWithTimeout(
+    url,
+    signal
+  );
+
+  return normalizeServerResponse(data);
+}
+
+/* =========================================================
+   25. PETICIONES COMPARTIDAS
+========================================================= */
+
+function createSharedRequest(query, key, options = {}) {
+  const controller = new AbortController();
+
+  const entry = {
+    controller,
+    consumers: 0,
+    settled: false,
+    generation: requestGeneration,
+    promise: null
+  };
+
+  entry.promise = performRequest(
+    query,
+    options,
+    controller.signal
+  ).finally(() => {
+    entry.settled = true;
+
+    if (inFlightRequests.get(key) === entry) {
+      inFlightRequests.delete(key);
+    }
   });
+
+  inFlightRequests.set(key, entry);
+
+  return entry;
 }
 
 function getSharedRequest(query, key, options = {}) {
   const existing = inFlightRequests.get(key);
 
-  if (existing) {
+  if (existing && !existing.settled) {
     statistics.sharedRequests++;
     return existing;
   }
 
-  const request = performRequest(query, options)
-    .finally(() => {
-      if (inFlightRequests.get(key) === request) {
-        inFlightRequests.delete(key);
+  return createSharedRequest(
+    query,
+    key,
+    options
+  );
+}
+
+function waitForSharedRequest(entry, signal) {
+  if (signal?.aborted) {
+    return Promise.reject(createAbortError());
+  }
+
+  if (entry.settled && entry.controller.signal.aborted) {
+    return Promise.reject(createAbortError());
+  }
+
+  entry.consumers++;
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+
+    const cleanup = () => {
+      signal?.removeEventListener(
+        "abort",
+        onAbort
+      );
+    };
+
+    const releaseConsumer = () => {
+      entry.consumers = Math.max(
+        0,
+        entry.consumers - 1
+      );
+
+      if (
+        entry.consumers === 0 &&
+        !entry.settled
+      ) {
+        entry.controller.abort();
       }
-    });
+    };
 
-  inFlightRequests.set(key, request);
+    const finish = (callback, value) => {
+      if (settled) return;
 
-  return request;
+      settled = true;
+
+      cleanup();
+      releaseConsumer();
+
+      callback(value);
+    };
+
+    const onAbort = () => {
+      finish(reject, createAbortError());
+    };
+
+    signal?.addEventListener(
+      "abort",
+      onAbort,
+      { once: true }
+    );
+
+    entry.promise.then(
+      value => finish(resolve, value),
+      error => finish(reject, error)
+    );
+  });
 }
 
 /* =========================================================
-   21. RESOLUCIÓN DE ARGUMENTOS
+   26. RESOLUCIÓN DE ARGUMENTOS
 ========================================================= */
 
-/**
- * Mantiene la firma antigua:
- *
- * searchTracks(query, signal)
- *
- * También permite:
- *
- * searchTracks(query, signal, options)
- *
- * Y la forma alternativa:
- *
- * searchTracks(query, {
- *   signal,
- *   order: "date"
- * })
- */
-
-function resolveSearchArguments(signalOrOptions, options) {
+function resolveSearchArguments(
+  signalOrOptions,
+  options
+) {
   if (isAbortSignal(signalOrOptions)) {
     return {
       signal: signalOrOptions,
-      options: isObject(options) ? options : {}
+      options: isPlainObject(options)
+        ? options
+        : {}
     };
   }
 
-  if (isObject(signalOrOptions)) {
+  if (isPlainObject(signalOrOptions)) {
     return {
       signal: isAbortSignal(signalOrOptions.signal)
         ? signalOrOptions.signal
@@ -1137,30 +1696,15 @@ function resolveSearchArguments(signalOrOptions, options) {
 
   return {
     signal: undefined,
-    options: isObject(options) ? options : {}
+    options: isPlainObject(options)
+      ? options
+      : {}
   };
 }
 
 /* =========================================================
-   22. BÚSQUEDA PRINCIPAL
+   27. BÚSQUEDA PRINCIPAL
 ========================================================= */
-
-/**
- * Busca canciones en el servidor.
- *
- * Uso antiguo:
- * searchTracks(query, signal)
- *
- * Uso con opciones:
- * searchTracks(query, signal, {
- *   order: "viewCount"
- * })
- *
- * Uso alternativo:
- * searchTracks(query, {
- *   order: "date"
- * })
- */
 
 export async function searchTracks(
   query,
@@ -1179,6 +1723,8 @@ export async function searchTracks(
   );
 
   const signal = resolved.signal;
+
+  const generation = requestGeneration;
 
   try {
     if (signal?.aborted) {
@@ -1203,6 +1749,8 @@ export async function searchTracks(
         throw createAbortError();
       }
 
+      rememberSearch(cleanQuery);
+
       statistics.successfulSearches++;
 
       completed = true;
@@ -1210,14 +1758,14 @@ export async function searchTracks(
       return cached;
     }
 
-    const sharedPromise = getSharedRequest(
+    const entry = getSharedRequest(
       cleanQuery,
       cacheKey,
       options
     );
 
     const data = await waitForSharedRequest(
-      sharedPromise,
+      entry,
       signal
     );
 
@@ -1227,7 +1775,9 @@ export async function searchTracks(
 
     const tracks = deduplicateTracks(data.items);
 
-    setCachedResults(cacheKey, tracks);
+    if (generation === requestGeneration) {
+      setCachedResults(cacheKey, tracks);
+    }
 
     rememberSearch(cleanQuery);
 
@@ -1235,15 +1785,12 @@ export async function searchTracks(
 
     completed = true;
 
-    return tracks.map(track => ({ ...track }));
+    return cloneTracks(tracks);
 
   } catch (error) {
-    if (
-      error.name === "AbortError" ||
-      error.code === "SEARCH_ABORTED"
-    ) {
+    if (isAbortError(error)) {
       statistics.cancelledSearches++;
-      throw error;
+      throw createAbortError();
     }
 
     statistics.failedSearches++;
@@ -1258,8 +1805,9 @@ export async function searchTracks(
     );
 
   } finally {
-    const duration = Math.round(
-      getCurrentTime() - startedAt
+    const duration = Math.max(
+      0,
+      Math.round(getCurrentTime() - startedAt)
     );
 
     statistics.lastSearchDuration = duration;
@@ -1271,52 +1819,45 @@ export async function searchTracks(
 }
 
 /* =========================================================
-   23. BÚSQUEDA CON OPCIONES
+   28. BÚSQUEDA AVANZADA
 ========================================================= */
-
-/**
- * Búsqueda avanzada con:
- *
- * - sort: ordenamiento local.
- * - filters: filtros locales.
- * - order: orden del servidor.
- * - maxResults: cantidad solicitada al servidor.
- *
- * Ejemplo:
- *
- * searchTracksAdvanced("música nueva", {
- *   order: "date",
- *   sort: "relevance"
- * });
- */
 
 export async function searchTracksAdvanced(
   query,
   options = {},
   signal
 ) {
+  const source = isPlainObject(options)
+    ? options
+    : {};
+
+  const resolved = resolveSearchArguments(
+    signal,
+    {}
+  );
+
   const tracks = await searchTracks(
     query,
-    signal,
+    resolved.signal,
     {
-      order: options.order,
-      maxResults: options.maxResults
+      order: source.order,
+      maxResults: source.maxResults
     }
   );
 
   let results = tracks;
 
-  if (options.filters) {
+  if (source.filters) {
     results = filterTracks(
       results,
-      options.filters
+      source.filters
     );
   }
 
-  if (options.sort) {
+  if (source.sort) {
     results = sortTracks(
       results,
-      options.sort
+      source.sort
     );
   }
 
@@ -1324,14 +1865,8 @@ export async function searchTracksAdvanced(
 }
 
 /* =========================================================
-   24. BÚSQUEDAS ESPECIALIZADAS
+   29. BÚSQUEDAS ESPECIALIZADAS
 ========================================================= */
-
-/**
- * Música popular.
- *
- * Usa el orden viewCount de YouTube.
- */
 
 export function searchPopularTracks(
   query = "música popular",
@@ -1348,12 +1883,6 @@ export function searchPopularTracks(
   );
 }
 
-/**
- * Música nueva.
- *
- * Usa el orden date de YouTube.
- */
-
 export function searchNewTracks(
   query = "música nueva",
   signal,
@@ -1368,10 +1897,6 @@ export function searchNewTracks(
     }
   );
 }
-
-/**
- * Búsqueda normal por relevancia.
- */
 
 export function searchRelevantTracks(
   query,
@@ -1389,34 +1914,28 @@ export function searchRelevantTracks(
 }
 
 /* =========================================================
-   25. PAGINACIÓN
+   30. PAGINACIÓN
 ========================================================= */
-
-/**
- * Busca una página adicional.
- *
- * Uso:
- *
- * searchTracksPage(query, pageToken, signal)
- *
- * Con orden:
- *
- * searchTracksPage(query, pageToken, signal, {
- *   order: "date"
- * })
- */
 
 export async function searchTracksPage(
   query,
   pageToken,
-  signal,
-  options = {}
+  signalOrOptions,
+  additionalOptions = {}
 ) {
+  const resolved = resolveSearchArguments(
+    signalOrOptions,
+    additionalOptions
+  );
+
+  const signal = resolved.signal;
+
   const cleanQuery = validateQuery(query);
 
   if (
     typeof pageToken !== "string" ||
-    !pageToken.trim()
+    !pageToken.trim() ||
+    pageToken.length > CONFIG.maxPageTokenLength
   ) {
     throw new SearchError(
       "El identificador de página no es válido.",
@@ -1428,138 +1947,62 @@ export async function searchTracksPage(
     throw createAbortError();
   }
 
-  const normalizedOptions = normalizeSearchOptions(options);
-
-  const url = new URL(
-    SEARCH_ENDPOINT,
-    window.location.origin
+  const options = normalizeSearchOptions(
+    resolved.options
   );
 
-  url.searchParams.set("q", cleanQuery);
-  url.searchParams.set("pageToken", pageToken);
-  url.searchParams.set("order", normalizedOptions.order);
-  url.searchParams.set(
-    "maxResults",
-    String(normalizedOptions.maxResults)
+  const url = createSearchURL(
+    cleanQuery,
+    options,
+    pageToken
   );
 
-  const controller = new AbortController();
+  const data = await fetchJSONWithTimeout(
+    url,
+    signal
+  );
 
-  let timedOut = false;
+  if (signal?.aborted) {
+    throw createAbortError();
+  }
 
-  const abort = () => controller.abort();
+  const normalized = normalizeServerResponse(data);
 
-  signal?.addEventListener("abort", abort, {
-    once: true
-  });
-
-  const timeoutId = setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, CONFIG.timeout);
-
-  try {
-    const response = await fetch(url, {
-      method: "GET",
-
-      headers: {
-        Accept: "application/json"
-      },
-
-      signal: controller.signal
-    });
-
-    if (signal?.aborted) {
-      throw createAbortError();
-    }
-
-    if (!response.ok) {
-      throw new SearchError(
-        "No se pudo cargar la siguiente página.",
-        "PAGINATION_HTTP_ERROR",
-        { status: response.status }
-      );
-    }
-
-    const data = await readResponseJSON(
-      response,
-      controller.signal
-    );
-
-    if (!Array.isArray(data?.items)) {
-      throw new SearchError(
-        "La respuesta de paginación no es válida.",
-        "INVALID_PAGE_RESPONSE"
-      );
-    }
-
-    return {
-      items: deduplicateTracks(data.items),
-
-      nextPageToken:
-        typeof data.nextPageToken === "string"
-          ? data.nextPageToken
-          : null,
-
-      hasMore:
-        typeof data.hasMore === "boolean"
-          ? data.hasMore
-          : null,
-
-      totalResults:
-        Number.isFinite(data.totalResults)
-          ? data.totalResults
-          : null
-    };
-
-  } catch (error) {
-    if (
-      signal?.aborted ||
-      error.name === "AbortError"
-    ) {
-      throw createAbortError();
-    }
-
-    if (timedOut) {
-      throw createTimeoutError();
-    }
-
-    if (error instanceof SearchError) {
-      throw error;
-    }
-
+  if (
+    normalized.nextPageToken &&
+    normalized.nextPageToken === pageToken
+  ) {
     throw new SearchError(
-      "No se pudo cargar la siguiente página.",
-      "PAGINATION_ERROR"
+      "El servidor devolvió el mismo identificador de página.",
+      "PAGINATION_TOKEN_LOOP"
     );
+  }
 
-  } finally {
-    clearTimeout(timeoutId);
+  statistics.totalPages++;
 
-    signal?.removeEventListener(
-      "abort",
-      abort
-    );
+  return normalized;
+}
+
+/* =========================================================
+   31. CANCELACIÓN DE PETICIONES
+========================================================= */
+
+export function clearPendingSearches() {
+  requestGeneration++;
+
+  const entries = [...inFlightRequests.values()];
+
+  inFlightRequests.clear();
+
+  for (const entry of entries) {
+    if (!entry.settled) {
+      entry.controller.abort();
+    }
   }
 }
 
 /* =========================================================
-   26. CANCELACIÓN DE PETICIONES
-========================================================= */
-
-/**
- * Limpia las referencias a peticiones compartidas.
- *
- * Las peticiones activas terminan por respuesta
- * o timeout.
- */
-
-export function clearPendingSearches() {
-  inFlightRequests.clear();
-}
-
-/* =========================================================
-   27. LIMPIEZA GENERAL
+   32. LIMPIEZA GENERAL
 ========================================================= */
 
 export function clearSearchData() {
@@ -1570,40 +2013,45 @@ export function clearSearchData() {
 }
 
 /* =========================================================
-   28. UTILIDADES DE DIAGNÓSTICO
+   33. DIAGNÓSTICO
 ========================================================= */
 
 export function getSearchEngineInfo() {
   return {
-    version: "4.1",
+    version: CONFIG.version,
 
     endpoint: SEARCH_ENDPOINT,
 
     cacheTTL: CONFIG.cacheTTL,
-
     maxCacheEntries: CONFIG.maxCacheEntries,
+    maxCacheBytes: CONFIG.maxCacheBytes,
 
     timeout: CONFIG.timeout,
 
     maxQueryLength: CONFIG.maxQueryLength,
+    maxResponseBytes: CONFIG.maxResponseBytes,
 
     maxResults: CONFIG.maxResults,
-
     defaultOrder: CONFIG.defaultOrder,
 
     supportedOrders: [...ALLOWED_ORDERS],
+    supportedLocalSorts: [...ALLOWED_SORTS],
 
-    supportedLocalSorts: [...ALLOWED_SORTS]
+    pagination: true,
+    sharedRequests: true,
+    independentCancellation: true,
+    responseSizeLimit: true,
+    lruCache: true
   };
 }
 
 /* =========================================================
-   29. INICIALIZACIÓN DEL HISTORIAL
+   34. INICIALIZACIÓN
 ========================================================= */
 
 loadRecentSearches();
 cleanSearchCache();
 
 /* =========================================================
-   FIN — SHUNEL SEARCH ENGINE 4.1
+   FIN — SHUNEL SEARCH ENGINE 5.0
 ========================================================= */

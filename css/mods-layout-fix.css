@@ -5,7 +5,7 @@
    // 1. "#view-home { display: flex }" le ganaba a ".view { display: none }":
    //    Inicio nunca se ocultaba y las demás vistas (Letra, Buscar...)
    //    quedaban miles de píxeles más abajo. Ahora solo aplica con .active.
-   // 2. "[id*=lyricsStudio] { position: static !important }" desarmaba el
+   // 2. "[id*=lyricsStudio] { position: static"" !important }" desarmaba el
    //    botón flotante y el panel del Lyrics Studio. Se quitó: lyrics.css 6.0
    //    ya oculta el botón fuera de la vista de letras, así que no pisa Inicio.
    // 3. Selectores como [class*="ai"] o [class*="mod"] atrapaban clases
